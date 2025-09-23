@@ -1,9 +1,9 @@
 "use client";
 
 import { useAuth } from "../../hooks/useAuth";
-import { DashboardLayout } from "../../components/sidebar/SidebarLayout";
-import { Container, Stack, Text, LoadingOverlay } from "@mantine/core";
-import { useRouter } from "next/navigation";
+import { DashboardLayout } from "../../components/SidebarLayout";
+import dynamic from "next/dynamic";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 export default function UserLayout({
@@ -13,6 +13,11 @@ export default function UserLayout({
 }) {
   const { user, logout, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const ProfileTabsNavbar = dynamic(
+    () => import("../../components/ProfileTabsNavbar"),
+    { ssr: false }
+  );
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "user")) {
@@ -20,26 +25,25 @@ export default function UserLayout({
     }
   }, [user, loading, router]);
 
+  // Avoid rendering DashboardLayout until user is resolved to prevent null access
   if (loading) {
-    return (
-      <Container size="sm" py={100}>
-        <LoadingOverlay visible />
-      </Container>
-    );
+    return null;
   }
 
-  if (!user || user.role !== "user") {
-    return (
-      <Container size="sm" py={100}>
-        <Stack align="center" gap="md">
-          <Text>Akses ditolak. Anda bukan siswa.</Text>
-        </Stack>
-      </Container>
-    );
+  if (!user) {
+    return null;
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout}>
+    <DashboardLayout
+      user={user}
+      onLogout={logout}
+      customNavbar={
+        pathname?.startsWith("/user/profile") ? (
+          <ProfileTabsNavbar />
+        ) : undefined
+      }
+    >
       {children}
     </DashboardLayout>
   );

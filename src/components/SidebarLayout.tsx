@@ -14,9 +14,10 @@ import {
   Badge,
   Switch,
   useMantineColorScheme,
+  Card,
 } from "@mantine/core";
 import Image from "next/image";
-import { User, NavigationItem } from "../../types";
+import { User, NavigationItem } from "../types";
 import {
   IconLogout,
   IconUser,
@@ -44,6 +45,10 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
   user: User;
   onLogout: () => void;
+  /** Optional: custom navbar content to replace the default navigation list */
+  customNavbar?: React.ReactNode;
+  /** Optional: hide navbar entirely and render only the header + main */
+  hideNavbar?: boolean;
 }
 
 const getNavigationItems = (role: User["role"]): NavigationItem[] => {
@@ -124,7 +129,10 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
   }
 };
 
-const iconMap: Record<string, React.FC<{ size?: string | number }>> = {
+const iconMap: Record<
+  string,
+  React.FC<{ size?: string | number; color?: string }>
+> = {
   IconDashboard,
   IconBook,
   IconUsers,
@@ -144,6 +152,8 @@ export function DashboardLayout({
   children,
   user,
   onLogout,
+  customNavbar,
+  hideNavbar,
 }: DashboardLayoutProps) {
   const pathname = usePathname();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
@@ -184,15 +194,23 @@ export function DashboardLayout({
 
   return (
     <AppShell
-      navbar={{
-        width: 280,
-        breakpoint: "sm",
-        collapsed: { mobile: !navOpened },
-      }}
+      navbar={
+        hideNavbar
+          ? undefined
+          : {
+              width: 280,
+              breakpoint: "sm",
+              collapsed: { mobile: !navOpened },
+            }
+      }
       header={{ height: 70 }}
       padding="md"
     >
-      <AppShell.Header withBorder>
+      <AppShell.Header
+        bg="transparent"
+        style={{ backdropFilter: "blur(10px)" }}
+        withBorder={false}
+      >
         <Group h="100%" px="md" justify="space-between">
           <Group>
             {/* Mobile burger */}
@@ -231,6 +249,16 @@ export function DashboardLayout({
               checked={colorScheme === "light"}
               onChange={() => toggleColorScheme()}
             />
+
+            <Text
+              size="sm"
+              fw={600}
+              className="hidden md:block"
+              style={{ maxWidth: 220 }}
+              lineClamp={1}
+            >
+              {user.fullName}
+            </Text>
 
             <Menu shadow="md" width={200}>
               <Menu.Target>
@@ -282,33 +310,101 @@ export function DashboardLayout({
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="md" withBorder>
-        <ScrollArea>
-          <Stack gap="sm">
-            {navigationItems.map((item) => {
-              const Icon = iconMap[item.icon];
-              const isActive = pathname === item.href;
+      {!hideNavbar && (
+        <AppShell.Navbar
+          p="md"
+          withBorder={false}
+          style={{ background: "transparent" }}
+        >
+          {customNavbar ? (
+            customNavbar
+          ) : (
+            <ScrollArea>
+              <Card
+                withBorder
+                padding="md"
+                radius="lg"
+                shadow="xs"
+                style={{
+                  background: "var(--mantine-color-body)",
+                  borderColor: "var(--mantine-color-gray-3)",
+                }}
+              >
+                <Stack gap="xs">
+                  {navigationItems.map((item) => {
+                    const Icon = iconMap[item.icon];
+                    const isActive = pathname === item.href;
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`nav-link ${isActive ? "active" : ""}`}
-                  style={{ textDecoration: "none" }}
-                  onClick={() => setNavOpened(false)}
-                >
-                  <Group>
-                    <Icon size="1.2rem" />
-                    <Text size="sm">{item.label}</Text>
-                  </Group>
-                </Link>
-              );
-            })}
-          </Stack>
-        </ScrollArea>
-      </AppShell.Navbar>
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        style={{ textDecoration: "none" }}
+                        onClick={() => setNavOpened(false)}
+                      >
+                        <UnstyledButton
+                          styles={(theme) => ({
+                            root: {
+                              display: "block",
+                              width: "100%",
+                              borderRadius: 10,
+                              padding: "10px 12px",
+                              backgroundColor: isActive
+                                ? "var(--primary-color)"
+                                : "transparent",
+                              color: isActive ? "white" : "inherit",
+                              transition:
+                                "background-color .15s ease, color .15s ease",
+                              "&:hover": {
+                                backgroundColor: isActive
+                                  ? "var(--primary-color)"
+                                  : colorScheme === "dark"
+                                  ? theme.colors.dark[5]
+                                  : theme.colors.gray[0],
+                                color: isActive ? "white" : undefined,
+                              },
+                            },
+                          })}
+                        >
+                          <Group gap={10} wrap="nowrap">
+                            <Icon
+                              size="1.1rem"
+                              color={isActive ? "white" : undefined}
+                            />
+                            <Text size="sm" fw={isActive ? 600 : 500} truncate>
+                              {item.label}
+                            </Text>
+                          </Group>
+                        </UnstyledButton>
+                      </Link>
+                    );
+                  })}
+                </Stack>
+              </Card>
+            </ScrollArea>
+          )}
+        </AppShell.Navbar>
+      )}
 
-      <AppShell.Main className="main-content">{children}</AppShell.Main>
+      <AppShell.Main className="min-h-screen w-full bg-[#f8fafc] relative">
+        {/* Midnight Aurora Glow Background */}
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundImage: `
+          radial-gradient(circle at 50% 50%, 
+            rgba(58, 123, 255, 0.25) 0%, 
+            rgba(100, 149, 237, 0.15) 25%, 
+            rgba(123, 104, 238, 0.07) 35%, 
+            transparent 50%
+          )
+        `,
+          }}
+        />
+
+        {/* Your Content/Components */}
+        <div className="relative z-10">{children}</div>
+      </AppShell.Main>
     </AppShell>
   );
 }

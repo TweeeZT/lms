@@ -4,330 +4,379 @@ import {
   Container,
   Title,
   Text,
-  Card,
   Stack,
   Group,
   Avatar,
   ActionIcon,
   Button,
-  Textarea,
   Badge,
   SegmentedControl,
   TextInput,
+  Image,
+  Select,
+  Pagination,
+  Skeleton,
 } from "@mantine/core";
-import {
-  IconHeart,
-  IconMessageCircle,
-  IconSend,
-  IconPlus,
-} from "@tabler/icons-react";
-import { useMemo, useState } from "react";
-import { dummyUsers } from "../../../data/users";
-import { User } from "../../../types";
+import { IconHeart, IconPlus, IconVideo } from "@tabler/icons-react";
+import Link from "next/link";
+import { useAuth } from "../../../hooks/useAuth";
+import { useCallback, useEffect, useState } from "react";
 
-type Post = {
+type ApiPost = {
   id: string;
-  user: User;
-  content: string;
-  images?: string[];
-  likes: number;
-  likedByMe?: boolean;
-  tags: string[];
-  createdAt: Date;
-  comments: {
+  user_id: string;
+  user: {
     id: string;
-    user: User;
-    content: string;
-    createdAt: Date;
-  }[];
+    full_name: string;
+    avatar?: string | null;
+    role?: string | null;
+  } | null;
+  title: string;
+  content: string;
+  likes: number;
+  tags: string[];
+  created_at: string;
+  media: Array<{
+    id: string;
+    post_id: string;
+    m_type: "image" | "video";
+    url: string;
+    thumbnail?: string | null;
+  }>;
 };
 
-const currentUser = dummyUsers.find((u) => u.role === "instructor")!;
-
 export default function InstructorDiscussionsFeed() {
-  const students = dummyUsers.filter((u) => u.role === "user");
-  const seedPosts: Post[] = useMemo(
-    () => [
-      {
-        id: "p1",
-        user: students[0] || currentUser,
-        content:
-          "Halo semua! Ada yang bisa bantu cara membuat karakter lompat dua kali di Scratch?",
-        likes: 12,
-        tags: ["scratch", "movement"],
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-        comments: [
-          {
-            id: "c1",
-            user: currentUser,
-            content:
-              "Gunakan variable untuk counter jump, reset saat menyentuh tanah.",
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4),
-          },
-        ],
-      },
-      {
-        id: "p2",
-        user: currentUser,
-        content:
-          "Baru upload video materi baru: Looping dan Events di Roblox Lua. Cek ya!",
-        likes: 30,
-        likedByMe: true,
-        tags: ["roblox", "lua", "video"],
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-        comments: [
-          {
-            id: "c2",
-            user: students[1] || currentUser,
-            content: "Videonya jelas banget, makasih kak!",
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 23),
-          },
-        ],
-      },
-    ],
-    [students]
-  );
+  const { user } = useAuth();
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState<"latest" | "popular">("latest");
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [items, setItems] = useState<ApiPost[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  // composer moved to separate page (/instructor/discussions/new)
+  const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
 
-  const [filter, setFilter] = useState<string>("all");
-  const [posts, setPosts] = useState<Post[]>(seedPosts);
-  const [composer, setComposer] = useState("");
-  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
+  const fetchItems = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        instructorId: user.id,
+        sort,
+        page: String(page),
+        limit: String(limit),
+        mine: String(filter === "mine"),
+      });
+      if (q.trim()) params.set("q", q.trim());
+      const res = await fetch(`/api/instructor/discussions?${params}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setItems(json.items as ApiPost[]);
+        setTotal(json.total as number);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [user, sort, page, limit, q, filter]);
 
-  const filteredPosts = posts.filter((p) =>
-    filter === "mine" ? p.user.id === currentUser.id : true
-  );
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
-  const postNow = () => {
-    if (!composer.trim()) return;
-    const newPost: Post = {
-      id: `p_${Date.now()}`,
-      user: currentUser,
-      content: composer.trim(),
-      images: [],
-      likes: 0,
-      tags: [],
-      createdAt: new Date(),
-      comments: [],
-    };
-    setPosts((prev) => [newPost, ...prev]);
-    setComposer("");
-  };
+  // like anti-spam: toggle once per post via localStorage key
+  const likedKey = (id: string) => `disc-liked-${id}`;
 
-  const toggleLike = (id: string) => {
-    setPosts((prev) =>
+  const toggleLike = async (id: string) => {
+    if (!user) return;
+    const liked = localStorage.getItem(likedKey(id)) === "1";
+    // optimistic
+    setItems((prev) =>
       prev.map((p) =>
         p.id === id
-          ? {
-              ...p,
-              likedByMe: !p.likedByMe,
-              likes: p.likedByMe ? Math.max(0, p.likes - 1) : p.likes + 1,
-            }
+          ? { ...p, likes: Math.max(0, (p.likes || 0) + (liked ? -1 : 1)) }
           : p
       )
     );
+    localStorage.setItem(likedKey(id), liked ? "0" : "1");
+    await fetch(`/api/instructor/discussions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instructorId: user.id,
+        action: liked ? "unlike" : "like",
+      }),
+    });
+    fetchItems();
   };
 
-  const addComment = (id: string) => {
-    const text = (commentDraft[id] || "").trim();
-    if (!text) return;
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              comments: [
-                ...p.comments,
-                {
-                  id: `c_${Date.now()}`,
-                  user: currentUser,
-                  content: text,
-                  createdAt: new Date(),
-                },
-              ],
-            }
-          : p
-      )
-    );
-    setCommentDraft((d) => ({ ...d, [id]: "" }));
-  };
+  const isLiked = (id: string) => localStorage.getItem(likedKey(id)) === "1";
+
+  function relativeTime(date: Date | string) {
+    const d = typeof date === "string" ? new Date(date) : date;
+    const diff = Date.now() - d.getTime();
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    const dd = Math.floor(h / 24);
+    if (dd < 7) return `${dd}d`;
+    return d.toLocaleDateString("id-ID", { dateStyle: "medium" });
+  }
 
   return (
-    <Container size="xl">
+    <Container size="lg">
       <Stack gap="lg">
         <Group justify="space-between" align="center">
           <div>
-            <Title order={1} mb="xs">
-              Forum Diskusi
-            </Title>
-            <Text c="dimmed">Bagikan update, tanya, dan bantu yang lain</Text>
+            <Title order={3}>Forum Diskusi</Title>
+            <Text size="xs" c="dimmed">
+              Bagikan pengetahuan dan diskusi dengan sesama
+            </Text>
           </div>
-          <SegmentedControl
-            value={filter}
-            onChange={setFilter}
-            data={[
-              { label: "Semua", value: "all" },
-              { label: "Postingan Saya", value: "mine" },
-            ]}
-          />
+          <Group>
+            <SegmentedControl
+              value={filter}
+              onChange={(v) => {
+                setFilter(v);
+                setPage(1);
+              }}
+              data={[
+                { label: "Semua", value: "all" },
+                { label: "Postingan Saya", value: "mine" },
+              ]}
+            />
+            <Select
+              data={[
+                { value: "latest", label: "Terbaru" },
+                { value: "popular", label: "Terpopuler" },
+              ]}
+              value={sort}
+              onChange={(v) => {
+                setSort((v as "latest" | "popular") || "latest");
+                setPage(1);
+              }}
+            />
+            <Button
+              component={Link}
+              href="/instructor/discussions/new"
+              leftSection={<IconPlus size="1rem" />}
+            >
+              Post Baru
+            </Button>
+          </Group>
         </Group>
 
-        {/* Composer */}
-        <Card padding="md" radius="md">
-          <Group align="start">
-            <Avatar radius="xl" size="md" src={currentUser.avatar}>
-              {currentUser.fullName
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </Avatar>
-            <Stack w="100%" gap="xs">
-              <Textarea
-                placeholder="Apa yang ingin Anda bagikan?"
-                autosize
-                minRows={2}
-                value={composer}
-                onChange={(e) => setComposer(e.currentTarget.value)}
-              />
-              <Group justify="space-between">
-                <Group gap="xs">
-                  <Badge variant="light">#scratch</Badge>
-                  <Badge variant="light">#roblox</Badge>
-                </Group>
-                <Button
-                  leftSection={<IconPlus size="1rem" />}
-                  className="btn-primary"
-                  onClick={postNow}
+        <TextInput
+          placeholder="Cari judul/konten..."
+          value={q}
+          onChange={(e) => setQ(e.currentTarget.value)}
+          onKeyDown={(e) => e.key === "Enter" && setPage(1)}
+        />
+
+        {/* Twitter-like feed */}
+        {loading && items.length === 0 ? (
+          <Stack gap="md">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <Skeleton key={i} height={120} radius="md" />
+            ))}
+          </Stack>
+        ) : (
+          <Stack gap="md">
+            {items.map((post) => {
+              const cover =
+                post.media && post.media.length > 0 ? post.media[0] : null;
+              const isVideo = cover?.m_type === "video";
+              const hasActualMedia = cover && (cover.url || cover.thumbnail);
+              const coverSrc = isVideo
+                ? cover?.thumbnail || undefined
+                : cover?.url;
+              const extraCount = Math.max(0, (post.media?.length || 0) - 1);
+              const liked = isLiked(post.id);
+
+              return (
+                <div
+                  key={post.id}
+                  style={{
+                    padding: "20px",
+                    background: "#ffffff",
+                    borderRadius: "12px",
+                    border: "1px solid #e9ecef",
+                    cursor: "pointer",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  }}
+                  onClick={() =>
+                    (window.location.href = `/instructor/discussions/${post.id}`)
+                  }
                 >
-                  Post
-                </Button>
-              </Group>
-            </Stack>
-          </Group>
-        </Card>
-
-        {/* Feed */}
-        <Stack>
-          {filteredPosts.map((p) => (
-            <Card key={p.id} padding="md" radius="md">
-              <Group align="start" wrap="nowrap">
-                <Avatar radius="xl" size="md" src={p.user.avatar}>
-                  {p.user.fullName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </Avatar>
-                <Stack gap={4} style={{ flex: 1 }}>
-                  <Group justify="space-between" align="start">
-                    <div>
-                      <Group gap={8}>
-                        <Text fw={600}>{p.user.fullName}</Text>
-                        <Badge variant="light" size="xs">
-                          {p.user.role}
-                        </Badge>
-                      </Group>
-                      <Text size="xs" c="dimmed">
-                        {p.createdAt.toLocaleString("id-ID", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </Text>
-                    </div>
-                  </Group>
-                  <Text>{p.content}</Text>
-                  {p.tags.length > 0 && (
-                    <Group gap="xs">
-                      {p.tags.map((t) => (
-                        <Badge key={t} variant="light" size="xs">
-                          #{t}
-                        </Badge>
-                      ))}
-                    </Group>
-                  )}
-                  <Group gap="lg" mt="xs">
-                    <ActionIcon
-                      variant={p.likedByMe ? "filled" : "light"}
-                      color="red"
-                      onClick={() => toggleLike(p.id)}
+                  <Group align="flex-start" gap="md" wrap="nowrap">
+                    {/* Avatar */}
+                    <Avatar
+                      radius="xl"
+                      size="md"
+                      src={post.user?.avatar || undefined}
+                      style={{ flexShrink: 0, marginTop: 2 }}
                     >
-                      <IconHeart size="1.1rem" />
-                    </ActionIcon>
-                    <Group gap={4}>
-                      <IconMessageCircle size={16} />
-                      <Text size="sm" c="dimmed">
-                        {p.comments.length} komentar
-                      </Text>
-                    </Group>
-                    <Text size="sm" c="dimmed">
-                      {p.likes} suka
-                    </Text>
-                  </Group>
-
-                  {/* Comments */}
-                  <Stack gap="sm" mt="sm">
-                    {p.comments.slice(-3).map((c) => (
-                      <Group key={c.id} align="start" wrap="nowrap">
-                        <Avatar size="sm" radius="xl" src={c.user.avatar}>
-                          {c.user.fullName
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")}
-                        </Avatar>
-                        <Card
-                          withBorder
-                          padding="xs"
-                          radius="sm"
-                          style={{ flex: 1 }}
-                        >
-                          <Group gap={6}>
-                            <Text fw={600} size="sm">
-                              {c.user.fullName}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {c.createdAt.toLocaleString("id-ID", {
-                                dateStyle: "medium",
-                                timeStyle: "short",
-                              })}
-                            </Text>
-                          </Group>
-                          <Text size="sm">{c.content}</Text>
-                        </Card>
-                      </Group>
-                    ))}
-                  </Stack>
-
-                  {/* Add comment */}
-                  <Group mt="sm" align="center">
-                    <Avatar size="sm" radius="xl" src={currentUser.avatar}>
-                      {currentUser.fullName
+                      {(post.user?.full_name || "U")
                         .split(" ")
                         .map((n) => n[0])
                         .join("")}
                     </Avatar>
-                    <TextInput
-                      placeholder="Tulis komentar..."
-                      value={commentDraft[p.id] || ""}
-                      onChange={(e) => {
-                        const value = e.currentTarget.value;
-                        setCommentDraft((d) => ({
-                          ...d,
-                          [p.id]: value,
-                        }));
-                      }}
-                      style={{ flex: 1 }}
-                    />
-                    <ActionIcon
-                      variant="filled"
-                      color="blue"
-                      onClick={() => addComment(p.id)}
-                    >
-                      <IconSend size="1rem" />
-                    </ActionIcon>
+
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Header */}
+                      <Group gap="xs" mb={8}>
+                        <Text fw={600} size="sm" c="dark">
+                          {post.user?.full_name || "Pengguna"}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          •
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {relativeTime(post.created_at)}
+                        </Text>
+                        {post.tags?.[0] && (
+                          <>
+                            <Text size="xs" c="dimmed">
+                              •
+                            </Text>
+                            <Badge size="xs" variant="light" color="blue">
+                              {post.tags[0]}
+                            </Badge>
+                          </>
+                        )}
+                      </Group>
+
+                      {/* Post content */}
+                      <div style={{ marginBottom: 12 }}>
+                        <Text fw={600} size="sm" mb={6}>
+                          {post.title}
+                        </Text>
+                        <Text
+                          size="sm"
+                          style={{ lineHeight: 1.5, whiteSpace: "pre-line" }}
+                        >
+                          {post.content.replace(/\\n/g, "\n")}
+                        </Text>
+                      </div>
+
+                      {/* Media */}
+                      {hasActualMedia && (
+                        <div style={{ marginBottom: 15 }}>
+                          <div
+                            style={{
+                              position: "relative",
+                              maxWidth: 400,
+                              height: 200,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              border: "1px solid #e9ecef",
+                            }}
+                          >
+                            <Image
+                              src={coverSrc}
+                              alt={
+                                isVideo
+                                  ? `Video ${post.title}`
+                                  : `Gambar ${post.title}`
+                              }
+                              height={200}
+                              fit="cover"
+                              fallbackSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDQwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjVmNWY1Ii8+CjxwYXRoIGQ9Ik0xNzUgODBIMjI1VjEyMEgxNzVWODBaIiBmaWxsPSIjYzljOWM5Ii8+CjxwYXRoIGQ9Ik0xODUgOTBIMjE1VjExMEgxODVWOTBaIiBmaWxsPSIjYTlhOWE5Ii8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0iLXdlYmtpdC1waWN0b2dyYXBoLCBzeXN0ZW0tdWkiPkdhbWJhciB0aWRhayB0ZXJzZWRpYTwvdGV4dD4KPC9zdmc+"
+                            />
+                            {isVideo && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  inset: 0,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  background: "rgba(0,0,0,0.3)",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    background: "rgba(255,255,255,0.9)",
+                                    borderRadius: "50%",
+                                    width: 48,
+                                    height: 48,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconVideo size={20} color="#1e3769" />
+                                </div>
+                              </div>
+                            )}
+                            {extraCount > 0 && (
+                              <Badge
+                                variant="filled"
+                                color="dark"
+                                style={{
+                                  position: "absolute",
+                                  top: 8,
+                                  right: 8,
+                                }}
+                                size="sm"
+                              >
+                                +{extraCount}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Engagement */}
+                      <Group gap="lg">
+                        <Group gap="xs">
+                          <ActionIcon
+                            variant={liked ? "filled" : "subtle"}
+                            color="red"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLike(post.id);
+                            }}
+                            style={{
+                              background: liked ? "#ff6b6b" : undefined,
+                              color: liked ? "#fff" : undefined,
+                            }}
+                          >
+                            <IconHeart size="1rem" />
+                          </ActionIcon>
+                          <Text size="xs" c="dimmed" fw={500}>
+                            {post.likes}
+                          </Text>
+                        </Group>
+                        <Text size="xs" c="blue" fw={500}>
+                          Lihat detail
+                        </Text>
+                      </Group>
+                    </div>
                   </Group>
-                </Stack>
-              </Group>
-            </Card>
-          ))}
-        </Stack>
+                </div>
+              );
+            })}
+          </Stack>
+        )}
+
+        <Group justify="space-between" align="center" mt="md">
+          <Text size="xs" c="dimmed">
+            Total {total} post
+          </Text>
+          <Pagination
+            total={totalPages}
+            value={page}
+            onChange={setPage}
+            size="sm"
+          />
+        </Group>
       </Stack>
     </Container>
   );

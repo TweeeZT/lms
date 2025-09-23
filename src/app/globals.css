@@ -3,9 +3,9 @@
 
 :root {
   /* Brand vars diupdate ke palet baru */
-  --primary-color: #1e386a; /* dark brand blue */
-  --secondary-color: #f6d457; /* yellow accent */
-  --accent-color: #4b6087; /* mid blue */
+  --primary-color: rgb(30, 55, 105); /* dark brand blue */
+  --secondary-color: rgb(246, 212, 87); /* yellow accent */
+  --accent-color: #ecf3fa; /* mid blue */
 
   /* (opsi) kalau mau samakan "success" ke tone brand, bisa pakai biru juga */
   --success-color: #1e3769;
@@ -69,7 +69,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-color);
+  cursor: pointer;
 }
 
 /* Update scrollbar for dark mode */

@@ -1,360 +1,366 @@
 "use client";
 
-import { useState } from "react";
 import {
   Container,
   Title,
   Text,
-  Grid,
-  Card,
   Stack,
   Group,
-  Badge,
-  Button,
-  TextInput,
-  Select,
   Avatar,
   ActionIcon,
-  Textarea,
-  Modal,
+  Button,
+  Badge,
+  SegmentedControl,
+  TextInput,
+  Image,
+  Select,
+  Pagination,
+  Skeleton,
 } from "@mantine/core";
-import {
-  IconSearch,
-  IconFilter,
-  IconMessageCircle,
-  IconHeart,
-  IconPlus,
-  IconSend,
-  IconPhoto,
-  IconTag,
-} from "@tabler/icons-react";
-import { dummyDiscussions } from "../../../data/learning";
+import { IconHeart, IconPlus, IconVideo } from "@tabler/icons-react";
+import Link from "next/link";
+import { useAuth } from "../../../hooks/useAuth";
+import { useCallback, useEffect, useState } from "react";
+
+type ApiPost = {
+  id: string;
+  user_id: string;
+  user: {
+    id: string;
+    full_name: string;
+    avatar?: string | null;
+    role?: string | null;
+  } | null;
+  title: string;
+  content: string;
+  likes: number;
+  tags: string[];
+  created_at: string;
+  media: Array<{
+    id: string;
+    post_id: string;
+    m_type: "image" | "video";
+    url: string;
+    thumbnail?: string | null;
+  }>;
+};
 
 export default function UserDiscussionsPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<string | null>("recent");
-  const [tagFilter, setTagFilter] = useState<string | null>("all");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newPost, setNewPost] = useState({ title: "", content: "", tags: "" });
+  const { user } = useAuth();
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState<"latest" | "popular">("latest");
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [items, setItems] = useState<ApiPost[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
 
-  const allTags = Array.from(new Set(dummyDiscussions.flatMap((d) => d.tags)));
-
-  const filteredDiscussions = dummyDiscussions
-    .filter((discussion) => {
-      const matchesSearch =
-        discussion.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        discussion.content.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTag =
-        tagFilter === "all" ||
-        (tagFilter && discussion.tags.includes(tagFilter));
-      return matchesSearch && matchesTag;
-    })
-    .sort((a, b) => {
-      if (sortBy === "popular") {
-        return b.likes - a.likes;
+  const fetchItems = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        userId: user.id,
+        sort,
+        page: String(page),
+        limit: String(limit),
+        mine: String(filter === "mine"),
+      });
+      if (q.trim()) params.set("q", q.trim());
+      const res = await fetch(`/api/user/discussions?${params}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setItems(json.items as ApiPost[]);
+        setTotal(json.total as number);
       }
-      return b.createdAt.getTime() - a.createdAt.getTime(); // recent
-    });
+    } finally {
+      setLoading(false);
+    }
+  }, [user, sort, page, limit, q, filter]);
 
-  const handleCreatePost = () => {
-    // In real app, this would call API
-    console.log("Creating post:", newPost);
-    setNewPost({ title: "", content: "", tags: "" });
-    setIsCreateModalOpen(false);
-  };
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diffInHours = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+  const likedKey = (id: string) => `disc-liked-${id}`;
+  const toggleLike = async (id: string) => {
+    if (!user) return;
+    const liked = localStorage.getItem(likedKey(id)) === "1";
+    setItems((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, likes: Math.max(0, (p.likes || 0) + (liked ? -1 : 1)) }
+          : p
+      )
     );
-
-    if (diffInHours < 1) return "Baru saja";
-    if (diffInHours < 24) return `${diffInHours} jam yang lalu`;
-    if (diffInHours < 48) return "Kemarin";
-    return date.toLocaleDateString("id-ID");
+    localStorage.setItem(likedKey(id), liked ? "0" : "1");
+    await fetch(`/api/user/discussions/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        action: liked ? "unlike" : "like",
+      }),
+    });
+    fetchItems();
   };
+  const isLiked = (id: string) => localStorage.getItem(likedKey(id)) === "1";
+
+  function relativeTime(date: Date | string) {
+    const d = typeof date === "string" ? new Date(date) : date;
+    const diff = Date.now() - d.getTime();
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    const dd = Math.floor(h / 24);
+    if (dd < 7) return `${dd}d`;
+    return d.toLocaleDateString("id-ID", { dateStyle: "medium" });
+  }
 
   return (
-    <Container size="xl">
-      <Stack gap="xl">
-        <Group justify="space-between">
+    <Container size="lg">
+      <Stack gap="lg">
+        <Group justify="space-between" align="center">
           <div>
-            <Title order={1} mb="md">
-              Forum Diskusi
-            </Title>
-            <Text size="lg" c="dimmed">
-              Berbagi pengalaman, tanya jawab, dan berkolaborasi dengan sesama
-              learner
+            <Title order={3}>Forum Diskusi</Title>
+            <Text size="xs" c="dimmed">
+              Bagikan pengetahuan dan diskusi dengan sesama
             </Text>
           </div>
-          <Button
-            leftSection={<IconPlus size="1rem" />}
-            className="btn-primary"
-            onClick={() => setIsCreateModalOpen(true)}
-          >
-            Buat Post Baru
-          </Button>
+          <Group>
+            <SegmentedControl
+              value={filter}
+              onChange={(v) => {
+                setFilter(v);
+                setPage(1);
+              }}
+              data={[
+                { label: "Semua", value: "all" },
+                { label: "Postingan Saya", value: "mine" },
+              ]}
+            />
+            <Select
+              data={[
+                { value: "latest", label: "Terbaru" },
+                { value: "popular", label: "Terpopuler" },
+              ]}
+              value={sort}
+              onChange={(v) => {
+                setSort((v as "latest" | "popular") || "latest");
+                setPage(1);
+              }}
+            />
+            <Button
+              component={Link}
+              href="/user/discussions/new"
+              leftSection={<IconPlus size="1rem" />}
+            >
+              Post Baru
+            </Button>
+          </Group>
         </Group>
 
-        {/* Search and Filters */}
-        <Card padding="lg" radius="md">
-          <Grid gutter="md" align="end">
-            <Grid.Col span={{ base: 12, md: 4 }}>
-              <TextInput
-                placeholder="Cari diskusi..."
-                leftSection={<IconSearch size="1rem" />}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-              />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, md: 4 }}>
-              <Select
-                placeholder="Urutkan berdasarkan"
-                leftSection={<IconFilter size="1rem" />}
-                data={[
-                  { value: "recent", label: "Terbaru" },
-                  { value: "popular", label: "Paling Populer" },
-                ]}
-                value={sortBy}
-                onChange={setSortBy}
-              />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, md: 4 }}>
-              <Select
-                placeholder="Filter berdasarkan tag"
-                leftSection={<IconTag size="1rem" />}
-                data={[
-                  { value: "all", label: "Semua Tag" },
-                  ...allTags.map((tag) => ({ value: tag, label: tag })),
-                ]}
-                value={tagFilter}
-                onChange={setTagFilter}
-              />
-            </Grid.Col>
-          </Grid>
-        </Card>
+        <TextInput
+          placeholder="Cari judul/konten..."
+          value={q}
+          onChange={(e) => setQ(e.currentTarget.value)}
+          onKeyDown={(e) => e.key === "Enter" && setPage(1)}
+        />
 
-        {/* Popular Tags */}
-        <Card padding="md" radius="md">
-          <Text size="sm" fw={600} mb="xs">
-            Tag Populer:
-          </Text>
-          <Group gap="xs">
-            {allTags.slice(0, 8).map((tag) => (
-              <Badge
-                key={tag}
-                variant="light"
-                style={{ cursor: "pointer" }}
-                onClick={() => setTagFilter(tag)}
-              >
-                #{tag}
-              </Badge>
+        {loading && items.length === 0 ? (
+          <Stack gap="md">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <Skeleton key={i} height={120} radius="md" />
             ))}
-          </Group>
-        </Card>
+          </Stack>
+        ) : (
+          <Stack gap="md">
+            {items.map((post) => {
+              const cover =
+                post.media && post.media.length > 0 ? post.media[0] : null;
+              const isVideo = cover?.m_type === "video";
+              const hasActualMedia = cover && (cover.url || cover.thumbnail);
+              const coverSrc = isVideo
+                ? cover?.thumbnail || undefined
+                : cover?.url;
+              const extraCount = Math.max(0, (post.media?.length || 0) - 1);
+              const liked = isLiked(post.id);
 
-        {/* Discussions List */}
-        <Stack gap="md">
-          {filteredDiscussions.map((discussion) => (
-            <Card
-              key={discussion.id}
-              padding="lg"
-              radius="md"
-              className="card-hover"
-              withBorder
-            >
-              <Stack gap="md">
-                <Group justify="space-between">
-                  <Group>
-                    <Avatar src={discussion.user.avatar} size="md" radius="xl">
-                      {discussion.user.fullName
+              return (
+                <div
+                  key={post.id}
+                  style={{
+                    padding: "20px",
+                    background: "#ffffff",
+                    borderRadius: "12px",
+                    border: "1px solid #e9ecef",
+                    cursor: "pointer",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                  }}
+                  onClick={() =>
+                    (window.location.href = `/user/discussions/${post.id}`)
+                  }
+                >
+                  <Group align="flex-start" gap="md" wrap="nowrap">
+                    <Avatar
+                      radius="xl"
+                      size="md"
+                      src={post.user?.avatar || undefined}
+                      style={{ flexShrink: 0, marginTop: 2 }}
+                    >
+                      {(post.user?.full_name || "U")
                         .split(" ")
-                        .map((n: string) => n[0])
+                        .map((n) => n[0])
                         .join("")}
                     </Avatar>
-                    <div>
-                      <Text fw={600}>{discussion.user.fullName}</Text>
-                      <Text size="xs" c="dimmed">
-                        {formatDate(discussion.createdAt)}
-                      </Text>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Group gap="xs" mb={8}>
+                        <Text fw={600} size="sm" c="dark">
+                          {post.user?.full_name || "Pengguna"}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          •
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {relativeTime(post.created_at)}
+                        </Text>
+                        {post.tags?.[0] && (
+                          <>
+                            <Text size="xs" c="dimmed">
+                              •
+                            </Text>
+                            <Badge size="xs" variant="light" color="blue">
+                              {post.tags[0]}
+                            </Badge>
+                          </>
+                        )}
+                      </Group>
+                      <div style={{ marginBottom: 12 }}>
+                        <Text fw={600} size="sm" mb={6}>
+                          {post.title}
+                        </Text>
+                        <Text
+                          size="sm"
+                          style={{ lineHeight: 1.5, whiteSpace: "pre-line" }}
+                        >
+                          {post.content.replace(/\\n/g, "\n")}
+                        </Text>
+                      </div>
+                      {hasActualMedia && (
+                        <div style={{ marginBottom: 15 }}>
+                          <div
+                            style={{
+                              position: "relative",
+                              maxWidth: 400,
+                              height: 200,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              border: "1px solid #e9ecef",
+                            }}
+                          >
+                            <Image
+                              src={coverSrc}
+                              alt={
+                                isVideo
+                                  ? `Video ${post.title}`
+                                  : `Gambar ${post.title}`
+                              }
+                              height={200}
+                              fit="cover"
+                              fallbackSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDQwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjVmNWY1Ii8+CjxwYXRoIGQ9Ik0xNzUgODBIMjI1VjEyMEgxNzVWODBaIiBmaWxsPSIjYzljOWM5Ii8+CjxwYXRoIGQ9Ik0xODUgOTBIMjE1VjExMEgxODVWOTBaIiBmaWxsPSIjYTlhOWE5Ii8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0iLXdlYmtpdC1waWN0b2dyYXBoLCBzeXN0ZW0tdWkiPkdhbWJhciB0aWRhayB0ZXJzZWRpYTwvdGV4dD4KPC9zdmc+"
+                            />
+                            {isVideo && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  inset: 0,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  background: "rgba(0,0,0,0.3)",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    background: "rgba(255,255,255,0.9)",
+                                    borderRadius: "50%",
+                                    width: 48,
+                                    height: 48,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <IconVideo size={20} color="#1e3769" />
+                                </div>
+                              </div>
+                            )}
+                            {extraCount > 0 && (
+                              <Badge
+                                variant="filled"
+                                color="dark"
+                                style={{
+                                  position: "absolute",
+                                  top: 8,
+                                  right: 8,
+                                }}
+                                size="sm"
+                              >
+                                +{extraCount}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <Group gap="lg">
+                        <Group gap="xs">
+                          <ActionIcon
+                            variant={liked ? "filled" : "subtle"}
+                            color="red"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLike(post.id);
+                            }}
+                            style={{
+                              background: liked ? "#ff6b6b" : undefined,
+                              color: liked ? "#fff" : undefined,
+                            }}
+                          >
+                            <IconHeart size="1rem" />
+                          </ActionIcon>
+                          <Text size="xs" c="dimmed" fw={500}>
+                            {post.likes}
+                          </Text>
+                        </Group>
+                        <Text size="xs" c="blue" fw={500}>
+                          Lihat detail
+                        </Text>
+                      </Group>
                     </div>
                   </Group>
-                  <Group gap="xs">
-                    {discussion.tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag} size="sm" variant="light">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Group>
-
-                <div>
-                  <Title order={4} mb="xs">
-                    {discussion.title}
-                  </Title>
-                  <Text size="sm" lineClamp={3}>
-                    {discussion.content}
-                  </Text>
                 </div>
-
-                {discussion.images && discussion.images.length > 0 && (
-                  <Group gap="xs">
-                    {discussion.images.map((image, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          width: 60,
-                          height: 60,
-                          background: "var(--gradient-accent)",
-                          borderRadius: 8,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "white",
-                          fontSize: "12px",
-                        }}
-                      >
-                        📷
-                      </div>
-                    ))}
-                  </Group>
-                )}
-
-                <Group justify="space-between">
-                  <Group gap="lg">
-                    <Group gap="xs">
-                      <ActionIcon variant="subtle" color="red">
-                        <IconHeart size="1rem" />
-                      </ActionIcon>
-                      <Text size="sm">{discussion.likes}</Text>
-                    </Group>
-                    <Group gap="xs">
-                      <ActionIcon variant="subtle" color="blue">
-                        <IconMessageCircle size="1rem" />
-                      </ActionIcon>
-                      <Text size="sm">{discussion.comments.length}</Text>
-                    </Group>
-                  </Group>
-                  <Button variant="light" size="sm">
-                    Lihat Detail
-                  </Button>
-                </Group>
-
-                {/* Latest Comments Preview */}
-                {discussion.comments.length > 0 && (
-                  <div
-                    style={{
-                      borderTop: "1px solid #e5e7eb",
-                      paddingTop: "12px",
-                      marginTop: "8px",
-                    }}
-                  >
-                    <Text size="xs" c="dimmed" mb="xs">
-                      Komentar terbaru:
-                    </Text>
-                    {discussion.comments.slice(-1).map((comment) => (
-                      <Group key={comment.id} gap="xs">
-                        <Avatar src={comment.user.avatar} size="xs" radius="xl">
-                          {comment.user.fullName
-                            .split(" ")
-                            .map((n: string) => n[0])
-                            .join("")}
-                        </Avatar>
-                        <div style={{ flex: 1 }}>
-                          <Text size="xs">
-                            <span style={{ fontWeight: 600 }}>
-                              {comment.user.fullName}
-                            </span>
-                            : {comment.content.slice(0, 100)}
-                            {comment.content.length > 100 ? "..." : ""}
-                          </Text>
-                        </div>
-                      </Group>
-                    ))}
-                  </div>
-                )}
-              </Stack>
-            </Card>
-          ))}
-        </Stack>
-
-        {filteredDiscussions.length === 0 && (
-          <Card padding="xl" radius="md">
-            <Stack align="center" gap="md">
-              <IconMessageCircle size="3rem" color="gray" />
-              <Text size="lg" c="dimmed">
-                Tidak ada diskusi ditemukan
-              </Text>
-              <Text size="sm" c="dimmed" ta="center">
-                Coba ubah kata kunci pencarian atau filter yang digunakan
-              </Text>
-            </Stack>
-          </Card>
+              );
+            })}
+          </Stack>
         )}
 
-        {/* Create Post Modal */}
-        <Modal
-          opened={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          title="Buat Post Diskusi Baru"
-          size="lg"
-        >
-          <Stack gap="md">
-            <TextInput
-              label="Judul"
-              placeholder="Tulis judul diskusi yang menarik..."
-              value={newPost.title}
-              onChange={(e) =>
-                setNewPost({ ...newPost, title: e.currentTarget.value })
-              }
-              required
-            />
-
-            <Textarea
-              label="Konten"
-              placeholder="Tulis pertanyaan atau topik diskusi Anda..."
-              minRows={4}
-              value={newPost.content}
-              onChange={(e) =>
-                setNewPost({ ...newPost, content: e.currentTarget.value })
-              }
-              required
-            />
-
-            <TextInput
-              label="Tags"
-              placeholder="scratch, beginner, help (pisahkan dengan koma)"
-              value={newPost.tags}
-              onChange={(e) =>
-                setNewPost({ ...newPost, tags: e.currentTarget.value })
-              }
-            />
-
-            <Group gap="xs">
-              <Button variant="light" leftSection={<IconPhoto size="1rem" />}>
-                Tambah Gambar
-              </Button>
-            </Group>
-
-            <Group justify="flex-end" gap="md">
-              <Button
-                variant="outline"
-                onClick={() => setIsCreateModalOpen(false)}
-              >
-                Batal
-              </Button>
-              <Button
-                leftSection={<IconSend size="1rem" />}
-                className="btn-primary"
-                onClick={handleCreatePost}
-                disabled={!newPost.title || !newPost.content}
-              >
-                Posting
-              </Button>
-            </Group>
-          </Stack>
-        </Modal>
+        <Group justify="space-between" align="center" mt="md">
+          <Text size="xs" c="dimmed">
+            Total {total} post
+          </Text>
+          <Pagination
+            total={totalPages}
+            value={page}
+            onChange={setPage}
+            size="sm"
+          />
+        </Group>
       </Stack>
     </Container>
   );

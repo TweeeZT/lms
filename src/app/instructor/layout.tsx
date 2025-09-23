@@ -1,8 +1,7 @@
 "use client";
 
 import { useAuth } from "../../hooks/useAuth";
-import { DashboardLayout } from "../../components/sidebar/SidebarLayout";
-import { Container, Stack, Text, LoadingOverlay } from "@mantine/core";
+import { DashboardLayout } from "../../components/SidebarLayout";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -20,22 +19,8 @@ export default function InstructorLayout({
     }
   }, [user, loading, router]);
 
-  if (loading) {
-    return (
-      <Container size="sm" py={100}>
-        <LoadingOverlay visible />
-      </Container>
-    );
-  }
-
-  if (!user || user.role !== "instructor") {
-    return (
-      <Container size="sm" py={100}>
-        <Stack align="center" gap="md">
-          <Text>Akses ditolak. Anda bukan instruktur.</Text>
-        </Stack>
-      </Container>
-    );
+  if (loading || !user) {
+    return null;
   }
 
   return (

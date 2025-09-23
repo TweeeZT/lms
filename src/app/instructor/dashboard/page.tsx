@@ -10,49 +10,182 @@ import {
   Group,
   Badge,
   Button,
-  Table,
-  Anchor,
-  rem,
+  Avatar,
 } from "@mantine/core";
 import {
   IconBook,
   IconUsers,
   IconCoin,
   IconChartBar,
-  IconPlus,
 } from "@tabler/icons-react";
-import { getCoursesByInstructor } from "../../../data/courses";
-import { dummyUsers } from "../../../data/users";
-import { monthlyRevenue } from "../../../data/finance";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth } from "../../../hooks/useAuth";
 
-// Simulate current instructor (in real app, get from auth context)
-const currentInstructor = dummyUsers.find((u) => u.role === "instructor")!;
-
-type Purchase = {
+type ApiProfile = {
   id: string;
-  userName: string;
-  courseTitle: string;
-  amount: number;
-  date: Date;
+  email: string;
+  username: string;
+  full_name: string;
+  avatar?: string | null;
 };
 
-export default function InstructorDashboard() {
-  const myCourses = getCoursesByInstructor(currentInstructor.id);
-  const totalStudents = myCourses.reduce(
-    (sum, course) => sum + course.enrolledCount,
-    0
+type ApiInstructor = {
+  user_id: string;
+  total_earnings?: number | null;
+  rating?: number | null;
+  bank_account?: string | null;
+} | null;
+
+type ApiCourse = {
+  id: string;
+  title: string;
+  thumbnail: string | null;
+  category: string;
+  price: number | null;
+  duration_min: number | null;
+  level: string;
+  total_modules: number | null;
+  enrolled_count: number | null;
+  rating: number | null;
+  is_published: boolean | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ApiPurchase = {
+  id: string;
+  amount: number;
+  date: string; // ISO
+  courseId: string;
+  courseTitle: string;
+  userId: string;
+  userName: string;
+  userEmail?: string | null;
+};
+
+type ApiMonthly = { month: string; revenue: number; orders: number };
+
+type DashboardResponse = {
+  success: boolean;
+  profile: ApiProfile;
+  instructor: ApiInstructor;
+  stats: {
+    coursesCount: number;
+    totalStudents: number;
+    totalEarnings: number;
+    avgRating: number;
+  };
+  courses: ApiCourse[];
+  payouts: Array<{ id: string; amount: number; date: string; status: string }>;
+  purchases: ApiPurchase[];
+  monthly: ApiMonthly[];
+};
+
+// Reusable StatCard (vertical) similar style to admin
+function StatCard({
+  label,
+  value,
+  Icon,
+}: {
+  label: string;
+  value: React.ReactNode;
+  Icon: React.ComponentType<{ size?: number; color?: string }>;
+  color: string;
+  gradientFrom?: string;
+  gradientTo?: string;
+}) {
+  // Use brand gradient and soft frosted icon badge
+  const bg = "var(--primary-color)"; // defined in globals.css
+  const iconBadgeBg = "var(--secondary-color)";
+  const textColor = "#ffffff";
+  return (
+    <Card
+      withBorder
+      padding="lg"
+      radius="md"
+      shadow="sm"
+      style={{
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        position: "relative",
+        overflow: "hidden",
+        transition: "transform .25s, box-shadow .25s",
+        background: bg,
+        minHeight: 170,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-4px)";
+        e.currentTarget.style.boxShadow = "0 8px 22px -6px rgba(0,0,0,.15)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = "var(--mantine-shadow-sm)";
+      }}
+    >
+      <Text size="xs" c={textColor} fw={600} tt="uppercase" mb={4}>
+        {label}
+      </Text>
+      <div
+        style={{
+          margin: 16,
+          width: 56,
+          height: 56,
+          borderRadius: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: iconBadgeBg,
+        }}
+      >
+        <Icon size={32} color="#1e3769" />
+      </div>
+      <Title order={2} style={{ lineHeight: 1 }} c={textColor}>
+        {value}
+      </Title>
+    </Card>
   );
-  const totalEarnings = myCourses.reduce(
-    (sum, course) => sum + course.price * course.enrolledCount * 0.7,
-    0
-  ); // 70% for instructor
-  const avgRating =
-    myCourses.length > 0
-      ? myCourses.reduce((sum, course) => sum + course.rating, 0) /
-        myCourses.length
-      : 0;
+}
+
+export default function InstructorDashboard() {
+  const { user, loading: authLoading } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<DashboardResponse | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      if (!user) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(
+          `/api/instructor/dashboard?instructorId=${encodeURIComponent(
+            user.id
+          )}`
+        );
+        const json: DashboardResponse = await res.json();
+        if (!res.ok || !json.success) {
+          const errMsg =
+            (json as Partial<{ error: string }>).error ||
+            "Gagal memuat dashboard";
+          throw new Error(errMsg);
+        }
+        if (!ignore) setData(json);
+      } catch (e) {
+        if (!ignore) setError(e instanceof Error ? e.message : "Gagal memuat");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    if (!authLoading && user) load();
+    return () => {
+      ignore = true;
+    };
+  }, [authLoading, user]);
 
   // Make numbers compact and prevent wrapping
   const formatCurrency = (n: number) =>
@@ -65,366 +198,488 @@ export default function InstructorDashboard() {
       .format(n)
       .replace("IDR", "Rp");
 
-  // Earnings trend derived from global revenue for demo, scaled to instructor share
+  // Trend from API
   const earningsTrend = useMemo(() => {
-    const share = Math.min(0.35, Math.max(0.12, totalEarnings / 60000000));
-    return monthlyRevenue.map((m, i) => ({
-      label: m.month,
-      value: Math.round(m.revenue * share * 0.7),
-      idx: i,
-    }));
-  }, [totalEarnings]);
+    const list = data?.monthly || [];
+    return list.map((m, i) => ({ ...m, idx: i }));
+  }, [data]);
 
-  // Generate recent purchases from users and courses (demo only)
-  const [recentPurchases] = useState<Purchase[]>(() => {
-    const students = dummyUsers.filter((u) => u.role === "user");
-    const arr: Purchase[] = [];
-    for (let i = 0; i < Math.min(6, myCourses.length); i++) {
-      const course = myCourses[i % myCourses.length];
-      const student = students[(i * 3 + 1) % students.length];
-      arr.push({
-        id: `p_${i}`,
-        userName: student.fullName,
-        courseTitle: course.title,
-        amount: course.price,
-        date: new Date(Date.now() - i * 36e5),
-      });
-    }
-    return arr;
-  });
+  // Legend toggles
+  const [showRevenue, setShowRevenue] = useState(true);
+  const [showOrders, setShowOrders] = useState(true);
 
-  // Small SVG line chart with tooltip
-  const Chart = () => {
-    const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-    const padding = 24;
-    const w = 600;
-    const h = 220;
-    const max = Math.max(...earningsTrend.map((d) => d.value), 1);
-    const points = earningsTrend.map((d, i) => {
-      const x =
-        padding +
-        (i * (w - padding * 2)) / Math.max(earningsTrend.length - 1, 1);
-      const y = padding + (1 - d.value / max) * (h - padding * 2);
-      return { x, y, ...d };
-    });
-    const path = points
-      .map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`)
+  const maxVal = Math.max(
+    ...(showRevenue ? earningsTrend.map((d) => d.revenue) : [0]),
+    ...(showOrders ? earningsTrend.map((d) => d.orders) : [0]),
+    1
+  );
+
+  const chartH = 220;
+  const chartW = 640;
+  const padding = 40;
+
+  function buildPolyline(field: "revenue" | "orders") {
+    return earningsTrend
+      .map((d, i) => {
+        const x =
+          padding +
+          (i * (chartW - padding * 2)) / Math.max(earningsTrend.length - 1, 1);
+        const val = d[field];
+        const y = padding + (1 - val / maxVal) * (chartH - padding * 2);
+        return `${i ? "L" : "M"}${x},${y}`;
+      })
       .join(" ");
+  }
+
+  const revenuePath = buildPolyline("revenue");
+  const ordersPath = buildPolyline("orders");
+
+  // map API -> UI
+  const myCourses = useMemo(() => {
+    return (data?.courses || []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      enrolledCount: c.enrolled_count || 0,
+      totalModules: c.total_modules || 0,
+      isPublished: !!c.is_published,
+      price: c.price || 0,
+    }));
+  }, [data]);
+
+  const recentPurchases = useMemo(() => {
+    return (data?.purchases || []).slice(0, 5).map((p) => ({
+      id: p.id,
+      courseTitle: p.courseTitle,
+      userName: p.userName,
+      amount: p.amount,
+      date: new Date(p.date),
+    }));
+  }, [data]);
+
+  const totalStudents = data?.stats.totalStudents || 0;
+  const totalEarnings = data?.stats.totalEarnings || 0;
+  const avgRating = data?.stats.avgRating || 0;
+
+  if (authLoading || loading) {
     return (
-      <div style={{ width: "100%", overflowX: "auto" }}>
-        <svg width={w} height={h} role="img">
-          <defs>
-            <linearGradient id="grad" x1="0" x2="0" y1="0" y2="1">
-              <stop
-                offset="0%"
-                stopColor="var(--mantine-color-blue-5)"
-                stopOpacity="0.5"
-              />
-              <stop
-                offset="100%"
-                stopColor="var(--mantine-color-blue-5)"
-                stopOpacity="0"
-              />
-            </linearGradient>
-          </defs>
-          <path
-            d={path}
-            fill="none"
-            stroke="var(--mantine-color-blue-6)"
-            strokeWidth={2}
-          />
-          <path
-            d={`${path} L ${points.at(-1)?.x},${h - padding} L ${
-              points[0]?.x
-            },${h - padding} Z`}
-            fill="url(#grad)"
-            opacity={0.4}
-          />
-          {points.map((p, i) => (
-            <g
-              key={i}
-              onMouseEnter={() => setHoverIdx(i)}
-              onMouseLeave={() => setHoverIdx(null)}
-            >
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={3}
-                fill="var(--mantine-color-blue-6)"
-              />
-              {hoverIdx === i && (
-                <g>
-                  <rect
-                    x={Math.min(Math.max(p.x - 60, 8), w - 120)}
-                    y={Math.max(p.y - 46, 8)}
-                    rx={6}
-                    width={120}
-                    height={40}
-                    fill="var(--mantine-color-dark-6)"
-                    opacity={0.9}
-                  />
-                  <text
-                    x={Math.min(Math.max(p.x - 50, 14), w - 110)}
-                    y={Math.max(p.y - 28, 22)}
-                    fill="#fff"
-                    fontSize={12}
-                  >
-                    {new Date(p.label + "-01").toLocaleDateString("id-ID", {
-                      month: "short",
-                    })}
-                  </text>
-                  <text
-                    x={Math.min(Math.max(p.x - 50, 14), w - 110)}
-                    y={Math.max(p.y - 12, 38)}
-                    fill="#fff"
-                    fontSize={12}
-                  >
-                    {formatCurrency(p.value)}
-                  </text>
-                </g>
-              )}
-            </g>
-          ))}
-        </svg>
-        <Group gap="sm" mt="xs">
-          <Badge color="blue" variant="light">
-            Pendapatan
-          </Badge>
-          <Text size="xs" c="dimmed">
-            Trend pendapatan per bulan (estimasi)
-          </Text>
-        </Group>
-      </div>
+      <Container size="xl">
+        <Stack gap="md">
+          <Title order={2}>Memuat dashboard…</Title>
+          <Text c="dimmed">Harap tunggu sebentar.</Text>
+        </Stack>
+      </Container>
     );
-  };
+  }
+
+  if (!user || !data) {
+    return (
+      <Container size="xl">
+        <Stack gap="md">
+          <Title order={3}>Tidak dapat memuat dashboard</Title>
+          <Text c="red">{error || "Silakan coba lagi nanti."}</Text>
+        </Stack>
+      </Container>
+    );
+  }
 
   return (
     <Container size="xl">
       <Stack gap="xl">
-        <div>
-          <Title order={1} mb="md">
-            Dashboard Instruktur
-          </Title>
-          <Text size="lg" c="dimmed">
-            Selamat datang kembali, {currentInstructor.fullName}!
-          </Text>
-        </div>
+        {/* Hero card */}
+        <Card
+          padding="lg"
+          radius="lg"
+          style={{
+            position: "relative",
+            overflow: "hidden",
+            background: "var(--primary-color)", // fallback solid color
+            color: "white",
+          }}
+        >
+          {/* Circle accent */}
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              right: -80,
+              top: -60,
+              width: 280,
+              height: 280,
+              borderRadius: "50%",
+              background: "var(--secondary-color)",
+            }}
+          />
+          <Group
+            justify="space-between"
+            align="center"
+            style={{ position: "relative", zIndex: 1 }}
+          >
+            <Group>
+              <div>
+                <Title order={2} c="white">
+                  Selamat datang, {data.profile.full_name || user.fullName}
+                </Title>
+                <Text c="white" opacity={0.85}>
+                  Kelola kursus, pantau pendapatan, dan lihat aktivitas terbaru.
+                </Text>
+              </div>
+            </Group>
+          </Group>
+        </Card>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <Grid gutter="xl">
-          {[
-            {
-              label: "Kursus Saya",
-              value: String(myCourses.length),
-              Icon: IconBook,
-              color: "var(--mantine-color-blue-6)",
-            },
-            {
-              label: "Total Siswa",
-              value: String(totalStudents),
-              Icon: IconUsers,
-              color: "var(--mantine-color-grape-6)",
-            },
-            {
-              label: "Total Penghasilan",
-              value: formatCurrency(totalEarnings),
-              Icon: IconCoin,
-              color: "var(--mantine-color-green-6)",
-            },
-            {
-              label: "Rata-rata Rating",
-              value: `${avgRating.toFixed(1)}`,
-              Icon: IconChartBar,
-              color: "var(--mantine-color-yellow-6)",
-            },
-          ].map(({ label, value, Icon }) => (
-            <Grid.Col key={label} span={{ base: 12, sm: 6, lg: 3 }}>
-              <Card
-                padding="lg"
-                radius="md"
-                className="stats-card"
-                style={{ minHeight: 160, display: "flex" }}
-              >
-                <Stack align="center" gap={8} w="100%">
-                  <div
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: "50%",
-                      background: "var(--gradient-primary)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Icon size="1.6rem" color="#fff" />
-                  </div>
-                  <Text
-                    size="sm"
-                    c="dimmed"
-                    tt="uppercase"
-                    fw={600}
-                    ta="center"
-                  >
-                    {label}
-                  </Text>
-                  <Text
-                    size={rem(28)}
-                    fw={800}
-                    ta="center"
-                    style={{ whiteSpace: "nowrap" }}
-                  >
-                    {value}
-                  </Text>
-                </Stack>
-              </Card>
-            </Grid.Col>
-          ))}
+          <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
+            <StatCard
+              label="Kursus Saya"
+              value={myCourses.length}
+              Icon={IconBook}
+              color="blue"
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
+            <StatCard
+              label="Total Siswa"
+              value={totalStudents}
+              Icon={IconUsers}
+              color="grape"
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
+            <StatCard
+              label="Total Penghasilan"
+              value={formatCurrency(totalEarnings)}
+              Icon={IconCoin}
+              color="green"
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
+            <StatCard
+              label="Rata-Rata Rating"
+              value={avgRating.toFixed(1)}
+              Icon={IconChartBar}
+              color="yellow"
+            />
+          </Grid.Col>
         </Grid>
 
-        {/* Chart + Lists */}
-        <Grid gutter="xl">
+        {/* New two-column layout: Left (Chart + Courses) | Right (Profile + Purchases) */}
+        <Grid gutter="xl" align="stretch">
           <Grid.Col span={{ base: 12, lg: 8 }}>
-            <Card padding="lg" radius="md">
-              <Group justify="space-between" mb="md">
-                <Title order={3}>Pendapatan Bulanan</Title>
-                <Anchor component={Link} href="/instructor/earnings" size="sm">
-                  Lihat selengkapnya
-                </Anchor>
-              </Group>
-              <Chart />
-            </Card>
+            <Stack gap="lg">
+              {/* Chart */}
+              <Card
+                withBorder
+                padding="lg"
+                radius="md"
+                style={{ position: "relative" }}
+              >
+                <Group justify="space-between" mb="md">
+                  <Title order={3}>Performa Bulanan</Title>
+                </Group>
+                <div style={{ width: "100%", overflowX: "auto" }}>
+                  <svg
+                    viewBox={`0 0 ${chartW} ${chartH}`}
+                    width="100%"
+                    style={{ minWidth: 560, display: "block" }}
+                  >
+                    {/* Grid lines */}
+                    {Array.from({ length: 4 }, (_, i) => {
+                      const y = padding + (i * (chartH - padding * 2)) / 3;
+                      const val = Math.round((1 - i / 3) * maxVal);
+                      return (
+                        <g key={i} opacity={0.4}>
+                          <line
+                            x1={padding - 10}
+                            x2={chartW - padding + 10}
+                            y1={y}
+                            y2={y}
+                            stroke="var(--mantine-color-gray-4)"
+                            strokeDasharray="4 6"
+                          />
+                          <text
+                            x={8}
+                            y={y - 4}
+                            fontSize={10}
+                            fill="var(--mantine-color-dimmed)"
+                          >
+                            {new Intl.NumberFormat("id-ID").format(val)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    {/* Revenue line */}
+                    {showRevenue && (
+                      <path
+                        d={revenuePath}
+                        fill="none"
+                        stroke="var(--mantine-color-green-6)"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                      />
+                    )}
+                    {/* Orders line */}
+                    {showOrders && (
+                      <path
+                        d={ordersPath}
+                        fill="none"
+                        stroke="var(--mantine-color-blue-6)"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        strokeDasharray="5 6"
+                      />
+                    )}
+                    {/* Points + tooltip */}
+                    {earningsTrend.map((d, i) => {
+                      const x =
+                        padding +
+                        (i * (chartW - padding * 2)) /
+                          Math.max(earningsTrend.length - 1, 1);
+                      const yRev =
+                        padding +
+                        (1 - d.revenue / maxVal) * (chartH - padding * 2);
+                      const yOrd =
+                        padding +
+                        (1 - d.orders / maxVal) * (chartH - padding * 2);
 
-            <Card padding="lg" radius="md" mt="lg">
-              <Group justify="space-between" mb="md">
-                <Title order={3}>Kursus Saya</Title>
+                      return (
+                        <g key={d.idx}>
+                          {showRevenue && (
+                            <circle
+                              cx={x}
+                              cy={yRev}
+                              r={5}
+                              fill="var(--mantine-color-green-6)"
+                              stroke="#fff"
+                              strokeWidth={2}
+                            >
+                              <title>
+                                {new Date(d.month + "-01").toLocaleDateString(
+                                  "id-ID",
+                                  {
+                                    month: "long",
+                                  }
+                                )}
+                                {"\n"}Pendapatan:{" "}
+                                {new Intl.NumberFormat("id-ID").format(
+                                  d.revenue
+                                )}
+                              </title>
+                            </circle>
+                          )}
+                          {showOrders && (
+                            <circle
+                              cx={x}
+                              cy={yOrd}
+                              r={5}
+                              fill="var(--mantine-color-blue-6)"
+                              stroke="#fff"
+                              strokeWidth={2}
+                            >
+                              <title>
+                                {new Date(d.month + "-01").toLocaleDateString(
+                                  "id-ID",
+                                  {
+                                    month: "long",
+                                  }
+                                )}
+                                {"\n"}Orders:{" "}
+                                {new Intl.NumberFormat("id-ID").format(
+                                  d.orders
+                                )}
+                              </title>
+                            </circle>
+                          )}
+                        </g>
+                      );
+                    })}
+
+                    {/* Month labels */}
+                    {earningsTrend.map((d, i) => {
+                      const x =
+                        padding +
+                        (i * (chartW - padding * 2)) /
+                          Math.max(earningsTrend.length - 1, 1);
+                      return (
+                        <text
+                          key={d.idx}
+                          x={x}
+                          y={chartH - 12}
+                          fontSize={11}
+                          textAnchor="middle"
+                          fill="var(--mantine-color-dimmed)"
+                        >
+                          {new Date(d.month + "-01").toLocaleDateString(
+                            "id-ID",
+                            {
+                              month: "short",
+                            }
+                          )}
+                        </text>
+                      );
+                    })}
+                  </svg>
+                </div>
+                <Group gap={8} mt="xs">
+                  <Badge
+                    onClick={() => setShowRevenue((s) => !s)}
+                    style={{
+                      cursor: "pointer",
+                      opacity: showRevenue ? 1 : 0.4,
+                    }}
+                    color="green"
+                    variant={showRevenue ? "filled" : "light"}
+                  >
+                    Pendapatan
+                  </Badge>
+                  <Badge
+                    onClick={() => setShowOrders((s) => !s)}
+                    style={{
+                      cursor: "pointer",
+                      opacity: showOrders ? 1 : 0.4,
+                    }}
+                    color="blue"
+                    variant={showOrders ? "filled" : "light"}
+                  >
+                    Orders
+                  </Badge>
+                </Group>
+                <Text size="xs" c="dimmed" mt="xs">
+                  Klik legend untuk sembunyikan / tampilkan.
+                </Text>
+              </Card>
+
+              {/* Courses (limit 3) */}
+              <Card withBorder padding="lg" radius="md">
+                <Title order={4} mb="md">
+                  Kursus Saya
+                </Title>
+                <Stack gap={12} style={{ fontSize: 13 }}>
+                  {myCourses.slice(0, 3).map((c) => (
+                    <Group
+                      key={c.id}
+                      justify="space-between"
+                      align="flex-start"
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <Text size="sm" fw={600} lineClamp={1}>
+                          {c.title}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {c.enrolledCount} siswa • {c.totalModules} modul
+                        </Text>
+                      </div>
+                      <Badge
+                        variant="light"
+                        color={c.isPublished ? "teal" : "gray"}
+                      >
+                        {c.isPublished ? "Published" : "Draft"}
+                      </Badge>
+                    </Group>
+                  ))}
+                </Stack>
                 <Button
-                  leftSection={<IconPlus size="1rem" />}
-                  className="btn-primary"
-                  size="sm"
                   component={Link}
                   href="/instructor/courses"
+                  bg="var(--primary-color)"
+                  fullWidth
+                  mt="md"
+                  size="sm"
                 >
-                  Kelola Kursus
+                  Lihat selengkapnya
                 </Button>
-              </Group>
-              <Table verticalSpacing="xs">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Kursus</Table.Th>
-                    <Table.Th>Siswa</Table.Th>
-                    <Table.Th>Rating</Table.Th>
-                    <Table.Th>Penghasilan</Table.Th>
-                    <Table.Th>Status</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {myCourses.slice(0, 3).map((course) => (
-                    <Table.Tr key={course.id}>
-                      <Table.Td>
-                        <Group>
-                          <div
-                            style={{
-                              width: 44,
-                              height: 32,
-                              background: "var(--gradient-accent)",
-                              borderRadius: 6,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "white",
-                              fontSize: "10px",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {course.category === "scratch" ? "SCR" : "RBX"}
-                          </div>
-                          <div>
-                            <Text fw={600} size="sm" lineClamp={1}>
-                              {course.title}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {course.totalModules} modul
-                            </Text>
-                          </div>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">{course.enrolledCount}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">{course.rating}/5</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text
-                          size="sm"
-                          fw={600}
-                          c="green"
-                          style={{ whiteSpace: "nowrap" }}
-                        >
-                          {formatCurrency(
-                            course.price * course.enrolledCount * 0.7
-                          )}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge
-                          variant="light"
-                          color={course.isPublished ? "green" : "gray"}
-                        >
-                          {course.isPublished ? "Published" : "Draft"}
-                        </Badge>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Card>
+              </Card>
+            </Stack>
           </Grid.Col>
-
           <Grid.Col span={{ base: 12, lg: 4 }}>
-            <Card padding="lg" radius="md">
-              <Title order={4} mb="md">
-                Riwayat Pembelian Terbaru
-              </Title>
-              <Stack gap="sm">
-                {recentPurchases.slice(0, 3).map((p) => (
-                  <Group key={p.id} justify="space-between" wrap="nowrap">
-                    <div style={{ minWidth: 0 }}>
-                      <Text size="sm" fw={600} lineClamp={1}>
-                        {p.userName}
-                      </Text>
-                      <Text size="xs" c="dimmed" lineClamp={1}>
-                        {p.courseTitle}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {p.date.toLocaleString("id-ID", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </Text>
-                    </div>
-                    <Text
-                      fw={700}
-                      size="sm"
-                      c="green"
-                      style={{ whiteSpace: "nowrap" }}
-                    >
-                      {formatCurrency(p.amount)}
-                    </Text>
-                  </Group>
-                ))}
-              </Stack>
-              <Button
-                component={Link}
-                href="/instructor/earnings"
-                variant="light"
-                fullWidth
-                mt="md"
+            <Stack gap="lg">
+              {/* Profile card */}
+              <Card
+                withBorder
+                padding="lg"
+                radius="md"
+                style={{ textAlign: "center" }}
               >
-                Lihat selengkapnya
-              </Button>
-            </Card>
+                <Stack gap="xs" align="center">
+                  <Avatar
+                    src={data.profile.avatar || undefined}
+                    radius="xl"
+                    size={72}
+                  >
+                    {data.profile.full_name?.[0]}
+                  </Avatar>
+
+                  <Title order={4} lineClamp={1}>
+                    {data.profile.full_name || user.fullName}
+                  </Title>
+
+                  <Text size="sm" c="dimmed" lineClamp={1}>
+                    {data.profile.email}
+                  </Text>
+
+                  {data.instructor?.bank_account && (
+                    <Text
+                      size="sm"
+                      style={{
+                        backgroundColor: "#1e3769",
+                        color: "white",
+                        padding: "4px 12px",
+                        borderRadius: "8px",
+                        marginTop: 8,
+                        display: "inline-block",
+                      }}
+                    >
+                      Rekening: {data.instructor.bank_account}
+                    </Text>
+                  )}
+                </Stack>
+              </Card>
+
+              {/* Purchases 3 */}
+              <Card withBorder padding="lg" radius="md">
+                <Title order={4} mb="md">
+                  Pembelian Terbaru
+                </Title>
+                <Stack gap={12} style={{ fontSize: 13 }}>
+                  {recentPurchases.slice(0, 3).map((p) => (
+                    <Group key={p.id} justify="space-between" wrap="nowrap">
+                      <div style={{ minWidth: 0 }}>
+                        <Text size="sm" fw={600} lineClamp={1}>
+                          {p.userName}
+                        </Text>
+                        <Text size="xs" c="dimmed" lineClamp={1}>
+                          {p.courseTitle}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {p.date.toLocaleString("id-ID", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </Text>
+                      </div>
+                      <Text
+                        size="sm"
+                        fw={700}
+                        c="green"
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        {formatCurrency(p.amount)}
+                      </Text>
+                    </Group>
+                  ))}
+                </Stack>
+                <Button
+                  component={Link}
+                  href="/instructor/earnings"
+                  bg="var(--primary-color)"
+                  fullWidth
+                  mt="md"
+                  size="sm"
+                >
+                  Lihat selengkapnya
+                </Button>
+              </Card>
+            </Stack>
           </Grid.Col>
         </Grid>
       </Stack>

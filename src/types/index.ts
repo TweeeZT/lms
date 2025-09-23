@@ -186,6 +186,9 @@ export interface SignupData {
   email: string;
   username: string;
   fullName: string;
+  role: "instructor" | "user"; // 'user' represents siswa/student
+  phone: string;
+  bio?: string;
   password: string;
   confirmPassword: string;
 }

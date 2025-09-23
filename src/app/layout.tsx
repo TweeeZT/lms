@@ -9,21 +9,23 @@ import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 import "./globals.css";
 import { AuthProvider } from "../hooks/useAuth";
+import PrimeLoader from "../components/PrimeLoader";
+import "@mantine/dates/styles.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 // Define custom colors for better dark mode support
 const primaryColors: MantineColorsTuple = [
-  "#e8f2ff",
-  "#d1e6ff",
-  "#a8d0ff",
-  "#7ab5ff",
-  "#4c99ff",
-  "#187420",
-  "#145f1a",
-  "#104a14",
-  "#0c350e",
-  "#082008",
+  "#eef1f6", // 50
+  "#d3d8e2", // 100
+  "#aeb9cc", // 200
+  "#7988a6", // 300
+  "#627495", // 400
+  "#4b6087", // 500
+  "#3c4e77", // 600
+  "#2b406e", // 700
+  "#1e386a", // 800
+  "#15294d", // 900
 ];
 
 const secondaryColors: MantineColorsTuple = [
@@ -81,6 +83,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <MantineProvider theme={theme}>
           <Notifications />
+          <PrimeLoader />
           <AuthProvider>{children}</AuthProvider>
         </MantineProvider>
       </body>

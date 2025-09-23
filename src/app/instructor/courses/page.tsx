@@ -10,14 +10,18 @@ import {
   Group,
   Badge,
   Button,
-  Table,
   ActionIcon,
   Modal,
   TextInput,
+  Textarea,
   NumberInput,
   Select,
+  FileInput,
   Switch,
+  Pagination,
+  Skeleton,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import {
   IconBook,
   IconPlus,
@@ -27,46 +31,100 @@ import {
   IconUsers,
   IconStar,
 } from "@tabler/icons-react";
-import { getCoursesByInstructor } from "../../../data/courses";
-import { dummyUsers } from "../../../data/users";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useMediaQuery } from "@mantine/hooks";
+import { useAuth } from "../../../hooks/useAuth";
 import Link from "next/link";
 
-// Simulate current instructor
-const currentInstructor = dummyUsers.find((u) => u.role === "instructor")!;
-
 export default function InstructorCoursesPage() {
-  const [courses, setCourses] = useState(() =>
-    getCoursesByInstructor(currentInstructor.id)
-  );
+  const { user } = useAuth();
+  const isMobile = useMediaQuery("(max-width: 48em)");
+  const [loading, setLoading] = useState(true);
+  // error state handled via dialog + notifications
+  type CourseRow = {
+    id: string;
+    title: string;
+    description?: string | null;
+    thumbnail?: string | null;
+    category: string;
+    price?: number | null;
+    duration_min?: number | null;
+    level: string;
+    total_modules?: number | null;
+    enrolled_count?: number | null;
+    rating?: number | null;
+    is_published?: boolean | null;
+    created_at: string;
+    updated_at?: string;
+  };
+  const [courses, setCourses] = useState<CourseRow[]>([]);
   const [opened, setOpened] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
-    category: "scratch" as "scratch" | "roblox",
     price: 0,
     totalModules: 0,
     isPublished: true,
     level: "beginner" as "beginner" | "intermediate" | "advanced",
+    thumbnail: "",
+    description: "",
+    category: "scratch" as "scratch" | "roblox",
+    durationMin: 0,
   });
+  const [errors, setErrors] = useState<{
+    title?: string;
+    totalModules?: string;
+    thumbnail?: string;
+    description?: string;
+  }>({});
+  // no remote upload state needed; upload only on save via API
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageMeta, setImageMeta] = useState<{
+    name: string;
+    sizeKB: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "published" | "draft"
+  >("all");
+  const [page, setPage] = useState(1);
+  const [limit] = useState(6);
+  const [total, setTotal] = useState(0);
 
-  const myCourses = courses;
+  // errors reported via notifications only
+
+  const myCourses: CourseRow[] = courses;
+  const filteredCourses = myCourses; // server-side filtering already applied
+
+  // validation handled inline in saveCourse
 
   const resetForm = () => {
     setForm({
       title: "",
-      category: "scratch",
       price: 0,
       totalModules: 0,
       isPublished: true,
       level: "beginner",
+      thumbnail: "",
+      description: "",
+      category: "scratch",
+      durationMin: 0,
     });
     setEditingId(null);
+    setErrors({});
   };
 
   const openAdd = () => {
     resetForm();
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setImageMeta(null);
     setOpened(true);
   };
 
@@ -74,66 +132,303 @@ export default function InstructorCoursesPage() {
     const c = myCourses.find((c) => c.id === id)!;
     setForm({
       title: c.title,
-      category: c.category,
-      price: c.price,
-      totalModules: c.totalModules,
-      isPublished: c.isPublished,
-      level: c.level,
+      price: c.price || 0,
+      totalModules: c.total_modules || 0,
+      isPublished: c.is_published ?? true,
+      level:
+        (c.level as "beginner" | "intermediate" | "advanced") || "beginner",
+      thumbnail: (c.thumbnail?.trim() || "") as string,
+      description: c.description || "",
+      category: (c.category as "scratch" | "roblox") || "scratch",
+      durationMin: Number(c.duration_min || 0),
     });
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setImageMeta(null);
     setEditingId(id);
+    setErrors({});
     setOpened(true);
   };
 
-  const saveCourse = () => {
-    if (editingId) {
-      setCourses((prev) =>
-        prev.map((c) =>
-          c.id === editingId
-            ? {
-                ...c,
-                title: form.title,
-                category: form.category,
-                price: form.price,
-                totalModules: form.totalModules,
-                isPublished: form.isPublished,
-                level: form.level,
-                updatedAt: new Date(),
-              }
-            : c
-        )
-      );
-    } else {
-      const id = `new-${Date.now()}`;
-      setCourses((prev) => [
-        ...prev,
-        {
-          id,
-          title: form.title,
-          description: "",
-          thumbnail: "/course-thumbnails/new.jpg",
-          category: form.category,
-          instructorId: currentInstructor.id,
-          instructor: currentInstructor,
-          price: form.price,
-          duration: 0,
-          level: form.level,
-          totalModules: form.totalModules,
-          enrolledCount: 0,
-          rating: 0,
-          isPublished: form.isPublished,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]);
+  // Local-only preview; no upload until Simpan
+  const handlePickThumbnail = (file: File | null) => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setImageMeta(null);
+    if (file) {
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      // clear remote thumbnail until saved
+      setForm((f) => ({ ...f, thumbnail: "" }));
+      setErrors((e) => ({ ...e, thumbnail: undefined }));
+      // load dimensions
+      const img = new Image();
+      img.onload = () => {
+        setImageMeta({
+          name: file.name,
+          sizeKB: Math.max(1, Math.round(file.size / 1024)),
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+      };
+      img.src = url;
     }
-    setOpened(false);
+  };
+
+  // API helpers
+  const fetchCourses = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        instructorId: user.id,
+        q: search,
+        status: statusFilter,
+        page: String(page),
+        limit: String(limit),
+      });
+      const res = await fetch(`/api/instructor/courses?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok || !json.success)
+        throw new Error(json.error || "Gagal memuat kursus");
+      setCourses(json.items || []);
+      setTotal(json.total || 0);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal memuat kursus";
+      notifications.show({ color: "red", title: "Gagal", message: msg });
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, search, statusFilter, page, limit]);
+
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
+
+  useEffect(() => {
+    // re-filter/refetch on search/status changes (server filters for accuracy)
+    const t = setTimeout(() => fetchCourses(), 300);
+    return () => clearTimeout(t);
+  }, [fetchCourses, search, statusFilter, page]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
+  const saveCourse = async () => {
+    if (saving) return; // prevent spam
+    if (!user) return;
+    // validate against local state; require either selected file (add) or existing thumbnail (edit)
+    const baseErrors: typeof errors = {};
+    if (!form.title.trim()) baseErrors.title = "Judul wajib";
+    if (!form.description.trim()) baseErrors.description = "Deskripsi wajib";
+    if (form.totalModules <= 0)
+      baseErrors.totalModules = "Total modul harus > 0";
+    const needsThumb = !editingId
+      ? !selectedFile
+      : !(selectedFile || form.thumbnail?.trim());
+    if (needsThumb) baseErrors.thumbnail = "Thumbnail wajib";
+    setErrors(baseErrors);
+    if (Object.keys(baseErrors).length) return;
+    try {
+      setSaving(true);
+      if (editingId) {
+        let res: Response;
+        if (selectedFile) {
+          const fd = new FormData();
+          fd.append("title", form.title);
+          fd.append("price", String(form.price ?? 0));
+          fd.append("total_modules", String(form.totalModules));
+          fd.append("is_published", String(!!form.isPublished));
+          fd.append("level", form.level);
+          fd.append("description", form.description);
+          fd.append("category", form.category);
+          fd.append("duration_min", String(form.durationMin));
+          fd.append("file", selectedFile);
+          fd.append("filename", selectedFile.name);
+          res = await fetch(
+            `/api/instructor/courses/${editingId}?instructorId=${encodeURIComponent(
+              user.id
+            )}`,
+            { method: "PATCH", body: fd }
+          );
+        } else {
+          res = await fetch(
+            `/api/instructor/courses/${editingId}?instructorId=${encodeURIComponent(
+              user.id
+            )}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: form.title,
+                price: form.price,
+                total_modules: form.totalModules,
+                is_published: form.isPublished,
+                level: form.level,
+                thumbnail: form.thumbnail,
+                description: form.description,
+                category: form.category,
+                duration_min: form.durationMin,
+              }),
+            }
+          );
+        }
+        const json = await res.json();
+        if (!res.ok || !json.success)
+          throw new Error(json.error || "Gagal update");
+        notifications.show({
+          color: "green",
+          title: "Berhasil",
+          message: "Kursus berhasil diperbarui",
+        });
+      } else {
+        const fd = new FormData();
+        fd.append("instructorId", user.id);
+        fd.append("title", form.title);
+        fd.append("price", String(form.price ?? 0));
+        fd.append("total_modules", String(form.totalModules));
+        fd.append("is_published", String(!!form.isPublished));
+        fd.append("level", form.level);
+        fd.append("description", form.description);
+        fd.append("category", form.category);
+        fd.append("duration_min", String(form.durationMin));
+        if (selectedFile) {
+          fd.append("file", selectedFile);
+          fd.append("filename", selectedFile.name);
+        }
+        const res = await fetch(`/api/instructor/courses`, {
+          method: "POST",
+          body: fd,
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success)
+          throw new Error(json.error || "Gagal membuat kursus");
+        notifications.show({
+          color: "green",
+          title: "Berhasil",
+          message: "Kursus berhasil dibuat",
+        });
+      }
+      setOpened(false);
+      // cleanup preview url to avoid leaks
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setSelectedFile(null);
+      setImageMeta(null);
+      await fetchCourses();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Operasi gagal";
+      notifications.show({ color: "red", title: "Gagal", message: msg });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const confirmDelete = (id: string) => setDeleteId(id);
-  const doDelete = () => {
-    setCourses((prev) => prev.filter((c) => c.id !== deleteId));
-    setDeleteId(null);
+  const doDelete = async () => {
+    if (!deleteId || !user) return;
+    try {
+      const res = await fetch(
+        `/api/instructor/courses/${deleteId}?instructorId=${encodeURIComponent(
+          user.id
+        )}`,
+        { method: "DELETE" }
+      );
+      const json = await res.json();
+      if (!res.ok || !json.success)
+        throw new Error(json.error || "Gagal menghapus");
+      setDeleteId(null);
+      await fetchCourses();
+      notifications.show({
+        color: "green",
+        title: "Berhasil",
+        message: "Kursus berhasil dihapus",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal menghapus";
+      notifications.show({ color: "red", title: "Gagal", message: msg });
+    }
   };
+
+  // Gradient stat card component (uses globals.css theme variables)
+  const StatCard = ({
+    label,
+    value,
+    icon: Icon,
+  }: {
+    label: string;
+    value: string;
+    icon: React.ComponentType<{ size?: number; color?: string }>;
+  }) => {
+    // Use brand gradient and soft frosted icon badge
+    const bg = "var(--primary-color)"; // defined in globals.css
+    const iconBadgeBg = "var(--secondary-color)";
+    const textColor = "#ffffff";
+
+    return (
+      <Card
+        withBorder
+        radius="lg"
+        padding="lg"
+        style={{
+          background: bg,
+          boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
+          transition: "transform .18s ease, box-shadow .18s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-4px)";
+          e.currentTarget.style.boxShadow = "0 12px 28px rgba(0,0,0,0.22)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "0 6px 16px rgba(0,0,0,0.12)";
+        }}
+      >
+        <Stack align="center" gap={6}>
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              background: iconBadgeBg, // frosted look
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            <Icon size={28} />
+          </div>
+          <Text size="xs" tt="uppercase" fw={700} c={textColor}>
+            {label}
+          </Text>
+          <Text
+            size="xl"
+            fw={800}
+            style={{ lineHeight: 1.1, color: textColor }}
+          >
+            {value}
+          </Text>
+        </Stack>
+      </Card>
+    );
+  };
+
+  const totalStudents = myCourses.reduce(
+    (sum: number, c: CourseRow) => sum + (c.enrolled_count ?? 0),
+    0
+  );
+  const avgRating = myCourses.length
+    ? (
+        myCourses.reduce((s: number, c: CourseRow) => s + (c.rating ?? 0), 0) /
+        myCourses.length
+      ).toFixed(1)
+    : "0";
 
   return (
     <Container size="xl">
@@ -157,194 +452,207 @@ export default function InstructorCoursesPage() {
         </Group>
 
         {/* Stats */}
-        <Grid gutter="lg">
-          {[
-            {
-              label: "Total Kursus",
-              value: String(myCourses.length),
-              Icon: IconBook,
-              bg: "var(--gradient-primary)",
-            },
-            {
-              label: "Total Siswa",
-              value: String(
-                myCourses.reduce((sum, course) => sum + course.enrolledCount, 0)
-              ),
-              Icon: IconUsers,
-              bg: "var(--gradient-secondary)",
-            },
-            {
-              label: "Rata-rata Rating",
-              value:
-                myCourses.length > 0
-                  ? (
-                      myCourses.reduce(
-                        (sum, course) => sum + course.rating,
-                        0
-                      ) / myCourses.length
-                    ).toFixed(1)
-                  : "0",
-              Icon: IconStar,
-              bg: "var(--gradient-accent)",
-            },
-          ].map(({ label, value, Icon, bg }) => (
-            <Grid.Col key={label} span={{ base: 12, md: 4 }}>
-              <Card
-                padding="md"
-                radius="md"
-                className="stats-card"
-                style={{ minHeight: 140 }}
-              >
-                <Stack align="center" gap={6}>
-                  <div
-                    style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: "50%",
-                      background: bg,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Icon size="1.4rem" color="#fff" />
-                  </div>
-                  <Text
-                    size="sm"
-                    c="dimmed"
-                    tt="uppercase"
-                    fw={600}
-                    ta="center"
-                  >
-                    {label}
-                  </Text>
-                  <Text size="xl" fw={700} ta="center">
-                    {value}
-                  </Text>
-                </Stack>
-              </Card>
-            </Grid.Col>
-          ))}
+        <Grid gutter="xl">
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <StatCard
+              label="Total Kursus"
+              value={String(myCourses.length)}
+              icon={IconBook}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <StatCard
+              label="Total Siswa"
+              value={String(totalStudents)}
+              icon={IconUsers}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <StatCard
+              label="Rata-rata Rating"
+              value={avgRating}
+              icon={IconStar}
+            />
+          </Grid.Col>
         </Grid>
 
-        <Card padding="lg" radius="md">
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Kursus</Table.Th>
-                <Table.Th>Kategori</Table.Th>
-                <Table.Th>Harga</Table.Th>
-                <Table.Th>Siswa Terdaftar</Table.Th>
-                <Table.Th>Rating</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Dibuat</Table.Th>
-                <Table.Th>Aksi</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {myCourses.map((course) => (
-                <Table.Tr key={course.id}>
-                  <Table.Td>
-                    <Group>
-                      <div>
-                        <Text fw={600} lineClamp={1}>
+        <Card padding="xl" radius="lg" withBorder>
+          {/* Filters */}
+          <Group mb="md" align="flex-end" wrap="wrap" gap="md">
+            <TextInput
+              label="Pencarian"
+              placeholder="Cari judul..."
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              style={{ minWidth: 230, flex: 1 }}
+            />
+            <Select
+              label="Status"
+              value={statusFilter}
+              onChange={(v) =>
+                setStatusFilter((v as "all" | "published" | "draft") || "all")
+              }
+              data={[
+                { value: "all", label: "Semua" },
+                { value: "published", label: "Published" },
+                { value: "draft", label: "Draft" },
+              ]}
+              style={{ width: 180 }}
+            />
+            <Text size="xs" c="dimmed" style={{ marginLeft: "auto" }}>
+              {total} hasil
+            </Text>
+          </Group>
+          {/* Grid cards instead of table */}
+          {loading ? (
+            <Grid gutter="xl">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4 }}>
+                  <Skeleton height={160} radius="md" />
+                </Grid.Col>
+              ))}
+            </Grid>
+          ) : (
+            <Grid gutter="xl">
+              {filteredCourses.map((course) => (
+                <Grid.Col
+                  key={course.id}
+                  span={{ base: 12, sm: 6, md: 6, lg: 4 }}
+                >
+                  <Card
+                    withBorder
+                    padding="lg"
+                    radius="lg"
+                    className="card-hover"
+                  >
+                    <Stack gap={12}>
+                      {course.thumbnail ? (
+                        <div
+                          style={{
+                            position: "relative",
+                            width: "100%",
+                            aspectRatio: "16/9",
+                            overflow: "hidden",
+                            borderRadius: 8,
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={course.thumbnail}
+                            alt={course.title}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                            }}
+                            onError={(e) => {
+                              const el = e.currentTarget as HTMLImageElement;
+                              el.style.display = "none";
+                              const parent = el.parentElement;
+                              if (parent)
+                                parent.innerHTML = `<div style=\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#f1f5f9;color:#64748b;font-weight:600;\">Thumbnail tidak tersedia</div>`;
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            position: "relative",
+                            width: "100%",
+                            aspectRatio: "16/9",
+                            overflow: "hidden",
+                            borderRadius: 8,
+                            background: "#f1f5f9",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#64748b",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Thumbnail tidak tersedia
+                        </div>
+                      )}
+                      <Group justify="space-between" align="flex-start">
+                        <Text fw={700} lineClamp={2}>
                           {course.title}
                         </Text>
-                        <Text size="sm" c="dimmed">
-                          {course.totalModules} modul •{" "}
-                          {Math.round(course.duration / 60)}h
+                        <Badge
+                          variant="light"
+                          color={course.is_published ?? false ? "teal" : "gray"}
+                        >
+                          {course.is_published ?? false ? "Published" : "Draft"}
+                        </Badge>
+                      </Group>
+                      <Group gap={8}>
+                        <Badge size="sm" variant="light">
+                          {course.total_modules ?? 0} modul
+                        </Badge>
+                        <Badge size="sm" variant="light" color="grape">
+                          {Math.round((course.duration_min ?? 0) / 60)} jam
+                        </Badge>
+                      </Group>
+                      <Group justify="space-between" align="center">
+                        <Text fw={700} c="green">
+                          Rp {(course.price ?? 0).toLocaleString("id-ID")}
                         </Text>
-                      </div>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      variant="light"
-                      color={course.category === "scratch" ? "orange" : "cyan"}
-                    >
-                      {course.category}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text fw={600} c="green">
-                      Rp {course.price.toLocaleString()}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group>
-                      <Text size="sm">{course.enrolledCount}</Text>
+                        <Text size="sm" c="dimmed">
+                          {course.enrolled_count ?? 0} siswa
+                        </Text>
+                      </Group>
+                      <Group justify="space-between">
+                        <Button
+                          component={Link}
+                          href={`/instructor/courses/${course.id}`}
+                          variant="light"
+                          size="xs"
+                          leftSection={<IconEye size="1rem" />}
+                        >
+                          Detail
+                        </Button>
+                        <Group gap="xs">
+                          <ActionIcon
+                            variant="light"
+                            color="yellow"
+                            onClick={() => openEdit(course.id)}
+                          >
+                            <IconEdit size="1rem" />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            onClick={() => confirmDelete(course.id)}
+                          >
+                            <IconTrash size="1rem" />
+                          </ActionIcon>
+                        </Group>
+                      </Group>
                       <Text size="xs" c="dimmed">
-                        siswa
+                        Dibuat{" "}
+                        {new Date(course.created_at).toLocaleDateString(
+                          "id-ID"
+                        )}
                       </Text>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <IconStar size="1rem" color="gold" />
-                      <Text size="sm">{course.rating}</Text>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      variant="light"
-                      color={course.isPublished ? "green" : "gray"}
-                    >
-                      {course.isPublished ? "Published" : "Draft"}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">
-                      {course.createdAt.toLocaleDateString("id-ID")}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs" wrap="nowrap">
-                      <ActionIcon
-                        variant="light"
-                        color="blue"
-                        component={Link}
-                        href={`/instructor/courses/${course.id}`}
-                        title="Lihat detail"
-                      >
-                        <IconEye size="1rem" />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="yellow"
-                        onClick={() => openEdit(course.id)}
-                      >
-                        <IconEdit size="1rem" />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="red"
-                        onClick={() => confirmDelete(course.id)}
-                      >
-                        <IconTrash size="1rem" />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
+                    </Stack>
+                  </Card>
+                </Grid.Col>
               ))}
-            </Table.Tbody>
-          </Table>
-
-          {myCourses.length === 0 && (
-            <Stack align="center" py="xl" gap="md">
+            </Grid>
+          )}
+          {filteredCourses.length === 0 && (
+            <Stack align="center" py="xl" gap={6}>
               <IconBook size="3rem" color="gray" />
-              <Text size="lg" c="dimmed">
-                Belum ada kursus
-              </Text>
-              <Text size="sm" c="dimmed" ta="center">
-                Mulai berbagi pengetahuan Anda dengan membuat kursus pertama
-              </Text>
-              <Button
-                className="btn-primary"
-                leftSection={<IconPlus size="1rem" />}
-              >
-                Buat Kursus Pertama
-              </Button>
+              <Text c="dimmed">Tidak ada kursus memenuhi filter</Text>
             </Stack>
+          )}
+          {total > limit && (
+            <Group justify="center" mt="lg">
+              <Pagination
+                value={page}
+                onChange={setPage}
+                total={Math.max(1, Math.ceil(total / limit))}
+              />
+            </Group>
           )}
         </Card>
       </Stack>
@@ -352,9 +660,17 @@ export default function InstructorCoursesPage() {
       {/* Add / Edit Modal */}
       <Modal
         opened={opened}
-        onClose={() => setOpened(false)}
+        onClose={() => {
+          setOpened(false);
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          setPreviewUrl(null);
+          setSelectedFile(null);
+          setImageMeta(null);
+        }}
         title={editingId ? "Edit Kursus" : "Tambah Kursus"}
         centered
+        fullScreen={isMobile}
+        size={isMobile ? "100%" : "lg"}
       >
         <Stack gap="md">
           <TextInput
@@ -362,21 +678,80 @@ export default function InstructorCoursesPage() {
             placeholder="Masukkan judul kursus"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.currentTarget.value })}
-            required
+            withAsterisk
+            error={errors.title}
+            disabled={saving}
           />
-          <Select
-            label="Kategori"
-            data={[
-              { value: "scratch", label: "Scratch" },
-              { value: "roblox", label: "Roblox" },
-            ]}
-            value={form.category}
-            onChange={(v) =>
-              setForm({
-                ...form,
-                category: (v as "scratch" | "roblox") || "scratch",
-              })
+          <FileInput
+            label="Thumbnail (wajib)"
+            placeholder="Pilih gambar..."
+            accept="image/*"
+            onChange={(file) => handlePickThumbnail(file as File)}
+            withAsterisk
+            error={errors.thumbnail}
+            disabled={saving}
+          />
+          {previewUrl || form.thumbnail ? (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "16/9",
+                overflow: "hidden",
+                borderRadius: 8,
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl || form.thumbnail}
+                alt="Preview thumbnail"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  el.style.display = "none";
+                  const parent = el.parentElement;
+                  if (parent)
+                    parent.innerHTML = `<div style=\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#f1f5f9;color:#64748b;font-weight:600;\">Thumbnail tidak tersedia</div>`;
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "16/9",
+                overflow: "hidden",
+                borderRadius: 8,
+                background: "#f1f5f9",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#64748b",
+                fontWeight: 600,
+              }}
+            >
+              Thumbnail tidak tersedia
+            </div>
+          )}
+          {imageMeta && (
+            <Text size="xs" c="dimmed">
+              {imageMeta.name} • {imageMeta.sizeKB} KB • {imageMeta.width}×
+              {imageMeta.height}
+            </Text>
+          )}
+          <Textarea
+            label="Deskripsi"
+            placeholder="Ringkasan singkat kursus"
+            minRows={3}
+            autosize
+            value={form.description}
+            onChange={(e) =>
+              setForm({ ...form, description: e.currentTarget.value })
             }
+            withAsterisk
+            error={errors.description}
+            disabled={saving}
           />
           <Select
             label="Level"
@@ -393,6 +768,24 @@ export default function InstructorCoursesPage() {
                   (v as "beginner" | "intermediate" | "advanced") || "beginner",
               })
             }
+            withAsterisk
+            disabled={saving}
+          />
+          <Select
+            label="Kategori"
+            data={[
+              { value: "scratch", label: "Scratch" },
+              { value: "roblox", label: "Roblox" },
+            ]}
+            value={form.category}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                category: (v as "scratch" | "roblox") || "scratch",
+              })
+            }
+            withAsterisk
+            disabled={saving}
           />
           <NumberInput
             label="Harga (Rp)"
@@ -400,12 +793,26 @@ export default function InstructorCoursesPage() {
             onChange={(v) => setForm({ ...form, price: Number(v || 0) })}
             thousandSeparator
             min={0}
+            description="Isi 0 untuk kursus gratis"
+            withAsterisk
+            disabled={saving}
           />
           <NumberInput
             label="Total Modul"
             value={form.totalModules}
             onChange={(v) => setForm({ ...form, totalModules: Number(v || 0) })}
             min={0}
+            error={errors.totalModules}
+            withAsterisk
+            disabled={saving}
+          />
+          <NumberInput
+            label="Durasi (menit)"
+            value={form.durationMin}
+            onChange={(v) => setForm({ ...form, durationMin: Number(v || 0) })}
+            min={0}
+            withAsterisk
+            disabled={saving}
           />
           <Group justify="space-between" wrap="nowrap">
             <Switch
@@ -414,12 +821,28 @@ export default function InstructorCoursesPage() {
               onChange={(e) =>
                 setForm({ ...form, isPublished: e.currentTarget.checked })
               }
+              disabled={saving}
             />
             <Group>
-              <Button variant="default" onClick={() => setOpened(false)}>
+              <Button
+                variant="default"
+                onClick={() => {
+                  setOpened(false);
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
+                  setPreviewUrl(null);
+                  setSelectedFile(null);
+                  setImageMeta(null);
+                }}
+                disabled={saving}
+              >
                 Batal
               </Button>
-              <Button className="btn-primary" onClick={saveCourse}>
+              <Button
+                className="btn-primary"
+                onClick={saveCourse}
+                loading={saving}
+                disabled={saving}
+              >
                 Simpan
               </Button>
             </Group>
@@ -433,6 +856,8 @@ export default function InstructorCoursesPage() {
         onClose={() => setDeleteId(null)}
         title="Hapus Kursus"
         centered
+        fullScreen={isMobile}
+        size={isMobile ? "100%" : "sm"}
       >
         <Stack>
           <Text>
@@ -453,6 +878,8 @@ export default function InstructorCoursesPage() {
           </Group>
         </Stack>
       </Modal>
+
+      {/* all errors via notifications */}
     </Container>
   );
 }

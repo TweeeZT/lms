@@ -1,8 +1,8 @@
 "use client";
 
 import { useAuth } from "../../hooks/useAuth";
-import { DashboardLayout } from "../../components/sidebar/SidebarLayout";
-import { Container, Stack, Text, LoadingOverlay } from "@mantine/core";
+import { DashboardLayout } from "../../components/SidebarLayout";
+import { Container, Stack, Text } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -20,22 +20,20 @@ export default function AdminLayout({
     }
   }, [user, loading, router]);
 
+  // while auth is loading, show a simple loading state
   if (loading) {
     return (
-      <Container size="sm" py={100}>
-        <LoadingOverlay visible />
+      <Container>
+        <Stack align="center" justify="center" style={{ minHeight: "50vh" }}>
+          <Text>Loading...</Text>
+        </Stack>
       </Container>
     );
   }
 
-  if (!user || user.role !== "admin") {
-    return (
-      <Container size="sm" py={100}>
-        <Stack align="center" gap="md">
-          <Text>Akses ditolak. Anda bukan admin.</Text>
-        </Stack>
-      </Container>
-    );
+  // if there's no user (redirect will happen), don't render the layout to avoid passing null
+  if (!user) {
+    return null;
   }
 
   return (

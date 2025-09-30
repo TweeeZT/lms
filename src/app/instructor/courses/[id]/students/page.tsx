@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { notFound, useParams } from "next/navigation";
+import Image from "next/image";
 import {
   Container,
   Title,
@@ -15,6 +16,8 @@ import {
   Badge,
   Divider,
   Loader,
+  Modal,
+  Text as MText,
 } from "@mantine/core";
 import Link from "next/link";
 import { IconChevronLeft } from "@tabler/icons-react";
@@ -27,10 +30,9 @@ type Submission = {
   module_id: string;
   module_title: string;
   file_url: string | null;
-  answer_link: string | null;
-  text_answer: string | null;
-  grade: number | null;
-  feedback: string | null;
+  link_url: string | null;
+  score: number | null;
+  note: string | null;
   submitted_at: string;
   max_score: number | null;
 };
@@ -46,8 +48,21 @@ export default function CourseStudentsPage() {
     null
   );
   const [items, setItems] = useState<
-    Array<{ student_id: string; submissions: Submission[] }>
+    Array<{
+      student_id: string;
+      student_name?: string;
+      submissions: Submission[];
+    }>
   >([]);
+  const [grading, setGrading] = useState<
+    Record<string, { score: string; note: string; saving?: boolean }>
+  >({});
+  const [preview, setPreview] = useState<{
+    url: string;
+    type: string;
+    open: boolean;
+    title?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -80,6 +95,91 @@ export default function CourseStudentsPage() {
   return (
     <Container size="lg">
       <Stack gap="lg">
+        <Modal
+          opened={!!preview?.open}
+          onClose={() => setPreview(null)}
+          title={preview?.title || "Preview File"}
+          size="xl"
+          centered
+        >
+          {preview?.url ? (
+            preview.type === "pdf" ? (
+              <iframe
+                src={preview.url}
+                style={{ width: "100%", height: 600, border: 0 }}
+                title="PDF Preview"
+              />
+            ) : preview.type.startsWith("image") ? (
+              <div
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: 600,
+                  position: "relative",
+                }}
+              >
+                <Image
+                  src={preview.url}
+                  alt="Preview"
+                  width={1200}
+                  height={800}
+                  style={{
+                    objectFit: "contain",
+                    width: "100%",
+                    height: "auto",
+                    borderRadius: 8,
+                  }}
+                  unoptimized
+                  priority
+                />
+              </div>
+            ) : preview.type.startsWith("video") ? (
+              <video
+                src={preview.url}
+                style={{ width: "100%", maxHeight: 600 }}
+                controls
+              />
+            ) : (
+              <Anchor
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Buka File
+              </Anchor>
+            )
+          ) : (
+            <MText size="sm" c="dimmed">
+              Tidak ada file.
+            </MText>
+          )}
+          {preview?.url && (
+            <Group mt="md" gap="xs">
+              <Button
+                component="a"
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                size="xs"
+                variant="outline"
+              >
+                Unduh File
+              </Button>
+              {preview.type === "pdf" && (
+                <Button
+                  component="a"
+                  href={preview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="xs"
+                  variant="light"
+                >
+                  Buka di Tab Baru
+                </Button>
+              )}
+            </Group>
+          )}
+        </Modal>
         <Group>
           <Button
             variant="subtle"
@@ -115,49 +215,299 @@ export default function CourseStudentsPage() {
                   <Group>
                     <Avatar radius="xl">{initials(row.student_id)}</Avatar>
                     <div>
-                      <Text fw={600}>Student: {row.student_id}</Text>
+                      <Text fw={600}>
+                        Siswa: {row.student_name || row.student_id}
+                      </Text>
                       <Text size="sm" c="dimmed">
-                        {row.submissions.length} submission
-                        {row.submissions.length > 1 ? "s" : ""}
+                        {row.submissions.length} pengiriman
                       </Text>
                     </div>
                   </Group>
                 </Group>
                 <Divider my="sm" />
                 <Stack gap="xs">
-                  {row.submissions.map((s) => (
-                    <Group key={s.submission_id} justify="space-between">
-                      <div>
-                        <Text fw={500}>{s.module_title || "Tugas"}</Text>
-                        <Text size="sm" c="dimmed">
-                          Terkirim: {new Date(s.submitted_at).toLocaleString()}
-                        </Text>
-                        <Group gap="xs">
-                          {s.file_url && (
-                            <Anchor href={s.file_url} target="_blank">
-                              File
-                            </Anchor>
-                          )}
-                          {s.answer_link && (
-                            <Anchor href={s.answer_link} target="_blank">
-                              Link
-                            </Anchor>
-                          )}
-                          {s.text_answer && <Badge variant="light">Teks</Badge>}
+                  {row.submissions.map((s) => {
+                    const gState = grading[s.submission_id] || {
+                      score: s.score?.toString() || "",
+                      note: s.note || "",
+                    };
+                    return (
+                      <Card
+                        key={s.submission_id}
+                        withBorder
+                        padding="sm"
+                        radius="md"
+                      >
+                        <Group
+                          justify="space-between"
+                          align="flex-start"
+                          wrap="nowrap"
+                        >
+                          <div style={{ flex: 1, minWidth: 240 }}>
+                            <Text fw={500}>{s.module_title || "Tugas"}</Text>
+                            <Text size="xs" c="dimmed" mb={4}>
+                              Terkirim:{" "}
+                              {new Date(s.submitted_at).toLocaleString("id-ID")}
+                            </Text>
+                            <Group gap="xs" mb={6}>
+                              {s.file_url && (
+                                <Group gap={4} wrap="nowrap">
+                                  <Anchor
+                                    href={s.file_url}
+                                    target="_blank"
+                                    size="xs"
+                                  >
+                                    Unduh
+                                  </Anchor>
+                                  <Button
+                                    size="xs"
+                                    variant="light"
+                                    onClick={() => {
+                                      const fileUrl = s.file_url; // extra safety for TS
+                                      if (!fileUrl) return;
+                                      const lower = fileUrl.toLowerCase();
+                                      let type = "other";
+                                      if (lower.endsWith(".pdf")) type = "pdf";
+                                      else if (
+                                        /(png|jpg|jpeg|gif|webp)$/.test(lower)
+                                      )
+                                        type = "image";
+                                      else if (/(mp4|mov|mkv|avi)$/.test(lower))
+                                        type = "video";
+                                      setPreview({
+                                        url: fileUrl,
+                                        type,
+                                        open: true,
+                                        title: s.module_title,
+                                      });
+                                    }}
+                                  >
+                                    Preview
+                                  </Button>
+                                </Group>
+                              )}
+                              {s.link_url && (
+                                <Anchor
+                                  href={s.link_url}
+                                  target="_blank"
+                                  size="xs"
+                                >
+                                  Link
+                                </Anchor>
+                              )}
+                              {s.max_score != null && (
+                                <Badge size="xs" variant="light">
+                                  Max {s.max_score}
+                                </Badge>
+                              )}
+                            </Group>
+                            {s.score != null ? (
+                              <Group gap={8} wrap="wrap">
+                                <Badge
+                                  color={
+                                    s.max_score &&
+                                    s.score >=
+                                      Math.round((s.max_score * 60) / 100)
+                                      ? "green"
+                                      : "red"
+                                  }
+                                  variant="filled"
+                                >
+                                  {s.max_score &&
+                                  s.score >=
+                                    Math.round((s.max_score * 60) / 100)
+                                    ? "Lulus"
+                                    : "Belum Lulus"}
+                                </Badge>
+                                <Button
+                                  size="xs"
+                                  variant="outline"
+                                  onClick={() => {
+                                    // allow override grading -> reveal form by clearing local state
+                                    setGrading((prev) => ({
+                                      ...prev,
+                                      [s.submission_id]: {
+                                        score: String(s.score ?? ""),
+                                        note: s.note || "",
+                                      },
+                                    }));
+                                    // set score to null locally (UI) to show form
+                                    setItems((prev) =>
+                                      prev.map((it) => ({
+                                        ...it,
+                                        submissions: it.submissions.map((sub) =>
+                                          sub.submission_id === s.submission_id
+                                            ? { ...sub, score: null }
+                                            : sub
+                                        ),
+                                      }))
+                                    );
+                                  }}
+                                >
+                                  Override Nilai
+                                </Button>
+                              </Group>
+                            ) : (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={s.max_score ?? undefined}
+                                  placeholder="Skor"
+                                  value={gState.score}
+                                  style={{
+                                    width: 80,
+                                    padding: "4px 6px",
+                                    border: "1px solid #ccc",
+                                    borderRadius: 6,
+                                    fontSize: 12,
+                                  }}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (!val) {
+                                      setGrading((prev) => ({
+                                        ...prev,
+                                        [s.submission_id]: {
+                                          ...gState,
+                                          score: "",
+                                        },
+                                      }));
+                                    } else {
+                                      let num = Number(val);
+                                      if (
+                                        s.max_score != null &&
+                                        num > s.max_score
+                                      )
+                                        num = s.max_score;
+                                      if (num < 0) num = 0;
+                                      setGrading((prev) => ({
+                                        ...prev,
+                                        [s.submission_id]: {
+                                          ...gState,
+                                          score: String(num),
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                  disabled={gState.saving}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Catatan (opsional)"
+                                  value={gState.note}
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 160,
+                                    padding: "4px 6px",
+                                    border: "1px solid #ccc",
+                                    borderRadius: 6,
+                                    fontSize: 12,
+                                  }}
+                                  onChange={(e) =>
+                                    setGrading((prev) => ({
+                                      ...prev,
+                                      [s.submission_id]: {
+                                        ...gState,
+                                        note: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  disabled={gState.saving}
+                                />
+                                <Button
+                                  size="xs"
+                                  loading={gState.saving}
+                                  onClick={async () => {
+                                    if (!user) return;
+                                    setGrading((prev) => ({
+                                      ...prev,
+                                      [s.submission_id]: {
+                                        ...gState,
+                                        saving: true,
+                                      },
+                                    }));
+                                    try {
+                                      const numericScore = gState.score
+                                        ? Number(gState.score)
+                                        : null;
+                                      const res = await fetch(
+                                        `/api/instructor/courses/${id}/students`,
+                                        {
+                                          method: "PATCH",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                          },
+                                          body: JSON.stringify({
+                                            instructorId: user.id,
+                                            submissionId: s.submission_id,
+                                            score: numericScore,
+                                            note: gState.note || null,
+                                            override: s.score != null, // if previously graded
+                                          }),
+                                        }
+                                      );
+                                      const js = await res.json();
+                                      if (!res.ok || !js.success)
+                                        throw new Error(
+                                          js.error || "Gagal simpan"
+                                        );
+                                      // refresh minimal state
+                                      setItems((prev) =>
+                                        prev.map((it) => ({
+                                          ...it,
+                                          submissions: it.submissions.map(
+                                            (sub) =>
+                                              sub.submission_id ===
+                                              s.submission_id
+                                                ? {
+                                                    ...sub,
+                                                    score: numericScore,
+                                                    note: gState.note || null,
+                                                  }
+                                                : sub
+                                          ),
+                                        }))
+                                      );
+                                    } catch (e) {
+                                      console.error(e);
+                                    } finally {
+                                      setGrading((prev) => ({
+                                        ...prev,
+                                        [s.submission_id]: {
+                                          ...gState,
+                                          saving: false,
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                >
+                                  Simpan Nilai
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ minWidth: 110, textAlign: "right" }}>
+                            {s.score != null ? (
+                              <Badge color="green" variant="filled">
+                                {s.score}
+                                {s.max_score ? `/${s.max_score}` : ""}
+                              </Badge>
+                            ) : (
+                              <Badge color="gray" variant="light">
+                                Menunggu Penilaian
+                              </Badge>
+                            )}
+                          </div>
                         </Group>
-                      </div>
-                      <div>
-                        {s.grade != null ? (
-                          <Badge color="green">
-                            Nilai: {s.grade}
-                            {s.max_score ? `/${s.max_score}` : ""}
-                          </Badge>
-                        ) : (
-                          <Badge color="gray">Belum dinilai</Badge>
-                        )}
-                      </div>
-                    </Group>
-                  ))}
+                      </Card>
+                    );
+                  })}
                 </Stack>
               </Card>
             ))}

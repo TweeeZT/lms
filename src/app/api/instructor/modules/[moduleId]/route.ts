@@ -78,6 +78,13 @@ export async function GET(
         .eq("module_id", moduleId)
         .maybeSingle();
       detail = a || null;
+    } else if (mod.module_kind === "live") {
+      const { data: l } = await supabase
+        .from("module_live_sessions")
+        .select("id, title, agenda, start_at, provider, join_url, created_at")
+        .eq("module_id", moduleId)
+        .maybeSingle();
+      detail = l || null;
     }
 
     return NextResponse.json({ success: true, item: mod, detail });
@@ -248,6 +255,52 @@ export async function PATCH(
           allowed[f] = body[f] as unknown;
         }
       }
+      // Handle materi content via JSON (no file upload) e.g. text/link update
+      if (
+        mod.module_kind === "materi" &&
+        Object.prototype.hasOwnProperty.call(body, "content")
+      ) {
+        const content = body.content as {
+          content_type?: string;
+          url?: string;
+          text_content?: string;
+        };
+        const ctype =
+          content.content_type ||
+          (content.text_content ? "text" : content.url ? "link" : "text");
+        // Remove previous contents
+        const { data: oldContents } = await supabase
+          .from("module_contents")
+          .select("id, file_path")
+          .eq("module_id", moduleId);
+        if (oldContents?.length) {
+          const ids = oldContents.map((c) => c.id);
+          await supabase.from("module_contents").delete().in("id", ids);
+          const paths = oldContents
+            .map((c) => c.file_path)
+            .filter(Boolean) as string[];
+          if (paths.length) {
+            await supabase.storage.from("lessons-content").remove(paths);
+          }
+        }
+        const { error: insErr2 } = await supabase
+          .from("module_contents")
+          .insert({
+            id:
+              globalThis?.crypto?.randomUUID?.() ||
+              `mc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            module_id: moduleId,
+            content_type: ctype,
+            url: content.url || null,
+            file_path: null,
+            text_content: content.text_content || null,
+          });
+        if (insErr2)
+          return NextResponse.json(
+            { success: false, error: insErr2.message },
+            { status: 400 }
+          );
+      }
       if (
         mod.module_kind === "quiz" &&
         Object.prototype.hasOwnProperty.call(body, "quiz")
@@ -342,6 +395,55 @@ export async function PATCH(
         if (aErr)
           return NextResponse.json(
             { success: false, error: aErr.message },
+            { status: 400 }
+          );
+      }
+      if (
+        mod.module_kind === "live" &&
+        Object.prototype.hasOwnProperty.call(body, "live")
+      ) {
+        const live = body.live as {
+          title?: string;
+          agenda?: string;
+          start_at?: string;
+        };
+        if (!live?.title || !live?.agenda || !live?.start_at) {
+          return NextResponse.json(
+            { success: false, error: "Field live wajib" },
+            { status: 400 }
+          );
+        }
+        // Upsert strategy: delete then insert (simple)
+        await supabase
+          .from("module_live_sessions")
+          .delete()
+          .eq("module_id", moduleId);
+        const { data: modRow } = await supabase
+          .from("modules")
+          .select("course_id")
+          .eq("id", moduleId)
+          .maybeSingle();
+        const courseId = modRow?.course_id || "course";
+        const roomSlug = `${courseId}-${moduleId}`
+          .replace(/[^a-zA-Z0-9-_]/g, "-")
+          .slice(0, 120);
+        const join_url = `https://meet.jit.si/${roomSlug}`;
+        const { error: lErr } = await supabase
+          .from("module_live_sessions")
+          .insert({
+            id:
+              globalThis?.crypto?.randomUUID?.() ||
+              `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            module_id: moduleId,
+            title: live.title.trim(),
+            agenda: live.agenda.trim(),
+            start_at: live.start_at,
+            provider: "jitsi",
+            join_url,
+          });
+        if (lErr)
+          return NextResponse.json(
+            { success: false, error: lErr.message },
             { status: 400 }
           );
       }

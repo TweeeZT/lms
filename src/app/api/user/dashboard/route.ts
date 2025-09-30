@@ -10,19 +10,14 @@ const supabase = createClient(url, serviceRole);
 type CourseJoin = {
   id: string;
   title: string;
-  category: string;
+  // category removed from UI usage, keep optional to avoid query changes if later needed
+  category?: string | null;
   total_modules: number | null;
   duration_min?: number | null;
   level?: string | null;
   enrolled_count?: number | null;
   rating?: number | null;
   thumbnail?: string | null;
-};
-
-type EnrollmentJoin = {
-  id: string;
-  enrolled_at: string;
-  course?: CourseJoin | CourseJoin[] | null;
 };
 
 // GET /api/user/dashboard?userId=...
@@ -52,17 +47,52 @@ export async function GET(req: Request) {
       );
 
     // Student stats
-    const { data: student } = await supabase
+    type StudentRow = {
+      level?: number | null;
+      points?: number | null;
+      coins?: number | null;
+      xp?: number | null;
+    } | null;
+    interface StudentProbeDiag {
+      firstDurationMs?: number;
+      firstError?: string | null;
+      retryDurationMs?: number;
+      retryError?: string | null;
+      retryFound?: boolean;
+    }
+    const studentProbe: StudentProbeDiag = {};
+    const studentStart = Date.now();
+    const { data: student, error: studentErr } = await supabase
       .from("students")
-      .select("level, points, balance")
+      .select("user_id, level, points, coins, xp")
       .eq("user_id", userId)
-      .maybeSingle();
+      .maybeSingle<StudentRow>();
+    studentProbe.firstDurationMs = Date.now() - studentStart;
+    studentProbe.firstError = studentErr
+      ? String(studentErr.message || studentErr)
+      : null;
+    if (!student && !studentErr) {
+      // retry probe with limit(1)
+      const retryStart = Date.now();
+      const { data: retryRows, error: retryErr } = await supabase
+        .from("students")
+        .select("user_id, level, points, coins, xp")
+        .eq("user_id", userId)
+        .limit(1);
+      studentProbe.retryDurationMs = Date.now() - retryStart;
+      studentProbe.retryError = retryErr
+        ? String(retryErr.message || retryErr)
+        : null;
+      if (retryRows && retryRows.length) {
+        studentProbe.retryFound = true;
+      }
+    }
 
-    // Enrollments with course join
-    const { data: enrollments } = await supabase
-      .from("enrollments")
+    // User progress with course join
+    const { data: userProgress } = await supabase
+      .from("user_progress")
       .select(
-        "id, enrolled_at, course:courses ( id, title, category, total_modules, duration_min, level, enrolled_count, rating, thumbnail )"
+        "id, enrolled_at, course_id, completed_modules, progress_percentage, course:courses ( id, title, category, total_modules, duration_min, level, enrolled_count, rating, thumbnail )"
       )
       .eq("user_id", userId)
       .order("enrolled_at", { ascending: false })
@@ -76,57 +106,80 @@ export async function GET(req: Request) {
       return Array.isArray(joined) ? joined[0] ?? null : joined;
     };
 
-    const enrollmentsList: EnrollmentJoin[] = (enrollments ||
-      []) as EnrollmentJoin[];
+    const progressList = userProgress || [];
     const courseIds = Array.from(
       new Set(
-        enrollmentsList
-          .map((e) => unwrapCourse(e.course)?.id)
+        progressList
+          .map((p) => unwrapCourse(p.course)?.id)
           .filter((v): v is string => Boolean(v))
       )
     );
 
     const progressByCourse = new Map<
       string,
-      { completed: number; total: number }
+      { completed: number; total: number; percentage: number }
     >();
     if (courseIds.length) {
-      const { data: progress } = await supabase
-        .from("user_progress")
-        .select("course_id, completed_modules")
-        .eq("user_id", userId)
-        .in("course_id", courseIds);
-      const totals = new Map<string, number>();
-      const { data: coursesMeta } = await supabase
-        .from("courses")
-        .select("id, total_modules")
-        .in("id", courseIds);
-      (coursesMeta || []).forEach((c) =>
-        totals.set(c.id, c.total_modules || 0)
-      );
-      (progress || []).forEach((p) => {
-        const done = Array.isArray(p.completed_modules)
-          ? p.completed_modules.length
-          : 0;
+      // Use the progress data we already have from user_progress
+      progressList.forEach((p) => {
+        let mods: unknown = p.completed_modules as unknown;
+        if (typeof mods === "string") {
+          try {
+            mods = JSON.parse(mods);
+          } catch {
+            mods = [];
+          }
+        }
+        const arr = Array.isArray(mods) ? (mods as unknown[]) : [];
+        const course = unwrapCourse(p.course);
+        const totalModules = course?.total_modules || 0;
         progressByCourse.set(p.course_id, {
-          completed: done,
-          total: totals.get(p.course_id) || 0,
+          completed: arr.length,
+          total: totalModules,
+          percentage: Number(p.progress_percentage) || 0,
         });
       });
     }
 
-    // Stats
-    const coursesEnrolled = (enrollments || []).length;
+    // Stats: user wants ALL enrolled (completed + in-progress) counted as "activeCourses" displayed.
     let coursesCompleted = 0;
-    let modulesCompleted = 0;
-    progressByCourse.forEach(({ completed, total }) => {
-      modulesCompleted += completed;
-      if (total && completed >= total) coursesCompleted += 1;
+    let inProgress = 0;
+    progressByCourse.forEach(({ percentage }) => {
+      if (percentage >= 100) coursesCompleted += 1;
+      else inProgress += 1;
     });
-    const level = Number(student?.level ?? 1);
-    const points = Number(student?.points ?? 0);
-    const currentXP = points * 10 + modulesCompleted * 5;
-    const nextLevelXP = Math.max(100, level * 200);
+    const allEnrolledCount = coursesCompleted + inProgress;
+    // Note: numeric level not used in stats anymore
+    const studentFound = !!student;
+    const rawPoints = student?.points ?? null;
+    const rawCoins = student?.coins ?? null;
+    const points = Number(rawPoints ?? 0); // Poin
+    const coins = Number(rawCoins ?? 0); // Total Koin
+    const currentXP = Number(
+      (student as unknown as { xp?: number | null })?.xp ?? 0
+    );
+    // Score removed – UI will display raw points & coins instead
+    // Tier derived from thresholds (same as profile/leaderboard)
+    const tier = (() => {
+      const t = [
+        { key: "master", xp: 60000, points: 120000, courses: 50 },
+        { key: "hero", xp: 50000, points: 100000, courses: 40 },
+        { key: "futuristic", xp: 40000, points: 80000, courses: 32 },
+        { key: "creative", xp: 30000, points: 60000, courses: 20 },
+        { key: "scientist", xp: 20000, points: 40000, courses: 12 },
+        { key: "explorer", xp: 10000, points: 20000, courses: 8 },
+        { key: "newbie", xp: 0, points: 0, courses: 0 },
+      ];
+      for (const th of t) {
+        if (
+          currentXP >= th.xp &&
+          points >= th.points &&
+          coursesCompleted >= th.courses
+        )
+          return th.key;
+      }
+      return "newbie";
+    })();
 
     // Recent discussions (latest 3)
     const { data: discussions } = await supabase
@@ -136,7 +189,7 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .limit(3);
 
-    // Latest transactions (latest 3 by date)
+    // Latest transactions (latest 3 by date) - fallback to dummy if no data
     const { data: transactions } = await supabase
       .from("transactions")
       .select("id, date, course_title, amount, status")
@@ -144,37 +197,61 @@ export async function GET(req: Request) {
       .order("date", { ascending: false })
       .limit(3);
 
-    // Top courses (take first 3 enrolled)
-    const courses = enrollmentsList
+    // If no transactions found, provide empty array instead of dummy data
+    const transactionsList = transactions || [];
+
+    // Top courses (take first 3 from user progress)
+    const courses = progressList
       .slice(0, 3)
-      .map((e) => {
-        const c = unwrapCourse(e.course);
-        const pr = c?.id ? progressByCourse.get(c.id) : undefined;
-        const pct =
-          pr && pr.total ? Math.round((pr.completed / pr.total) * 100) : 0;
+      .map((p) => {
+        const c = unwrapCourse(p.course);
+        if (!c?.id) return null;
+        const pr = progressByCourse.get(c.id);
         return {
-          id: c?.id,
-          title: c?.title,
-          category: c?.category,
-          totalModules: c?.total_modules || 0,
-          progress: pct,
+          id: c.id,
+          title: c.title,
+          thumbnail: c.thumbnail || null,
+          totalModules: c.total_modules || 0,
+          progress: Math.round(pr?.percentage || 0),
         };
       })
-      .filter((c) => c.id);
+      .filter(
+        (
+          c
+        ): c is {
+          id: string;
+          title: string;
+          thumbnail: string | null;
+          totalModules: number;
+          progress: number;
+        } => Boolean(c)
+      );
 
     return NextResponse.json({
       success: true,
       user: { id: actor.id, fullName: actor.full_name },
       stats: {
-        inProgress: Math.max(0, coursesEnrolled - coursesCompleted),
+        activeCourses: allEnrolledCount, // now all enrolled courses (completed + in-progress)
         completed: coursesCompleted,
         xp: currentXP,
-        level,
-        nextLevelXP,
+        points,
+        coins,
+        tier,
+        _diagnostic: {
+          studentFound,
+          rawPoints,
+          rawCoins,
+          rawBalance: null,
+          inProgress,
+          studentProbe,
+        },
+        // raw student payload for hard debugging (can be removed later)
+        // WARNING: exposes internal fields; keep only in development/troubleshooting
+        _rawStudent: student ?? null,
       },
       courses,
       discussions: discussions || [],
-      transactions: transactions || [],
+      transactions: transactionsList,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Gagal memuat dashboard";

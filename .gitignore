@@ -1,5 +1,18 @@
-node_modules
-# Keep environment variables out of version control
-.env
+# Abaikan folder node_modules
+node_modules/
 
-/src/generated/prisma
+# Abaikan file environment
+# .env
+# .env.local
+
+# Abaikan file log
+*.log
+
+# Abaikan build output Next.js
+.next/
+out/
+.vscode
+
+# Abaikan file sistem
+.DS_Store
+Thumbs.db

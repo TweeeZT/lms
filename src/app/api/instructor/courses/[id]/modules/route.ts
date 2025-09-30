@@ -112,7 +112,7 @@ export async function POST(
     // Normalized inputs
     let title = "";
     let description: string | null = null;
-    let module_kind: "materi" | "quiz" | "tugas" = "materi";
+    let module_kind: "materi" | "quiz" | "tugas" | "live" = "materi";
     let order_index = 0;
     let is_published = true;
 
@@ -142,12 +142,22 @@ export async function POST(
     let due_date: string | undefined; // ISO
     let max_score: number | undefined;
 
+    // Live session specifics
+    let live_title: string | undefined;
+    let live_agenda: string | undefined;
+    let live_start_at: string | undefined; // ISO datetime
+
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
       title = String(form.get("title") || "").trim();
       description = (form.get("description")?.toString() || "").trim() || null;
       const kindVal = (form.get("module_kind") as string) || "materi";
-      if (kindVal === "materi" || kindVal === "quiz" || kindVal === "tugas") {
+      if (
+        kindVal === "materi" ||
+        kindVal === "quiz" ||
+        kindVal === "tugas" ||
+        kindVal === "live"
+      ) {
         module_kind = kindVal;
       }
       order_index = Number(form.get("order_index") || 0);
@@ -182,7 +192,8 @@ export async function POST(
       description =
         (body.description ? String(body.description) : "").trim() || null;
       const mk = body.module_kind as string | undefined;
-      if (mk === "materi" || mk === "quiz" || mk === "tugas") module_kind = mk;
+      if (mk === "materi" || mk === "quiz" || mk === "tugas" || mk === "live")
+        module_kind = mk;
       order_index = Number(body.order_index || 0);
       is_published = Boolean(
         typeof body.is_published === "boolean" ? body.is_published : true
@@ -234,6 +245,13 @@ export async function POST(
           assignment?.max_score !== undefined
             ? Number(assignment.max_score)
             : 100;
+      } else if (module_kind === "live") {
+        const live = body.live as
+          | { title?: string; agenda?: string; start_at?: string }
+          | undefined;
+        live_title = live?.title?.trim();
+        live_agenda = live?.agenda?.trim();
+        live_start_at = live?.start_at;
       }
     }
 
@@ -245,6 +263,11 @@ export async function POST(
     if (module_kind === "quiz" && !quiz_title) missing.push("judul kuis");
     if (module_kind === "tugas" && !instructions)
       missing.push("instruksi tugas");
+    if (module_kind === "live") {
+      if (!live_title) missing.push("judul sesi live");
+      if (!live_agenda) missing.push("agenda");
+      if (!live_start_at) missing.push("waktu mulai");
+    }
     if (missing.length) {
       return NextResponse.json(
         { success: false, error: `Field wajib: ${missing.join(", ")}` },
@@ -350,6 +373,24 @@ export async function POST(
             max_score: max_score ?? 100,
           });
         if (aErr) throw aErr;
+      } else if (module_kind === "live") {
+        // Deterministic Jitsi room name: courseId + moduleId (sanitized)
+        const roomSlug = `${courseId}-${moduleId}`
+          .replace(/[^a-zA-Z0-9-_]/g, "-")
+          .slice(0, 120);
+        const join_url = `https://meet.jit.si/${roomSlug}`;
+        // 'id' column in module_live_sessions is uuid; let DB default generate it.
+        const { error: lErr } = await supabase
+          .from("module_live_sessions")
+          .insert({
+            module_id: moduleId,
+            title: live_title!,
+            agenda: live_agenda!,
+            start_at: live_start_at!,
+            join_url,
+            created_by: instructorId,
+          });
+        if (lErr) throw lErr;
       }
     } catch (innerErr: unknown) {
       // Rollback module on any failure

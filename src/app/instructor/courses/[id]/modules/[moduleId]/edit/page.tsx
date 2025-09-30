@@ -13,11 +13,12 @@ import {
   Radio,
   FileInput,
   NumberInput,
-  Checkbox,
 } from "@mantine/core";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { IconChevronLeft, IconUpload } from "@tabler/icons-react";
+// Use absolute import via root alias; adjust if your tsconfig paths differ
+import PrimeLoader from "@/components/PrimeLoader";
 import { useAuth } from "../../../../../../../hooks/useAuth";
 
 type Question = {
@@ -38,9 +39,9 @@ export default function EditModulePage() {
   const [description, setDescription] = useState("");
   const [orderIndex, setOrderIndex] = useState(0);
   const [isPublished, setIsPublished] = useState(true);
-  const [moduleKind, setModuleKind] = useState<"materi" | "quiz" | "tugas">(
-    "materi"
-  );
+  const [moduleKind, setModuleKind] = useState<
+    "materi" | "quiz" | "tugas" | "live"
+  >("materi");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +65,12 @@ export default function EditModulePage() {
   const [dueDate, setDueDate] = useState<string>("");
   const [maxScore, setMaxScore] = useState<number | "">(100);
 
+  // Live session
+  const [liveTitle, setLiveTitle] = useState("");
+  const [liveAgenda, setLiveAgenda] = useState("");
+  const [liveStartAt, setLiveStartAt] = useState("");
+  const [liveJoinUrl, setLiveJoinUrl] = useState("");
+
   useEffect(() => {
     if (!user?.id) return;
     let active = true;
@@ -84,7 +91,7 @@ export default function EditModulePage() {
           description: string | null;
           order_index: number;
           is_published: boolean | null;
-          module_kind: "materi" | "quiz" | "tugas";
+          module_kind: "materi" | "quiz" | "tugas" | "live";
         };
         setTitle(m.title || "");
         setDescription(m.description || "");
@@ -102,15 +109,7 @@ export default function EditModulePage() {
           const content = Array.isArray(contentArr) ? contentArr[0] : undefined;
           if (content) {
             const ct = content.content_type as string;
-            if (
-              ct === "video" ||
-              ct === "pdf" ||
-              ct === "ppt" ||
-              ct === "image" ||
-              ct === "link" ||
-              ct === "file" ||
-              ct === "text"
-            )
+            if (ct === "link" || ct === "file" || ct === "text")
               setContentType(ct);
             setUrl(content.url || "");
             setTextContent(content.text_content || "");
@@ -137,15 +136,30 @@ export default function EditModulePage() {
             setPassingScore(q.passing_score || 70);
             setTimeLimit(q.time_limit || 10);
             const qs = Array.isArray(q.questions)
-              ? q.questions.map((qq) => ({
-                  question: qq.question,
-                  q_type: qq.q_type,
-                  options: qq.options_json
-                    ? JSON.parse(qq.options_json)
-                    : undefined,
-                  correct: String(qq.correct),
-                  explanation: qq.explanation || "",
-                }))
+              ? q.questions.map((qq) => {
+                  let opts: string[] | undefined = undefined;
+                  if (qq.options_json != null) {
+                    try {
+                      // options_json from API could be stringified JSON OR already an array/object (depending on driver casting)
+                      const raw: unknown = qq.options_json as unknown;
+                      if (typeof raw === "string") {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed)) opts = parsed.map(String);
+                      } else if (Array.isArray(raw)) {
+                        opts = (raw as unknown[]).map(String);
+                      }
+                    } catch (e) {
+                      console.warn("Gagal parse options_json", e);
+                    }
+                  }
+                  return {
+                    question: qq.question,
+                    q_type: qq.q_type,
+                    options: opts,
+                    correct: String(qq.correct),
+                    explanation: qq.explanation || "",
+                  } as Question;
+                })
               : [];
             setQuestions(qs);
           }
@@ -157,6 +171,20 @@ export default function EditModulePage() {
             setInstructions(a.instructions || "");
             setDueDate(a.due_date || "");
             setMaxScore(a.max_score || 100);
+          }
+        } else if (m.module_kind === "live") {
+          const l = json.detail as {
+            id: string;
+            title: string;
+            agenda: string;
+            start_at: string;
+            join_url?: string;
+          } | null;
+          if (l) {
+            setLiveTitle(l.title || "");
+            setLiveAgenda(l.agenda || "");
+            setLiveStartAt(l.start_at ? l.start_at.slice(0, 16) : "");
+            setLiveJoinUrl(l.join_url || "");
           }
         }
       } catch (e) {
@@ -213,13 +241,28 @@ export default function EditModulePage() {
             title: quizTitle,
             passing_score: Number(passingScore || 0),
             time_limit: timeLimit === "" ? undefined : Number(timeLimit),
-            questions,
+            questions: questions.map((q) => ({
+              question: q.question,
+              q_type: q.q_type,
+              options: q.q_type === "multiple-choice" ? q.options : undefined,
+              correct: q.correct,
+              explanation: q.explanation || undefined,
+            })),
           };
         } else if (moduleKind === "tugas") {
           payload.assignment = {
             instructions,
             due_date: dueDate || undefined,
             max_score: Number(maxScore || 100),
+          };
+        } else if (moduleKind === "live") {
+          if (!liveTitle || !liveAgenda || !liveStartAt) {
+            throw new Error("Field live wajib");
+          }
+          payload.live = {
+            title: liveTitle,
+            agenda: liveAgenda,
+            start_at: new Date(liveStartAt).toISOString(),
           };
         }
         const res = await fetch(baseUrl, {
@@ -239,13 +282,20 @@ export default function EditModulePage() {
     }
   };
 
+  if (loading) {
+    return (
+      <Container size="md">
+        <Group justify="center" mt="lg">
+          <PrimeLoader />
+        </Group>
+      </Container>
+    );
+  }
+
   return (
     <Container size="md">
       <Paper p="lg" radius="md" withBorder>
         <Stack gap="lg">
-          {loading && (
-            <TextInput readOnly variant="unstyled" value="Memuat modul..." />
-          )}
           <Group justify="space-between">
             <Button
               variant="subtle"
@@ -279,11 +329,11 @@ export default function EditModulePage() {
                   onChange={(v) => setOrderIndex(Number(v || 0))}
                   min={0}
                 />
-                <Checkbox
+                {/* <Checkbox
                   label="Published"
                   checked={isPublished}
                   onChange={(e) => setIsPublished(e.currentTarget.checked)}
-                />
+                /> */}
               </Group>
 
               {moduleKind === "materi" && (
@@ -309,15 +359,11 @@ export default function EditModulePage() {
                         <Radio value="link" label="Link" />
                         <Radio value="file" label="Upload File" />
                         <Radio value="text" label="Teks" />
-                        <Radio value="video" label="Video" />
-                        <Radio value="pdf" label="PDF" />
-                        <Radio value="ppt" label="PPT" />
-                        <Radio value="image" label="Gambar" />
                       </Group>
                     </Radio.Group>
                     {contentType === "file" ? (
                       <FileInput
-                        label="Upload File Baru (opsional)"
+                        label="Upload File Baru"
                         placeholder="Pilih file"
                         value={file}
                         onChange={setFile}
@@ -368,12 +414,253 @@ export default function EditModulePage() {
                       />
                     </Group>
                     {/* Questions editing */}
-                    {/* Simplified: show counts only; for brevity we keep add/remove minimal here */}
-                    <TextInput
-                      readOnly
-                      label="Jumlah pertanyaan"
-                      value={String(questions.length)}
-                    />
+                    <Group justify="space-between">
+                      <Title order={5}>Pertanyaan ({questions.length})</Title>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() =>
+                          setQuestions((q) => [
+                            ...q,
+                            {
+                              question: "",
+                              q_type: "multiple-choice",
+                              options: [""],
+                              correct: "0",
+                              explanation: "",
+                            },
+                          ])
+                        }
+                      >
+                        Tambah Pertanyaan
+                      </Button>
+                    </Group>
+                    <Stack gap="md">
+                      {questions.map((q, qi) => (
+                        <Paper key={qi} p="sm" withBorder radius="md">
+                          <Stack gap={6}>
+                            <Group justify="space-between" align="flex-start">
+                              <TextInput
+                                withAsterisk
+                                label={`Pertanyaan ${qi + 1}`}
+                                value={q.question}
+                                onChange={(e) => {
+                                  const val = e.currentTarget.value;
+                                  setQuestions((prev) =>
+                                    prev.map((qq, i) =>
+                                      i === qi ? { ...qq, question: val } : qq
+                                    )
+                                  );
+                                }}
+                              />
+                              <Button
+                                size="xs"
+                                color="red"
+                                variant="subtle"
+                                onClick={() =>
+                                  setQuestions((prev) =>
+                                    prev.filter((_, i) => i !== qi)
+                                  )
+                                }
+                              >
+                                Hapus
+                              </Button>
+                            </Group>
+                            <Radio.Group
+                              label="Tipe"
+                              value={q.q_type}
+                              onChange={(v: string) => {
+                                if (
+                                  v === "multiple-choice" ||
+                                  v === "true-false" ||
+                                  v === "short-answer"
+                                ) {
+                                  setQuestions((prev) =>
+                                    prev.map((qq, i) =>
+                                      i === qi
+                                        ? {
+                                            ...qq,
+                                            q_type: v,
+                                            options:
+                                              v === "multiple-choice"
+                                                ? qq.options &&
+                                                  qq.options.length
+                                                  ? qq.options
+                                                  : ["", ""]
+                                                : undefined,
+                                            correct: "0",
+                                          }
+                                        : qq
+                                    )
+                                  );
+                                }
+                              }}
+                            >
+                              <Group>
+                                <Radio
+                                  value="multiple-choice"
+                                  label="Pilihan Ganda"
+                                />
+                                <Radio value="true-false" label="True/False" />
+                                <Radio
+                                  value="short-answer"
+                                  label="Jawaban Singkat"
+                                />
+                              </Group>
+                            </Radio.Group>
+                            {q.q_type === "multiple-choice" && (
+                              <Stack gap={4}>
+                                {q.options?.map((opt, oi) => (
+                                  <Group key={oi} align="flex-end">
+                                    <TextInput
+                                      label={`Opsi ${oi + 1}`}
+                                      value={opt}
+                                      onChange={(e) => {
+                                        const val = e.currentTarget.value;
+                                        setQuestions((prev) =>
+                                          prev.map((qq, i) =>
+                                            i === qi
+                                              ? {
+                                                  ...qq,
+                                                  options: qq.options?.map(
+                                                    (oo, j) =>
+                                                      j === oi ? val : oo
+                                                  ),
+                                                }
+                                              : qq
+                                          )
+                                        );
+                                      }}
+                                      style={{ flex: 1 }}
+                                    />
+                                    <Radio
+                                      value={String(oi)}
+                                      checked={q.correct === String(oi)}
+                                      onChange={() =>
+                                        setQuestions((prev) =>
+                                          prev.map((qq, i) =>
+                                            i === qi
+                                              ? { ...qq, correct: String(oi) }
+                                              : qq
+                                          )
+                                        )
+                                      }
+                                      label="Benar"
+                                    />
+                                    <Button
+                                      size="xs"
+                                      variant="subtle"
+                                      color="red"
+                                      onClick={() =>
+                                        setQuestions((prev) =>
+                                          prev.map((qq, i) =>
+                                            i === qi
+                                              ? {
+                                                  ...qq,
+                                                  options: (
+                                                    qq.options || []
+                                                  ).filter((_, j) => j !== oi),
+                                                  correct:
+                                                    qq.correct === String(oi)
+                                                      ? "0"
+                                                      : qq.correct,
+                                                }
+                                              : qq
+                                          )
+                                        )
+                                      }
+                                    >
+                                      Hapus
+                                    </Button>
+                                  </Group>
+                                ))}
+                                <Button
+                                  size="xs"
+                                  variant="light"
+                                  onClick={() =>
+                                    setQuestions((prev) =>
+                                      prev.map((qq, i) =>
+                                        i === qi
+                                          ? {
+                                              ...qq,
+                                              options: [
+                                                ...(qq.options || []),
+                                                "",
+                                              ],
+                                            }
+                                          : qq
+                                      )
+                                    )
+                                  }
+                                >
+                                  Tambah Opsi
+                                </Button>
+                              </Stack>
+                            )}
+                            {q.q_type === "true-false" && (
+                              <Radio.Group
+                                label="Jawaban Benar"
+                                value={q.correct}
+                                onChange={(v: string) =>
+                                  setQuestions((prev) =>
+                                    prev.map((qq, i) =>
+                                      i === qi ? { ...qq, correct: v } : qq
+                                    )
+                                  )
+                                }
+                              >
+                                <Group>
+                                  <Radio value="true" label="True" />
+                                  <Radio value="false" label="False" />
+                                </Group>
+                              </Radio.Group>
+                            )}
+                            {q.q_type === "short-answer" && (
+                              <TextInput
+                                label="Jawaban Benar"
+                                value={q.correct}
+                                onChange={(e) =>
+                                  setQuestions((prev) =>
+                                    prev.map((qq, i) =>
+                                      i === qi
+                                        ? {
+                                            ...qq,
+                                            correct: e.currentTarget.value,
+                                          }
+                                        : qq
+                                    )
+                                  )
+                                }
+                              />
+                            )}
+                            <Textarea
+                              label="Penjelasan (opsional)"
+                              minRows={2}
+                              value={q.explanation || ""}
+                              onChange={(e) =>
+                                setQuestions((prev) =>
+                                  prev.map((qq, i) =>
+                                    i === qi
+                                      ? {
+                                          ...qq,
+                                          explanation: e.currentTarget.value,
+                                        }
+                                      : qq
+                                  )
+                                )
+                              }
+                            />
+                          </Stack>
+                        </Paper>
+                      ))}
+                      {questions.length === 0 && (
+                        <TextInput
+                          readOnly
+                          variant="unstyled"
+                          value="Belum ada pertanyaan"
+                        />
+                      )}
+                    </Stack>
                   </Stack>
                 </Paper>
               )}
@@ -400,6 +687,53 @@ export default function EditModulePage() {
                         min={1}
                       />
                     </Group>
+                  </Stack>
+                </Paper>
+              )}
+
+              {moduleKind === "live" && (
+                <Paper p="md" radius="md" withBorder>
+                  <Stack gap="sm">
+                    <TextInput
+                      label="Judul Sesi"
+                      value={liveTitle}
+                      onChange={(e) => setLiveTitle(e.currentTarget.value)}
+                      required
+                    />
+                    <Textarea
+                      label="Agenda"
+                      value={liveAgenda}
+                      onChange={(e) => setLiveAgenda(e.currentTarget.value)}
+                      minRows={3}
+                      required
+                    />
+                    <TextInput
+                      label="Waktu Mulai"
+                      type="datetime-local"
+                      value={liveStartAt}
+                      onChange={(e) => setLiveStartAt(e.currentTarget.value)}
+                      required
+                    />
+                    {liveJoinUrl && (
+                      <Group gap="xs">
+                        <TextInput
+                          label="Join URL"
+                          value={liveJoinUrl}
+                          readOnly
+                          style={{ flex: 1 }}
+                        />
+                        <Button
+                          variant="light"
+                          onClick={() => {
+                            navigator.clipboard
+                              .writeText(liveJoinUrl)
+                              .catch(() => {});
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      </Group>
+                    )}
                   </Stack>
                 </Paper>
               )}

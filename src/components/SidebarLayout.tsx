@@ -12,7 +12,7 @@ import {
   ScrollArea,
   Stack,
   Badge,
-  Switch,
+  // Switch,
   useMantineColorScheme,
   Card,
 } from "@mantine/core";
@@ -21,8 +21,8 @@ import { User, NavigationItem } from "../types";
 import {
   IconLogout,
   IconUser,
-  IconMoon,
-  IconSun,
+  // IconMoon,
+  // IconSun,
   IconDashboard,
   IconBook,
   IconUsers,
@@ -49,6 +49,8 @@ interface DashboardLayoutProps {
   customNavbar?: React.ReactNode;
   /** Optional: hide navbar entirely and render only the header + main */
   hideNavbar?: boolean;
+  /** Optional global loading state to cover entire layout (header+navbar+main) */
+  globalLoading?: boolean;
 }
 
 const getNavigationItems = (role: User["role"]): NavigationItem[] => {
@@ -69,6 +71,11 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           label: "Manajemen User",
           href: "/admin/users",
           icon: "IconUsers",
+        },
+        {
+          label: "Manajemen Kursus",
+          href: "/admin/courses",
+          icon: "IconBook",
         },
         {
           label: "Manajemen Keuangan",
@@ -112,15 +119,20 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           href: "/user/explore",
           icon: "IconBookmark",
         },
-        {
-          label: "Learning Path",
-          href: "/user/learning-paths",
-          icon: "IconPlaylist",
-        },
+        // {
+        //   label: "Learning Path",
+        //   href: "/user/learning-paths",
+        //   icon: "IconPlaylist",
+        // },
         {
           label: "Diskusi & Forum",
           href: "/user/discussions",
           icon: "IconMessageCircle",
+        },
+        {
+          label: "Proyek Saya",
+          href: "/user/projects",
+          icon: "IconChartBar",
         },
       ];
 
@@ -154,9 +166,11 @@ export function DashboardLayout({
   onLogout,
   customNavbar,
   hideNavbar,
+  globalLoading,
 }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  //  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const { colorScheme } = useMantineColorScheme();
   const [navOpened, setNavOpened] = useState(false);
 
   const navigationItems = getNavigationItems(user.role);
@@ -241,14 +255,14 @@ export function DashboardLayout({
           </Group>
 
           <Group>
-            <Switch
+            {/* <Switch
               size="md"
               color="dark.4"
               onLabel={<IconSun size="1rem" stroke={2.5} />}
               offLabel={<IconMoon size="1rem" stroke={2.5} />}
               checked={colorScheme === "light"}
               onChange={() => toggleColorScheme()}
-            />
+            /> */}
 
             <Text
               size="sm"
@@ -387,6 +401,61 @@ export function DashboardLayout({
       )}
 
       <AppShell.Main className="min-h-screen w-full bg-[#f8fafc] relative">
+        {globalLoading && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(255,255,255,0.65)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 4000,
+            }}
+          >
+            <div style={{ display: "flex", gap: 32 }}>
+              {[0, 1, 2].map((i) => (
+                <svg
+                  key={i}
+                  width="72"
+                  height="72"
+                  viewBox="0 0 64 64"
+                  style={{
+                    animation: "spinDiamond 1.2s linear infinite",
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                >
+                  <rect
+                    x="12"
+                    y="12"
+                    width="40"
+                    height="40"
+                    fill="none"
+                    stroke="url(#gradSidebarLayoutFull)"
+                    strokeWidth="8"
+                    rx="4"
+                    ry="4"
+                    transform="rotate(45 32 32)"
+                  />
+                  <defs>
+                    <linearGradient
+                      id="gradSidebarLayoutFull"
+                      x1="0%"
+                      y1="0%"
+                      x2="100%"
+                      y2="100%"
+                    >
+                      <stop offset="0%" stopColor="#f6d457" />
+                      <stop offset="100%" stopColor="#1e3769" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              ))}
+            </div>
+            <style>{`@keyframes spinDiamond { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
+          </div>
+        )}
         {/* Midnight Aurora Glow Background */}
         <div
           className="absolute inset-0 z-0"

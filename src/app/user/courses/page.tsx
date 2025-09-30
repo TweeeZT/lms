@@ -12,7 +12,6 @@ import {
   Button,
   Progress,
   SimpleGrid,
-  Modal,
   Skeleton,
 } from "@mantine/core";
 import {
@@ -23,11 +22,15 @@ import {
   IconTrophy,
   IconCertificate,
   IconDownload,
-  IconFileTypePdf,
-  IconVideo,
   IconAward,
 } from "@tabler/icons-react";
-import { useState, useEffect, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  type ReactNode,
+  type ComponentType,
+} from "react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
 
@@ -59,14 +62,72 @@ type ApiEnrollmentItem = {
 
 export default function UserCoursesPage() {
   const { user } = useAuth();
-  const [resumeOpen, setResumeOpen] = useState(false);
-  const [resume, setResume] = useState<{
-    title: string;
-    type: "pdf" | "video";
-    url: string;
-  } | null>(null);
   const [items, setItems] = useState<ApiEnrollmentItem[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Reusable StatCard (vertical) similar style to admin
+  function StatCard({
+    label,
+    value,
+    Icon,
+  }: {
+    label: string;
+    value: ReactNode;
+    Icon: ComponentType<{ size?: number; color?: string }>;
+  }) {
+    // Use brand gradient and soft frosted icon badge
+    const bg = "var(--primary-color)"; // defined in globals.css
+    const iconBadgeBg = "var(--secondary-color)";
+    const textColor = "#ffffff";
+    return (
+      <Card
+        withBorder
+        padding="lg"
+        radius="md"
+        shadow="sm"
+        style={{
+          textAlign: "center",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          position: "relative",
+          overflow: "hidden",
+          transition: "transform .25s, box-shadow .25s",
+          background: bg,
+          minHeight: 170,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-4px)";
+          e.currentTarget.style.boxShadow = "0 8px 22px -6px rgba(0,0,0,.15)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "var(--mantine-shadow-sm)";
+        }}
+      >
+        <Text size="xs" c={textColor} fw={600} tt="uppercase" mb={4}>
+          {label}
+        </Text>
+        <div
+          style={{
+            margin: 16,
+            width: 56,
+            height: 56,
+            borderRadius: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: iconBadgeBg,
+          }}
+        >
+          <Icon size={32} color="#1e3769" />
+        </div>
+        <Title order={2} style={{ lineHeight: 1 }} c={textColor}>
+          {value}
+        </Title>
+      </Card>
+    );
+  }
 
   useEffect(() => {
     const load = async () => {
@@ -115,64 +176,28 @@ export default function UserCoursesPage() {
         {/* Progress Overview */}
         <Grid gutter="lg">
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <Card padding="md" radius="md" className="stats-card">
-              <Group>
-                <IconBook size="2rem" color="blue" />
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Kursus Aktif
-                  </Text>
-                  <Text size="xl" fw={700}>
-                    {stats.active}
-                  </Text>
-                </div>
-              </Group>
-            </Card>
+            <StatCard
+              label="Kursus Aktif"
+              value={stats.active}
+              Icon={IconBook}
+            />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <Card padding="md" radius="md" className="stats-card">
-              <Group>
-                <IconCheck size="2rem" color="green" />
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Selesai
-                  </Text>
-                  <Text size="xl" fw={700}>
-                    {stats.completed}
-                  </Text>
-                </div>
-              </Group>
-            </Card>
+            <StatCard
+              label="Selesai"
+              value={stats.completed}
+              Icon={IconCheck}
+            />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <Card padding="md" radius="md" className="stats-card">
-              <Group>
-                <IconAward size="2rem" color="indigo" />
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Total XP
-                  </Text>
-                  <Text size="xl" fw={700}>
-                    {stats.totalXP}
-                  </Text>
-                </div>
-              </Group>
-            </Card>
+            <StatCard label="Total XP" value={stats.totalXP} Icon={IconAward} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <Card padding="md" radius="md" className="stats-card">
-              <Group>
-                <IconTrophy size="2rem" color="gold" />
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Pencapaian
-                  </Text>
-                  <Text size="xl" fw={700}>
-                    {stats.achievements}
-                  </Text>
-                </div>
-              </Group>
-            </Card>
+            <StatCard
+              label="Pencapaian"
+              value={stats.achievements}
+              Icon={IconTrophy}
+            />
           </Grid.Col>
         </Grid>
 
@@ -212,22 +237,6 @@ export default function UserCoursesPage() {
                   <Stack gap="md">
                     <Group justify="space-between">
                       <Group>
-                        <div
-                          style={{
-                            width: 50,
-                            height: 35,
-                            background: "var(--gradient-accent)",
-                            borderRadius: 6,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "white",
-                            fontSize: "11px",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {course.category === "scratch" ? "SCR" : "RBX"}
-                        </div>
                         <Badge
                           variant="light"
                           color={isCompleted ? "green" : "blue"}
@@ -297,6 +306,35 @@ export default function UserCoursesPage() {
                             size="sm"
                             leftSection={<IconDownload size="0.8rem" />}
                             color="yellow"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(
+                                  `/api/user/certificates?userId=${user?.id}&courseId=${course.id}`
+                                );
+                                const json = await res.json();
+                                if (
+                                  res.ok &&
+                                  json.success &&
+                                  json.items.length > 0
+                                ) {
+                                  const cert = json.items[0];
+                                  if (cert.certificate_url) {
+                                    const link = document.createElement("a");
+                                    link.href = cert.certificate_url;
+                                    link.download = `sertifikat-${course.title.replace(
+                                      /\s+/g,
+                                      "-"
+                                    )}.pdf`;
+                                    link.click();
+                                  }
+                                }
+                              } catch (error) {
+                                console.error(
+                                  "Error downloading certificate:",
+                                  error
+                                );
+                              }
+                            }}
                           >
                             Sertifikat
                           </Button>
@@ -304,20 +342,9 @@ export default function UserCoursesPage() {
                         <Button
                           className="btn-primary"
                           size="sm"
+                          component={Link}
+                          href={`/user/courses/${course.id}`}
                           leftSection={<IconPlayerPlayFilled size="0.8rem" />}
-                          onClick={() => {
-                            // demo resume: alternating pdf/video
-                            const type = Math.random() > 0.5 ? "pdf" : "video";
-                            setResume({
-                              title: course.title,
-                              type,
-                              url:
-                                type === "pdf"
-                                  ? "/docs/sample.pdf"
-                                  : "/videos/sample.mp4",
-                            });
-                            setResumeOpen(true);
-                          }}
                         >
                           {isCompleted ? "Resume Materi" : "Lanjutkan"}
                         </Button>
@@ -367,6 +394,35 @@ export default function UserCoursesPage() {
                         variant="light"
                         color="yellow"
                         leftSection={<IconDownload size="0.8rem" />}
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(
+                              `/api/user/certificates?userId=${user?.id}&courseId=${i.course?.id}`
+                            );
+                            const json = await res.json();
+                            if (
+                              res.ok &&
+                              json.success &&
+                              json.items.length > 0
+                            ) {
+                              const cert = json.items[0];
+                              if (cert.certificate_url) {
+                                const link = document.createElement("a");
+                                link.href = cert.certificate_url;
+                                link.download = `sertifikat-${i.course?.title.replace(
+                                  /\s+/g,
+                                  "-"
+                                )}.pdf`;
+                                link.click();
+                              }
+                            }
+                          } catch (error) {
+                            console.error(
+                              "Error downloading certificate:",
+                              error
+                            );
+                          }
+                        }}
                       >
                         Download
                       </Button>
@@ -399,39 +455,7 @@ export default function UserCoursesPage() {
         )}
       </Stack>
 
-      {/* Resume Material Modal */}
-      <Modal
-        opened={resumeOpen}
-        onClose={() => setResumeOpen(false)}
-        title="Resume Materi"
-        size="xl"
-      >
-        <Stack gap="md">
-          <Group gap="xs">
-            {resume?.type === "pdf" ? (
-              <IconFileTypePdf size="1.2rem" />
-            ) : (
-              <IconVideo size="1.2rem" />
-            )}
-            <Text fw={700}>{resume?.title}</Text>
-          </Group>
-          {resume?.type === "pdf" ? (
-            <div style={{ height: 500 }}>
-              <iframe
-                src={resume.url}
-                style={{ width: "100%", height: "100%", border: 0 }}
-                title="PDF Preview"
-              />
-            </div>
-          ) : (
-            <video
-              src={resume?.url}
-              controls
-              style={{ width: "100%", borderRadius: 8 }}
-            />
-          )}
-        </Stack>
-      </Modal>
+      {/* Detail materi kini dibuka di halaman baru: /user/courses/[id] */}
     </Container>
   );
 }

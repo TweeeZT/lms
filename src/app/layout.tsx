@@ -81,7 +81,7 @@ export default function RootLayout({
         <title>Afterschola Kursus</title>
       </head>
       <body className={inter.className}>
-        <MantineProvider theme={theme}>
+        <MantineProvider theme={theme} forceColorScheme="light">
           <Notifications />
           <PrimeLoader />
           <AuthProvider>{children}</AuthProvider>

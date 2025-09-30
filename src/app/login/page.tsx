@@ -81,6 +81,30 @@ export function LoginForm() {
       setLoginError(null);
       const result = await login(data);
       if (result.success) {
+        // Persist lightweight auth cookies for auto-login fallback
+        try {
+          const cached = localStorage.getItem("afterschola_user");
+          if (cached) {
+            const parsed = JSON.parse(cached) as {
+              id: string;
+              role: string;
+              fullName?: string;
+            };
+            // 'data' may include rememberMe per form generic; treat truthy as 30-day
+            const ttlDays = (data as { rememberMe?: boolean }).rememberMe
+              ? 30
+              : 1; // fallback if rememberMe included
+            const maxAge = ttlDays * 24 * 60 * 60; // seconds
+            const safeName = encodeURIComponent(parsed.fullName || "User");
+            document.cookie = `a_uid=${encodeURIComponent(
+              parsed.id
+            )}; Path=/; Max-Age=${maxAge}`;
+            document.cookie = `a_role=${encodeURIComponent(
+              parsed.role
+            )}; Path=/; Max-Age=${maxAge}`;
+            document.cookie = `a_uname=${safeName}; Path=/; Max-Age=${maxAge}`;
+          }
+        } catch {}
         const userRole = localStorage.getItem("userRole");
         if (userRole === "admin") {
           router.push("/admin/dashboard");
@@ -151,6 +175,21 @@ export function LoginForm() {
         })
       );
       localStorage.setItem("userRole", mapped.role);
+
+      // Set cookies for fallback auto-login (non-HttpOnly client side). In production consider setting via secure HTTP-only cookie from server.
+      try {
+        const ttlDays = 7; // OAuth treat as 1 week
+        const maxAge = ttlDays * 24 * 60 * 60;
+        document.cookie = `a_uid=${encodeURIComponent(
+          mapped.id
+        )}; Path=/; Max-Age=${maxAge}`;
+        document.cookie = `a_role=${encodeURIComponent(
+          mapped.role
+        )}; Path=/; Max-Age=${maxAge}`;
+        document.cookie = `a_uname=${encodeURIComponent(
+          mapped.fullName || "User"
+        )}; Path=/; Max-Age=${maxAge}`;
+      } catch {}
 
       if (mapped.role === "admin") router.push("/admin/dashboard");
       else if (mapped.role === "instructor")

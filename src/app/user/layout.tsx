@@ -38,6 +38,11 @@ export default function UserLayout({
     <DashboardLayout
       user={user}
       onLogout={logout}
+      // Hide sidebar for course detail pages and blockly project editor pages
+      hideNavbar={
+        pathname?.startsWith("/user/courses/") ||
+        pathname?.startsWith("/user/projects/")
+      }
       customNavbar={
         pathname?.startsWith("/user/profile") ? (
           <ProfileTabsNavbar />

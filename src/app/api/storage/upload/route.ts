@@ -13,7 +13,14 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file");
     const userId = String(formData.get("userId") || "").trim();
-    const bucket = String(formData.get("bucket") || "lessons-thumbnail");
+    const rawBucket = String(formData.get("bucket") || "avatar").trim();
+    // Allow assignment submission buckets
+    const bucket =
+      /^(avatar|avatars|uploads|module-submission|assignments-submissions)$/i.test(
+        rawBucket
+      )
+        ? rawBucket
+        : "avatar";
 
     if (!file || !(file instanceof Blob)) {
       return NextResponse.json(
@@ -29,26 +36,55 @@ export async function POST(req: Request) {
     }
 
     const contentType = (file as Blob).type || "application/octet-stream";
-    if (!/^image\//i.test(contentType)) {
+    // For assignment buckets allow common doc/video types else restrict to images
+    const isAssignmentBucket =
+      /module-submission|assignments-submissions/i.test(bucket);
+    if (!isAssignmentBucket && !/^image\//i.test(contentType)) {
       return NextResponse.json(
         { success: false, error: "Hanya file gambar yang diperbolehkan" },
         { status: 400 }
       );
     }
+    if (isAssignmentBucket) {
+      const allowed = [
+        /^image\//i,
+        /^video\//i,
+        /pdf$/i,
+        /zip$/i,
+        /octet-stream$/i,
+        /msword$/i,
+        /officedocument/i,
+      ];
+      const ok = allowed.some((r) => r.test(contentType));
+      if (!ok) {
+        return NextResponse.json(
+          { success: false, error: "Tipe file tidak diizinkan" },
+          { status: 400 }
+        );
+      }
+    }
 
-    const originalName = (formData.get("filename") as string) || "upload";
-    const extGuess = originalName.includes(".")
-      ? originalName.split(".").pop()!
-      : contentType.split("/").pop() || "jpg";
-    const objectPath = `${userId}/${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}.${extGuess}`;
+    const originalName = ((formData.get("filename") as string) || "avatar.jpg")
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .slice(0, 80);
+    const extGuess =
+      (originalName.includes(".")
+        ? originalName.split(".").pop()!
+        : contentType.split("/").pop() || "jpg"
+      )
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "") || "jpg";
+    // Deterministic path: <userId>/avatar.<ext> to auto-replace
+    // For assignment store path: <userId>/<timestamp>-<sanitized>
+    const objectPath = isAssignmentBucket
+      ? `${userId}/${Date.now()}-${originalName}`
+      : `${userId}/avatar.${extGuess}`;
 
     const { error: upErr } = await supabase.storage
       .from(bucket)
       .upload(objectPath, file, {
         cacheControl: "3600",
-        upsert: false,
+        upsert: true,
         contentType,
       });
     if (upErr) {

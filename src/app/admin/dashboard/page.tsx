@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Container,
   Title,
@@ -20,15 +20,8 @@ import {
   IconCoin,
   IconChartBar,
 } from "@tabler/icons-react";
-import { dummyUsers, getStudents } from "../../../data/users";
-import { dummyCourses } from "../../../data/courses";
 import Link from "next/link";
-import {
-  monthlyRevenue,
-  transactionsSeed,
-  roleDistribution,
-  computeFinanceSummary,
-} from "../../../data/finance";
+// Dummy finance/user/course imports removed; data now fetched from API
 
 function rupiah(n: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -378,44 +371,37 @@ function SimpleDonut({
   );
 }
 
-// Reusable stat card with vertical layout (label -> icon -> value) used in dashboard metrics section
+// Reusable StatCard (vertical) similar style to admin
 function StatCard({
   label,
   value,
-  icon: Icon,
-  color,
-  onClick,
-  gradientFrom,
-  gradientTo,
+  Icon,
 }: {
   label: string;
   value: React.ReactNode;
-  icon: React.ComponentType<{ size?: number; color?: string }>;
-  color: string;
-  onClick?: () => void;
-  gradientFrom?: string;
-  gradientTo?: string;
+  Icon: React.ComponentType<{ size?: number; color?: string }>;
 }) {
+  // Use brand gradient and soft frosted icon badge
+  const bg = "var(--primary-color)"; // defined in globals.css
+  const iconBadgeBg = "var(--secondary-color)";
+  const textColor = "#ffffff";
   return (
     <Card
+      withBorder
       padding="lg"
       radius="md"
-      withBorder
       shadow="sm"
-      onClick={onClick}
-      style={
-        {
-          cursor: onClick ? "pointer" : undefined,
-          transition: "transform .25s, box-shadow .25s",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          textAlign: "center",
-          position: "relative",
-          overflow: "hidden",
-          background: `linear-gradient(135deg,var(--mantine-color-${color}-0),var(--mantine-color-${color}-1))`,
-        } as React.CSSProperties
-      }
+      style={{
+        textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        position: "relative",
+        overflow: "hidden",
+        transition: "transform .25s, box-shadow .25s",
+        background: bg,
+        minHeight: 170,
+      }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-4px)";
         e.currentTarget.style.boxShadow = "0 8px 22px -6px rgba(0,0,0,.15)";
@@ -425,26 +411,24 @@ function StatCard({
         e.currentTarget.style.boxShadow = "var(--mantine-shadow-sm)";
       }}
     >
-      <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+      <Text size="xs" c={textColor} fw={600} tt="uppercase" mb={4}>
         {label}
       </Text>
       <div
         style={{
-          width: 54,
-          height: 54,
-          borderRadius: 14,
+          margin: 16,
+          width: 56,
+          height: 56,
+          borderRadius: 20,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: `linear-gradient(135deg, ${gradientFrom || color}40, ${
-            gradientTo || color
-          }15)`,
-          marginBottom: 8,
+          background: iconBadgeBg,
         }}
       >
-        <Icon size={30} color={color} />
+        <Icon size={32} color="#1e3769" />
       </div>
-      <Title order={2} c={color} style={{ lineHeight: 1 }}>
+      <Title order={2} style={{ lineHeight: 1 }} c={textColor}>
         {value}
       </Title>
     </Card>
@@ -452,18 +436,161 @@ function StatCard({
 }
 
 export default function AdminDashboard() {
-  const totalUsers = dummyUsers.length;
-  const totalCourses = dummyCourses.length;
-  const finSummary = computeFinanceSummary(transactionsSeed, []);
-  const totalRevenue = finSummary.totalRevenue;
-  const activeStudents = getStudents().length;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<{
+    totalUsers: number;
+    totalCourses: number;
+    totalModules: number;
+    totalDiscussions: number;
+    activeEnrollments: number;
+    totalEnrolled: number;
+    avgCourseRating: number;
+    revenue: { totalRevenue: number; totalOrders: number; avgOrder: number };
+  } | null>(null);
+  const [distribution, setDistribution] = useState<
+    { role: string; value: number }[]
+  >([]);
+  const [recentUsers, setRecentUsers] = useState<
+    {
+      id: string;
+      fullName: string;
+      email: string;
+      role: string;
+      avatar?: string | null;
+    }[]
+  >([]);
+  const [recentTransactions, setRecentTransactions] = useState<
+    {
+      id: string;
+      courseTitle: string;
+      userName: string;
+      date: string;
+      amount: number;
+      status: string;
+    }[]
+  >([]);
+  const [monthLabels, setMonthLabels] = useState<string[]>([]);
+  const [revenueNumbers, setRevenueNumbers] = useState<number[]>([]);
+  const [ordersNumbers, setOrdersNumbers] = useState<number[]>([]);
 
-  const recentUsers = dummyUsers.slice(-5);
-  const recentTransactions = transactionsSeed.slice(0, 5);
-  const revenueNumbers = monthlyRevenue.map((m) => m.revenue);
-  const ordersNumbers = monthlyRevenue.map((m) => m.orders);
-  const monthLabels = monthlyRevenue.map((m) => m.month);
-  const donutData = roleDistribution.map((r) => ({
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        // Discover admin id from localStorage or cookie
+        let uid: string | null = null;
+        try {
+          const cached = localStorage.getItem("afterschola_user");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            uid = parsed.id;
+          }
+        } catch {}
+        if (!uid && typeof document !== "undefined") {
+          const m = document.cookie.match(/(?:^|; )a_uid=([^;]+)/);
+          if (m) uid = decodeURIComponent(m[1]);
+        }
+        if (!uid) throw new Error("Tidak menemukan user id");
+        const dashRes = await fetch(`/api/admin/dashboard?userId=${uid}`);
+        const dashJson = await dashRes.json();
+        if (!dashRes.ok || !dashJson.success) {
+          throw new Error(dashJson.error || "Gagal memuat dashboard");
+        }
+        if (!active) return;
+        setStats(dashJson.stats);
+        setDistribution(dashJson.roleDistribution || []);
+        // recent users
+        const usersRes = await fetch(
+          `/api/admin/users?userId=${uid}&page=1&limit=5&sortBy=created_at&sortDir=desc`
+        );
+        const usersJson = await usersRes.json();
+        if (usersRes.ok && usersJson.success) {
+          interface RawUser {
+            id: string;
+            name?: string;
+            full_name?: string;
+            email?: string;
+            role?: string;
+            avatar_url?: string | null;
+          }
+          const mapped = ((usersJson.items || []) as RawUser[]).map((u) => ({
+            id: u.id,
+            fullName: u.name || u.full_name || "-",
+            email: u.email || "",
+            role: u.role || "user",
+            avatar: u.avatar_url || null,
+          }));
+          setRecentUsers(mapped);
+        }
+        // recent transactions
+        const txRes = await fetch(
+          `/api/admin/earnings?userId=${uid}&page=1&limit=5&sortBy=date&sortDir=desc`
+        );
+        const txJson = await txRes.json();
+        if (txRes.ok && txJson.success) {
+          interface RawTx {
+            id: string;
+            course_title: string;
+            user_name: string;
+            date: string;
+            amount: number;
+            status: string;
+          }
+          const mappedTx = ((txJson.items || []) as RawTx[]).map((t) => ({
+            id: t.id,
+            courseTitle: t.course_title,
+            userName: t.user_name,
+            date: t.date,
+            amount: t.amount,
+            status: t.status,
+          }));
+          setRecentTransactions(mappedTx);
+          const byMonth = new Map<string, { rev: number; orders: number }>();
+          mappedTx.forEach(
+            (t: { date: string; status: string; amount: number }) => {
+              const d = new Date(t.date);
+              const key = d.toLocaleDateString("id-ID", {
+                month: "short",
+                year: "2-digit",
+              });
+              if (!byMonth.has(key)) byMonth.set(key, { rev: 0, orders: 0 });
+              const entry = byMonth.get(key)!;
+              if (t.status === "paid") {
+                entry.rev += Number(t.amount || 0);
+                entry.orders += 1;
+              }
+            }
+          );
+          const monthArr = Array.from(byMonth.entries());
+          monthArr.sort(
+            (a, b) =>
+              new Date("01 " + a[0]).getTime() -
+              new Date("01 " + b[0]).getTime()
+          );
+          setMonthLabels(monthArr.map((m) => m[0]));
+          setRevenueNumbers(monthArr.map((m) => m[1].rev));
+          setOrdersNumbers(monthArr.map((m) => m[1].orders));
+        }
+      } catch (e) {
+        if (!active) return;
+        setError(e instanceof Error ? e.message : "Gagal memuat data");
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const totalUsers = stats?.totalUsers || 0;
+  const totalCourses = stats?.totalCourses || 0;
+  const totalRevenue = stats?.revenue.totalRevenue || 0;
+  const activeStudents = stats?.activeEnrollments || 0;
+  const donutData = distribution.map((r) => ({
     label: r.role,
     value: r.value,
     color:
@@ -482,54 +609,41 @@ export default function AdminDashboard() {
             Dashboard Admin
           </Title>
           <Text size="lg" c="dimmed">
-            Overview dan manajemen platform AfterSchola
+            {loading
+              ? "Memuat data..."
+              : "Overview dan manajemen platform AfterSchola"}
           </Text>
+          {error && (
+            <Text size="sm" c="red" mt={4}>
+              {error}
+            </Text>
+          )}
         </div>
 
         {/* Stats Cards (vertical layout) */}
         <Grid gutter="xl">
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
-            <StatCard
-              label="Total Users"
-              value={totalUsers}
-              icon={IconUsers}
-              color="blue"
-              gradientFrom="#4e8df7"
-              gradientTo="#1c4e91"
-              onClick={() => (window.location.href = "/admin/users")}
-            />
+            <StatCard label="Total Users" value={totalUsers} Icon={IconUsers} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
             <StatCard
               label="Total Kursus"
               value={totalCourses}
-              icon={IconBook}
-              color="indigo"
-              gradientFrom="#4c51bf"
-              gradientTo="#2c3e50"
-              onClick={() => (window.location.href = "/admin/courses")}
+              Icon={IconBook}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
             <StatCard
               label="Total Revenue"
               value={`Rp ${totalRevenue.toLocaleString()}`}
-              icon={IconCoin}
-              color="green"
-              gradientFrom="#3fbf7d"
-              gradientTo="#0f6434"
-              onClick={() => (window.location.href = "/admin/earnings")}
+              Icon={IconCoin}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
             <StatCard
               label="Siswa Aktif"
               value={activeStudents}
-              icon={IconChartBar}
-              color="orange"
-              gradientFrom="#ffb347"
-              gradientTo="#c96b07"
-              onClick={() => (window.location.href = "/admin/users")}
+              Icon={IconChartBar}
             />
           </Grid.Col>
         </Grid>

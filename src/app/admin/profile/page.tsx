@@ -16,15 +16,23 @@ import {
   Divider,
   Badge,
   Modal,
+  LoadingOverlay,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../../hooks/useAuth";
-import { IconUser, IconMail, IconPhone } from "@tabler/icons-react";
+import {
+  IconUser,
+  IconMail,
+  IconPhone,
+  IconCheck,
+  IconX,
+} from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 const Cropper = dynamic(() => import("react-easy-crop"), { ssr: false });
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const router = useRouter();
 
   const [fullName, setFullName] = useState("");
@@ -33,6 +41,8 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [avatar, setAvatar] = useState("");
+  const [loadingFetch, setLoadingFetch] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Error state
   const [usernameError, setUsernameError] = useState("");
@@ -62,30 +72,23 @@ export default function ProfilePage() {
   // warna badge berdasarkan role
   const badgeColor: "red" | "blue" = role === "Admin" ? "red" : "blue";
 
+  // Load fresh profile from Supabase users table (single fetch) - email is immutable here
   useEffect(() => {
-    const savedProfile = localStorage.getItem("profile");
-    const savedAvatar = localStorage.getItem("avatar");
-
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile);
-      setFullName(profile.fullName || "");
-      setUsername(profile.username || "");
-      setEmail(profile.email || "");
-      setPhone(profile.phone || "");
-      setBio(profile.bio || "");
-    } else if (user) {
-      setFullName(user.fullName || "");
-      setUsername(user.username || "");
-      setEmail(user.email || "");
-      setPhone(user.phone || "");
-      setBio(user.bio || "");
-    }
-
-    if (savedAvatar) {
-      setAvatar(savedAvatar);
-    } else if (user?.avatar) {
-      setAvatar(user.avatar);
-    }
+    if (!user) return;
+    (async () => {
+      try {
+        setLoadingFetch(true);
+        // Use existing user object as primary source (server already synced). If needed could refetch via /api/admin/users list, but endpoint excludes actor, so rely on auth context.
+        setFullName(user.fullName || "");
+        setUsername(user.username || "");
+        setEmail(user.email || "");
+        setPhone(user.phone || "");
+        setBio(user.bio || "");
+        setAvatar(user.avatar || "");
+      } finally {
+        setLoadingFetch(false);
+      }
+    })();
   }, [user]);
 
   if (!user) return null;
@@ -114,37 +117,36 @@ export default function ProfilePage() {
   const onCropComplete = (_: unknown, pixels: CroppedPixels) =>
     setCroppedAreaPixels(pixels);
 
-  async function getCropped(imageSrc: string, cropPixels: CroppedPixels) {
-    const img = new Image();
-    img.src = imageSrc;
-    await new Promise((res, rej) => {
-      img.onload = res;
-      img.onerror = rej;
-    });
-    const canvas = document.createElement("canvas");
-    canvas.width = cropPixels.width;
-    canvas.height = cropPixels.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return imageSrc;
-    ctx.drawImage(
-      img,
-      cropPixels.x,
-      cropPixels.y,
-      cropPixels.width,
-      cropPixels.height,
-      0,
-      0,
-      cropPixels.width,
-      cropPixels.height
-    );
-    return canvas.toDataURL("image/png");
-  }
-
   const applyCrop = async () => {
     if (rawImage && croppedAreaPixels) {
-      const c = await getCropped(rawImage, croppedAreaPixels);
-      setAvatar(c);
-      localStorage.setItem("avatar", c);
+      // Enforce 1024x1024 output
+      const img = new Image();
+      img.src = rawImage;
+      await new Promise((res, rej) => {
+        img.onload = res;
+        img.onerror = rej;
+      });
+      const canvas = document.createElement("canvas");
+      const size = 1024;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(
+          img,
+          croppedAreaPixels.x,
+          croppedAreaPixels.y,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height,
+          0,
+          0,
+          size,
+          size
+        );
+        const dataUrl = canvas.toDataURL("image/png");
+        setAvatar(dataUrl);
+      }
     }
     setCropOpen(false);
   };
@@ -183,27 +185,71 @@ export default function ProfilePage() {
     bioError,
   ].some(Boolean);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     validateAll();
-    setTimeout(() => {
-      const afterValidateErrors = [
-        fullNameError,
-        usernameError,
-        emailError,
-        phoneError,
-        bioError,
-      ].some(Boolean);
-      if (afterValidateErrors) return;
-      const profile = { fullName, username, email, phone, bio };
-      localStorage.setItem("profile", JSON.stringify(profile));
-      if (avatar) localStorage.setItem("avatar", avatar);
-      setOpened(true);
-    });
+    const afterValidateErrors = [
+      fullNameError,
+      usernameError,
+      emailError,
+      phoneError,
+      bioError,
+    ].some(Boolean);
+    if (afterValidateErrors) return;
+    if (!user) return;
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        id: user.id,
+        full_name: fullName.trim(),
+        username: username.trim(),
+        phone: phone.trim(),
+        bio: bio.trim(),
+      };
+      // If avatar is base64 data url (not already a hosted https URL) send as avatar_base64
+      if (avatar && avatar.startsWith("data:image/")) {
+        payload.avatar_base64 = avatar;
+      }
+
+      const res = await fetch(`/api/admin/users?userId=${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Gagal menyimpan profil");
+      }
+      // Update local auth context
+      updateUser({
+        fullName: fullName.trim(),
+        username: username.trim(),
+        phone: phone.trim(),
+        bio: bio.trim(),
+        avatar: json.item?.avatar_url || avatar,
+      });
+      setAvatar(json.item?.avatar_url || avatar);
+      notifications.show({
+        title: "Profil disimpan",
+        message: "Perubahan berhasil disimpan.",
+        color: "teal",
+        icon: <IconCheck size={16} />,
+      });
+    } catch (e) {
+      notifications.show({
+        title: "Gagal",
+        message: e instanceof Error ? e.message : "Terjadi kesalahan",
+        color: "red",
+        icon: <IconX size={16} />,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <>
-      <Container size="lg">
+      <Container size="lg" style={{ position: "relative" }}>
+        <LoadingOverlay visible={loadingFetch || saving} zIndex={100} />
         <Modal
           opened={opened}
           onClose={() => setOpened(false)}
@@ -238,7 +284,12 @@ export default function ProfilePage() {
             <Grid.Col span={{ base: 12, md: 4 }}>
               <Card padding="lg" radius="md" withBorder>
                 <Stack align="center" gap="md">
-                  <Avatar size={120} radius="xl" src={avatar}>
+                  <Avatar
+                    size={120}
+                    radius={0}
+                    src={avatar}
+                    style={{ borderRadius: 12, overflow: "hidden" }}
+                  >
                     {fullName
                       .split(" ")
                       .map((n) => n[0])
@@ -314,13 +365,8 @@ export default function ProfilePage() {
                       label="Email"
                       leftSection={<IconMail size={16} />}
                       value={email}
-                      error={emailError}
-                      onBlur={validateAll}
-                      onChange={(e) => {
-                        const value = e.currentTarget.value;
-                        setEmail(value);
-                        if (emailError) setEmailError("");
-                      }}
+                      disabled
+                      description="Email tidak dapat diubah"
                     />
                   </Grid.Col>
 
@@ -369,7 +415,8 @@ export default function ProfilePage() {
                   <Button
                     className="btn-primary"
                     onClick={handleSave}
-                    disabled={hasErrors}
+                    disabled={hasErrors || saving}
+                    loading={saving}
                   >
                     Simpan Perubahan
                   </Button>
@@ -387,13 +434,13 @@ export default function ProfilePage() {
         centered
       >
         {rawImage && (
-          <div style={{ position: "relative", width: "100%", height: 300 }}>
+          <div style={{ position: "relative", width: "100%", height: 360 }}>
             <Cropper
               image={rawImage}
               crop={crop}
               zoom={zoom}
               aspect={1}
-              cropShape="round"
+              cropShape="rect" // square crop
               showGrid={false}
               onCropChange={setCrop}
               onZoomChange={setZoom}
@@ -402,9 +449,7 @@ export default function ProfilePage() {
               minZoom={1}
               maxZoom={3}
               zoomSpeed={1}
-              onRotationChange={() => {}}
-              onCropSizeChange={() => {}}
-              restrictPosition={true}
+              restrictPosition
               style={{ containerStyle: { width: "100%", height: "100%" } }}
               classes={{}}
               mediaProps={{}}

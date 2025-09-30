@@ -31,38 +31,177 @@ export async function GET(req: Request) {
     .eq("user_id", userId)
     .range(from, to);
 
-  if (error) {
+  // If enrollments query failed hard, return 500 unless we can fallback
+  const enrollmentsError = error?.message;
+
+  type JoinedInstructor = {
+    id: string;
+    full_name: string;
+    avatar?: string | null;
+  };
+  type JoinedCourse = {
+    id: string;
+    title: string;
+    description: string | null;
+    thumbnail: string | null;
+    category: string;
+    price: number | null;
+    duration_min: number | null;
+    level: string | null;
+    total_modules: number | null;
+    enrolled_count: number | null;
+    rating: number | null;
+    is_published: boolean | null;
+    users?: JoinedInstructor | null;
+  };
+  type ProgressJoined = {
+    id?: string;
+    completed_modules?: unknown;
+    current_module_id?: string | null;
+  } | null;
+  type EnrollmentJoinedRow = {
+    id?: string;
+    enrolled_at?: string;
+    enrolled_at_fallback?: string;
+    course?: JoinedCourse | JoinedCourse[] | null;
+    progress?: ProgressJoined | ProgressJoined[];
+  };
+
+  // Helper to map enrollment rows
+  const mapEnrollmentRows = (rows: unknown[]) =>
+    rows.map((r) => {
+      const row = r as EnrollmentJoinedRow;
+      const cRaw = row.course as
+        | JoinedCourse
+        | JoinedCourse[]
+        | null
+        | undefined;
+      const c = Array.isArray(cRaw) ? cRaw[0] : cRaw;
+      const pRaw = row.progress as
+        | ProgressJoined
+        | ProgressJoined[]
+        | undefined;
+      const p = Array.isArray(pRaw) ? pRaw[0] : pRaw;
+      const completedCount = Array.isArray(p?.completed_modules)
+        ? p.completed_modules.length
+        : 0;
+      const totalModules = Number(c?.total_modules || 0);
+      const progressPct = totalModules
+        ? Math.min(100, Math.round((completedCount / totalModules) * 100))
+        : 0;
+      return {
+        enrollmentId:
+          row.id || `up-${(c as JoinedCourse | null)?.id || "unknown"}`,
+        enrolledAt:
+          row.enrolled_at ||
+          row.enrolled_at_fallback ||
+          new Date().toISOString(),
+        course: c
+          ? {
+              id: c.id,
+              title: c.title,
+              description: c.description ?? "",
+              thumbnail: c.thumbnail ?? null,
+              category: c.category,
+              price: c.price,
+              durationMin: c.duration_min,
+              level: c.level ?? "beginner",
+              totalModules: totalModules,
+              enrolledCount: c.enrolled_count,
+              rating: Number(c.rating || 0),
+              isPublished: c.is_published,
+              instructor: c.users
+                ? {
+                    id: c.users.id,
+                    fullName: c.users.full_name,
+                    avatar: c.users.avatar ?? null,
+                  }
+                : null,
+            }
+          : null,
+        progress: {
+          percentage: progressPct,
+          completedCount,
+          currentModuleId: p?.current_module_id ?? null,
+        },
+      };
+    });
+
+  if (!enrollmentsError && (data?.length || 0) > 0) {
+    // Happy path: have enrollments
+    const items = mapEnrollmentRows(data as unknown[]);
+    return NextResponse.json({
+      success: true,
+      items,
+      total: count || items.length,
+      page,
+      limit,
+    });
+  }
+
+  // Fallback: build list from user_progress joined to courses if no enrollments
+  const { data: upRows, error: upErr } = await supabaseAdmin
+    .from("user_progress")
+    .select(
+      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )"
+    )
+    .eq("user_id", userId)
+    .range(from, to);
+
+  if (upErr) {
+    // If both fail, return original error
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: enrollmentsError || upErr.message },
       { status: 500 }
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = (data || []).map((row: any) => {
-    const c = row.course;
-    const p = Array.isArray(row.progress) ? row.progress[0] : row.progress; // handle 1:many left join
-    const completedCount = Array.isArray(p?.completed_modules)
-      ? p.completed_modules.length
-      : 0;
-    const totalModules = c?.total_modules || 0;
+  type UserProgressJoinedRow = {
+    id?: string;
+    user_id?: string;
+    course_id?: string;
+    completed_modules?: unknown;
+    current_module_id?: string | null;
+    enrolled_at?: string | null;
+    created_at?: string | null;
+    course?: JoinedCourse | JoinedCourse[] | null;
+  };
+  const items = (upRows || []).map((rowUnknown: unknown) => {
+    const row = rowUnknown as UserProgressJoinedRow;
+    // Normalize shape to enrollment-like
+    const cRaw = row.course as JoinedCourse | JoinedCourse[] | null | undefined;
+    const c = Array.isArray(cRaw) ? cRaw[0] : cRaw;
+    const p = {
+      completed_modules: Array.isArray(row.completed_modules)
+        ? (row.completed_modules as unknown[])
+        : (() => {
+            try {
+              return JSON.parse((row.completed_modules as string) || "[]");
+            } catch {
+              return [] as unknown[];
+            }
+          })(),
+      current_module_id: row.current_module_id ?? null,
+    };
+    const completedCount = (p.completed_modules as unknown[]).length;
+    const totalModules = Number(c?.total_modules || 0);
     const progressPct = totalModules
       ? Math.min(100, Math.round((completedCount / totalModules) * 100))
       : 0;
     return {
       enrollmentId: row.id,
-      enrolledAt: row.enrolled_at,
+      enrolledAt: row.enrolled_at || row.created_at || new Date().toISOString(),
       course: c
         ? {
             id: c.id,
             title: c.title,
-            description: c.description,
-            thumbnail: c.thumbnail,
+            description: c.description ?? "",
+            thumbnail: c.thumbnail ?? null,
             category: c.category,
             price: c.price,
             durationMin: c.duration_min,
-            level: c.level,
-            totalModules,
+            level: c.level ?? "beginner",
+            totalModules: totalModules,
             enrolledCount: c.enrolled_count,
             rating: Number(c.rating || 0),
             isPublished: c.is_published,
@@ -70,7 +209,7 @@ export async function GET(req: Request) {
               ? {
                   id: c.users.id,
                   fullName: c.users.full_name,
-                  avatar: c.users.avatar || null,
+                  avatar: c.users.avatar ?? null,
                 }
               : null,
           }
@@ -78,7 +217,7 @@ export async function GET(req: Request) {
       progress: {
         percentage: progressPct,
         completedCount,
-        currentModuleId: p?.current_module_id || null,
+        currentModuleId: p.current_module_id ?? null,
       },
     };
   });
@@ -86,7 +225,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     success: true,
     items,
-    total: count || 0,
+    total: items.length,
     page,
     limit,
   });

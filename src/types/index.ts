@@ -182,6 +182,42 @@ export interface LoginCredentials {
   password: string;
 }
 
+// ============== Blockly Projects ==============
+export interface BlocklyProject {
+  id: string;
+  user_id: string;
+  title: string;
+  description?: string | null;
+  // New canonical fields
+  workspace_xml?: string | null; // Stored Blockly XML
+  code_js?: string | null; // Generated JS code snapshot
+  // Legacy aliases (kept for transitional compatibility when older components still reference them)
+  blocks_json?: string | null;
+  javascript_code?: string | null;
+  is_public: boolean;
+  created_at: string; // ISO timestamp
+  updated_at: string; // ISO timestamp
+}
+
+export type NewBlocklyProjectInput = {
+  userId: string;
+  title: string;
+  description?: string;
+  blocksJson?: string;
+  javascriptCode?: string;
+  isPublic?: boolean;
+};
+
+export type UpdateBlocklyProjectInput = {
+  projectId: string;
+  userId: string; // for owner validation client side (RLS protects server side)
+  title?: string;
+  description?: string;
+  blocksJson?: string;
+  javascriptCode?: string;
+  isPublic?: boolean;
+};
+
 export interface SignupData {
   email: string;
   username: string;
@@ -244,3 +280,16 @@ export type Payout = {
   date: string; // ISO
   status: "paid" | "pending";
 };
+
+// Schedule event for user calendar (dashboard)
+export interface ScheduleEvent {
+  id: string; // uuid
+  userId: string;
+  title: string;
+  category?: string | null; // optional free-form category/tag
+  description?: string | null;
+  startDate: string; // ISO date or datetime (UTC)
+  endDate?: string | null; // optional end date (inclusive)
+  createdAt?: string;
+  updatedAt?: string;
+}

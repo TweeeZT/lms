@@ -26,7 +26,8 @@ export async function GET(req: Request) {
       .eq("id", userId)
       .maybeSingle();
     if (uErr) throw uErr;
-    if (!u || u.role !== "user") {
+    // Allow any existing user to view their profile summary (role-agnostic)
+    if (!u) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 403 }
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
     // Fetch student stats (level/points/balance) from students table
     const { data: student, error: sErr } = await supabase
       .from("students")
-      .select("level, points, balance")
+      .select("*")
       .eq("user_id", userId)
       .maybeSingle();
     if (sErr) throw sErr;
@@ -53,18 +54,27 @@ export async function GET(req: Request) {
       .select("course_id, completed_modules")
       .eq("user_id", userId);
     const completedCourses = new Set<string>();
-    const modulesCompleted = (progress || []).reduce((acc, p) => {
-      const count = Array.isArray(p.completed_modules)
-        ? p.completed_modules.length
-        : 0;
-      // naive: if completed_modules length > 0, count towards modules
-      return acc + count;
+    const parsedProgress = (progress || []).map((p) => {
+      let mods: unknown = p.completed_modules as unknown;
+      // Handle both JSON array and stringified JSON stored in DB
+      if (typeof mods === "string") {
+        try {
+          mods = JSON.parse(mods);
+        } catch {
+          mods = [];
+        }
+      }
+      const arr = Array.isArray(mods) ? (mods as unknown[]) : [];
+      return { course_id: p.course_id as string, completed_modules: arr };
+    });
+    const modulesCompleted = parsedProgress.reduce((acc, p) => {
+      return acc + p.completed_modules.length;
     }, 0);
 
     // For completed courses, we may check if completed_modules equals total_modules.
     // Fetch courses total_modules for those in progress
     const courseIds = Array.from(
-      new Set((progress || []).map((p) => p.course_id))
+      new Set(parsedProgress.map((p) => p.course_id))
     );
     let coursesTotalMap = new Map<string, number>();
     if (courseIds.length) {
@@ -76,18 +86,32 @@ export async function GET(req: Request) {
         (courses || []).map((c) => [c.id, c.total_modules || 0])
       );
     }
-    (progress || []).forEach((p) => {
+    parsedProgress.forEach((p) => {
       const tot = coursesTotalMap.get(p.course_id) || 0;
-      const done = Array.isArray(p.completed_modules)
-        ? p.completed_modules.length
-        : 0;
+      const done = p.completed_modules.length;
       if (tot && done >= tot) completedCourses.add(p.course_id);
     });
 
-    // XP heuristic: points*10 + modulesCompleted*5
-    const level = Number(student?.level ?? 1);
-    const points = Number(student?.points ?? 0);
-    const currentXP = points * 10 + modulesCompleted * 5;
+    // Use stored XP strictly from DB (no heuristic)
+    const stuAny: unknown = student as unknown;
+    const stu =
+      stuAny && typeof stuAny === "object"
+        ? (stuAny as {
+            level?: number | null;
+            points?: number | null;
+            balance?: number | null;
+            xp?: number | null;
+          })
+        : ({} as {
+            level?: number | null;
+            points?: number | null;
+            balance?: number | null;
+            xp?: number | null;
+          });
+    const level = Number(stu.level ?? 1);
+    const points = Number(stu.points ?? 0);
+    const storedXP = Number(stu.xp ?? 0);
+    const currentXP = storedXP;
     const nextLevelXP = Math.max(100, level * 200);
 
     return NextResponse.json({
@@ -103,7 +127,7 @@ export async function GET(req: Request) {
         role: u.role,
         level,
         points,
-        balance: student?.balance ?? 0,
+        balance: stu.balance ?? 0,
         createdAt: u.created_at,
         updatedAt: u.updated_at,
       },

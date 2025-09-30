@@ -1,6 +1,5 @@
 "use client";
-
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Container,
   Stack,
@@ -19,8 +18,8 @@ import {
   Collapse,
   ActionIcon,
   Tooltip,
-  ThemeIcon,
   Pagination,
+  Card,
 } from "@mantine/core";
 import {
   IconReportMoney,
@@ -32,68 +31,120 @@ import {
   IconChevronUp,
   IconArrowUp,
   IconArrowDown,
+  IconReceipt2,
 } from "@tabler/icons-react";
-import { FinanceTransaction, Payout } from "../../../types";
-import {
-  computeFinanceSummary,
-  payoutsSeed,
-  transactionsSeed,
-} from "../../../data/finance";
+import { useAuth } from "../../../hooks/useAuth";
 
-// Reusable StatCard component
+// Added constants for thermal receipt (monospaced 300px style)
+const RECEIPT_INFO = {
+  header: "AFTERSCHOLA",
+  // Could map campus/company info; using placeholders derived from landing/user profile
+  addressLines: [
+    "Jl. Cisaranten Wetan No.167 A, Cisaranten Wetan,",
+    "Kec. Cinambo, Kota Bandung, Jawa Barat 40294",
+    "Telp: +62 823-3808-9915",
+  ],
+  footer: [
+    "Terima kasih telah belajar di",
+    "Afterschola",
+    "Terus tingkatkan skill dan kemampuan Anda!",
+  ],
+  width: 300,
+};
+
+// Types
+interface FinanceTransaction {
+  id: string;
+  date: string; // ISO string
+  userId?: string | null;
+  userName: string;
+  courseId: string;
+  courseTitle: string;
+  amount: number;
+  method: string;
+  status: string; // paid | pending | failed
+}
+
+interface PayoutRow {
+  id: string;
+  instructorName: string;
+  amount: number;
+  status: string; // paid | pending
+  date: string;
+}
+
+interface SummaryData {
+  totalRevenue: number;
+  totalOrders: number;
+  avgOrder: number;
+  activeInstructors: number;
+}
+
+// Reusable StatCard (vertical) similar style to admin
 function StatCard({
-  title,
+  label,
   value,
-  icon,
-  accent = "blue",
-  footer,
-  footerColor,
+  Icon,
 }: {
-  title: string;
+  label: string;
   value: React.ReactNode;
-  icon: React.ReactNode;
-  accent?: string;
-  footer?: React.ReactNode;
-  footerColor?: string;
+  Icon: React.ComponentType<{ size?: number; color?: string }>;
 }) {
+  // Use brand gradient and soft frosted icon badge
+  const bg = "var(--primary-color)"; // defined in globals.css
+  const iconBadgeBg = "var(--secondary-color)";
+  const textColor = "#ffffff";
   return (
-    <Paper
+    <Card
       withBorder
+      padding="lg"
       radius="md"
-      p="md"
+      shadow="sm"
       style={{
-        position: "relative",
-        overflow: "hidden",
-        background: `linear-gradient(135deg,var(--mantine-color-${accent}-0),var(--mantine-color-${accent}-1))`,
-        minHeight: 124,
+        textAlign: "center",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
         alignItems: "center",
+        position: "relative",
+        overflow: "hidden",
+        transition: "transform .25s, box-shadow .25s",
+        background: bg,
+        minHeight: 170,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-4px)";
+        e.currentTarget.style.boxShadow = "0 8px 22px -6px rgba(0,0,0,.15)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = "var(--mantine-shadow-sm)";
       }}
     >
-      <Group justify="space-between" align="center" ta="center" mb={4}>
-        <ThemeIcon variant="light" color={accent} size={42} radius="md">
-          {icon}
-        </ThemeIcon>
-        {footer && (
-          <Badge color={footerColor || accent} variant="light">
-            {footer}
-          </Badge>
-        )}
-      </Group>
-      <div>
-        <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb={4} ta="center">
-          {title}
-        </Text>
-        <Text fw={700} style={{ fontSize: 26, lineHeight: 1 }} ta="center">
-          {value}
-        </Text>
+      <Text size="xs" c={textColor} fw={600} tt="uppercase" mb={4}>
+        {label}
+      </Text>
+      <div
+        style={{
+          margin: 16,
+          width: 56,
+          height: 56,
+          borderRadius: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: iconBadgeBg,
+        }}
+      >
+        <Icon size={32} color="#1e3769" />
       </div>
-    </Paper>
+      <Title order={2} style={{ lineHeight: 1 }} c={textColor}>
+        {value}
+      </Title>
+    </Card>
   );
 }
 
+// Helpers
 function rupiah(n: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -102,17 +153,119 @@ function rupiah(n: number) {
   }).format(n);
 }
 
+function displayMethod(m: string) {
+  if (!m) return m;
+  const key = m.toLowerCase();
+  const map: Record<string, string> = {
+    bca: "BCA",
+    bni: "BNI",
+    bri: "BRI",
+    mandiri: "Mandiri",
+    permata: "Permata",
+    bca_va: "BCA VA",
+    bni_va: "BNI VA",
+    bri_va: "BRI VA",
+    mandiri_va: "Mandiri VA",
+    gopay: "GoPay",
+    ovo: "OVO",
+    dana: "DANA",
+    shopeepay: "ShopeePay",
+    qris: "QRIS",
+    credit_card: "Kartu Kredit",
+    debit_card: "Kartu Debit",
+  };
+  if (map[key]) return map[key];
+  // Fallback: prettify underscores
+  if (key.includes("_")) {
+    return key
+      .split("_")
+      .map((p) => (p.length ? p[0].toUpperCase() + p.slice(1) : p))
+      .join(" ");
+  }
+  return /^[a-z0-9]+$/.test(key) ? key.toUpperCase() : m;
+}
+
+function statusLabel(id: string) {
+  const s = id.toLowerCase();
+  if (s === "paid") return "Selesai";
+  if (s === "pending") return "Menunggu";
+  if (s === "failed") return "Gagal";
+  return id;
+}
+
+// NEW: Thermal receipt printer (simple window.print approach)
+function printThermalReceipt(t: FinanceTransaction) {
+  const w = window.open("", "_blank", "width=400,height=600");
+  if (!w) return;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("id-ID");
+  const timeStr = now
+    .toLocaleTimeString("id-ID", { hour12: false })
+    .replace(/\.\d+$/, "");
+  const line = (text: string = "") => `<div class="ln">${text}</div>`;
+  const hr = `<div class="sep">--------------------------------</div>`;
+  const pad = (label: string, value: string) => {
+    const max = 30; // width reference
+    const raw = `${label}${value}`;
+    return raw.length > max ? raw.slice(0, max) : raw;
+  };
+  const html = `<!DOCTYPE html><html><head><title>Struk ${t.id}</title>
+  <style>
+    body { font-family: 'Courier New', monospace; font-size:12px; width:${
+      RECEIPT_INFO.width
+    }px; margin:0 auto; padding:8px; color:#000; }
+    h1 { font-size:14px; text-align:center; margin:0 0 4px; letter-spacing:1px; }
+    .addr, .ftr { text-align:center; white-space:pre-line; }
+    .sep { text-align:center; font-size:12px; }
+    .ln { display:block; }
+    .row { display:flex; justify-content:space-between; }
+    .amt { font-weight:700; }
+    .center { text-align:center; }
+    @media print { body { width:${RECEIPT_INFO.width}px; } }
+  </style></head><body>
+  <h1>${RECEIPT_INFO.header}</h1>
+  <div class="addr">${RECEIPT_INFO.addressLines.join("\n")}</div>
+  ${hr}
+  ${line(pad("ID: ", t.id))}
+  ${line(pad("Tanggal: ", dateStr))}
+  ${line(pad("Waktu: ", timeStr))}
+  ${line(pad("User: ", t.userName))}
+  ${line(pad("Kursus: ", t.courseTitle))}
+  ${line(pad("Metode: ", displayMethod(t.method)))}
+  ${line(pad("Status: ", statusLabel(t.status)))}
+  ${hr}
+  ${line(pad("Jumlah: ", rupiah(t.amount)))}
+  ${hr}
+  <div class="ftr">${RECEIPT_INFO.footer.join("\n")}</div>
+  <div class="center" style="margin-top:6px;font-size:10px;">Dicetak: ${dateStr} ${timeStr}</div>
+  <script>window.print(); window.onafterprint = () => window.close();</script>
+  </body></html>`;
+  w.document.write(html);
+  w.document.close();
+}
+
 export default function AdminEarningsPage() {
-  const [transactions] = useState<FinanceTransaction[]>(transactionsSeed);
-  const [payouts, setPayouts] = useState<Payout[]>(payoutsSeed);
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
+  const [, setPayouts] = useState<PayoutRow[]>([]);
+  const [summary, setSummary] = useState<SummaryData>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    avgOrder: 0,
+    activeInstructors: 0,
+  });
+  const [totalPages, setTotalPages] = useState(1);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [method, setMethod] = useState<string | null>(null);
-
+  const [methodOptions, setMethodOptions] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [viewItem, setViewItem] = useState<FinanceTransaction | null>(null);
 
-  // sorting & pagination
   type SortCol =
     | "date"
     | "userName"
@@ -125,100 +278,89 @@ export default function AdminEarningsPage() {
   const pageSize = 5;
   const [page, setPage] = useState(1);
 
-  const summary = useMemo(
-    () => computeFinanceSummary(transactions, payouts),
-    [transactions, payouts]
-  );
-
-  const [filtersOpen, setFiltersOpen] = useState(true);
-
-  const filtered = useMemo(() => {
-    return transactions.filter((t) => {
-      const matchQ =
-        !q ||
-        t.userName.toLowerCase().includes(q.toLowerCase()) ||
-        t.courseTitle.toLowerCase().includes(q.toLowerCase()) ||
-        t.id.toLowerCase().includes(q.toLowerCase());
-      const matchStatus = !status || t.status === status;
-      const matchMethod = !method || t.method === method;
-      return matchQ && matchStatus && matchMethod;
-    });
-  }, [transactions, q, status, method]);
-
-  const sorted = useMemo(() => {
-    type SortValue = number | string;
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      let va: SortValue;
-      let vb: SortValue;
-      switch (sortBy) {
-        case "date":
-          va = new Date(a.date).getTime();
-          vb = new Date(b.date).getTime();
-          break;
-        case "amount":
-          va = a.amount;
-          vb = b.amount;
-          break;
-        case "userName":
-          va = a.userName;
-          vb = b.userName;
-          break;
-        case "courseTitle":
-          va = a.courseTitle;
-          vb = b.courseTitle;
-          break;
-        case "method":
-          va = a.method;
-          vb = b.method;
-          break;
-        case "status":
-          va = a.status;
-          vb = b.status;
-          break;
-        default:
-          va = 0;
-          vb = 0;
+  async function fetchData() {
+    if (!user?.id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("userId", user.id); // optional context
+      params.set("page", String(page));
+      params.set("limit", String(pageSize));
+      if (q) params.set("q", q);
+      if (status) params.set("status", status);
+      if (method) params.set("method", method);
+      params.set(
+        "sortBy",
+        sortBy === "userName"
+          ? "user_name"
+          : sortBy === "courseTitle"
+          ? "course_title"
+          : sortBy
+      );
+      params.set("sortDir", sortDir);
+      const res = await fetch(`/api/admin/earnings?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        if (res.status === 403) throw new Error("Akses ditolak (bukan admin)");
+        throw new Error(json.error || "Gagal memuat data");
       }
-      if (typeof va === "string") va = va.toLowerCase();
-      if (typeof vb === "string") vb = vb.toLowerCase();
-      if (va < vb) return sortDir === "asc" ? -1 : 1;
-      if (va > vb) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-    return arr;
-  }, [filtered, sortBy, sortDir]);
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paged = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sorted.slice(start, start + pageSize);
-  }, [sorted, page]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [q, status, method, sortBy, sortDir]);
-
-  function changeSort(col: SortCol) {
-    if (sortBy === col) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(col);
-      setSortDir("asc");
+      const mapped: FinanceTransaction[] = (json.items || []).map(
+        (r: {
+          id: string;
+          date: string;
+          user_id?: string | null;
+          user_name: string;
+          course_id: string;
+          course_title: string;
+          amount?: number | string;
+          method: string;
+          status: string;
+        }) => ({
+          id: r.id,
+          date: r.date,
+          userId: r.user_id,
+          userName: r.user_name,
+          courseId: r.course_id,
+          courseTitle: r.course_title,
+          amount: Number(r.amount || 0),
+          method: r.method,
+          status: r.status,
+        })
+      );
+      setTransactions(mapped);
+      setSummary(
+        json.summary || {
+          totalRevenue: 0,
+          totalOrders: 0,
+          avgOrder: 0,
+          activeInstructors: 0,
+        }
+      );
+      setPayouts(json.instructorTotals || []);
+      setMethodOptions(Array.isArray(json.methods) ? json.methods : []);
+      setTotalPages(Math.max(1, Math.ceil((json.total || 0) / pageSize)));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Gagal memuat data");
+      setTransactions([]);
+      setPayouts([]);
+    } finally {
+      setLoading(false);
     }
   }
 
-  function markPayoutPaid(id: string) {
-    setPayouts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: "paid" } : p))
-    );
-  }
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, q, status, method, sortBy, sortDir, page]);
 
-  function displayMethod(m: string) {
-    if (m.toLowerCase() === "midtrans") return "Bank Transfer";
-    if (m.toLowerCase() === "xendit") return "Virtual Account";
-    if (m.toLowerCase() === "manual") return "Manual";
-    return m;
+  function changeSort(col: SortCol) {
+    setPage(1);
+    if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortBy(col);
+      setSortDir("asc");
+    }
   }
 
   function printTransaction(t: FinanceTransaction) {
@@ -232,78 +374,65 @@ export default function AdminEarningsPage() {
         td { padding:6px 4px; vertical-align:top; }
         tr:nth-child(even){ background:#f5f7fa; }
         .total { font-weight:700; }
-        .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:12px; background:#eee; }
       </style></head><body>
       <h1>Struk Transaksi</h1>
       <div>ID: <strong>${t.id}</strong></div>
       <div>Tanggal: ${new Date(t.date).toLocaleString("id-ID")}</div>
-      <table>
-        <tbody>
-          <tr><td>User</td><td>${t.userName}</td></tr>
-          <tr><td>Kursus</td><td>${t.courseTitle}</td></tr>
-          <tr><td>Metode</td><td>${displayMethod(t.method)}</td></tr>
-          <tr><td>Status</td><td>${t.status}</td></tr>
-          <tr><td class="total">Jumlah</td><td class="total">${rupiah(
-            t.amount
-          )}</td></tr>
-        </tbody>
-      </table>
+      <table><tbody>
+        <tr><td>User</td><td>${t.userName}</td></tr>
+        <tr><td>Kursus</td><td>${t.courseTitle}</td></tr>
+        <tr><td>Metode</td><td>${displayMethod(t.method)}</td></tr>
+  <tr><td>Status</td><td>${statusLabel(t.status)}</td></tr>
+        <tr><td class="total">Jumlah</td><td class="total">${rupiah(
+          t.amount
+        )}</td></tr>
+      </tbody></table>
       <p style="margin-top:24px;font-size:12px;color:#666">Dokumen ini dicetak otomatis dari sistem.</p>
       <script>window.print();</script>
       </body></html>`);
     w.document.close();
   }
 
+  const paged = transactions; // already paginated by server
+
   return (
     <Container size="xl">
-      <style>{`
-        @media print {
-          button, [role=button], input, select { display: none !important; }
-          .mantine-Modal-root, .mantine-ActionIcon-root { display:none !important; }
-          header, nav { display:none !important; }
-          body { background:#fff; }
-          .mantine-Table-table { font-size:11px; }
-          .no-print { display:none !important; }
-        }
-      `}</style>
+      <style>{`@media print { button, [role=button], input, select { display:none !important;} .mantine-Modal-root, header, nav {display:none !important;} body {background:#fff;} }`}</style>
       <Stack gap="lg">
         <Title order={2}>Keuangan</Title>
-
+        {/* Summary */}
         <Grid gutter="lg">
           <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
             <StatCard
-              title="Total Pendapatan"
+              label="Total Pendapatan"
               value={rupiah(summary.totalRevenue)}
-              icon={<IconReportMoney size={32} />}
-              accent="teal"
+              Icon={IconReportMoney}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
             <StatCard
-              title="Total Order"
+              label="Total Order"
               value={summary.totalOrders}
-              icon={<IconTrendingUp size={32} />}
-              accent="blue"
+              Icon={IconTrendingUp}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
             <StatCard
-              title="Rerata Order"
+              label="Rerata Order"
               value={rupiah(summary.avgOrder)}
-              icon={<IconCash size={32} />}
-              accent="orange"
+              Icon={IconCash}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
             <StatCard
-              title="Payout Pending"
-              value={rupiah(summary.pendingPayouts)}
-              icon={<IconCash size={32} />}
-              accent="grape"
+              label="Instruktur Aktif"
+              value={summary.activeInstructors}
+              Icon={IconCash}
             />
           </Grid.Col>
         </Grid>
 
+        {/* Filters */}
         <Paper p="sm" radius="md" withBorder>
           <Group justify="space-between" mb="xs">
             <Group gap="xs">
@@ -311,6 +440,9 @@ export default function AdminEarningsPage() {
               <ActionIcon
                 variant="subtle"
                 onClick={() => setFiltersOpen((o) => !o)}
+                aria-label={
+                  filtersOpen ? "Sembunyikan filter" : "Tampilkan filter"
+                }
               >
                 {filtersOpen ? (
                   <IconChevronUp size={16} />
@@ -324,6 +456,7 @@ export default function AdminEarningsPage() {
                 variant="light"
                 color="blue"
                 onClick={() => window.print()}
+                aria-label="Print halaman"
               >
                 <IconPrinter size={16} />
               </ActionIcon>
@@ -341,7 +474,11 @@ export default function AdminEarningsPage() {
               <Grid.Col span={{ base: 6, md: 3 }}>
                 <Select
                   placeholder="Status"
-                  data={["paid", "pending", "failed"]}
+                  data={[
+                    { value: "paid", label: "Selesai" },
+                    { value: "pending", label: "Menunggu" },
+                    { value: "failed", label: "Gagal" },
+                  ]}
                   value={status}
                   onChange={setStatus}
                   clearable
@@ -350,7 +487,10 @@ export default function AdminEarningsPage() {
               <Grid.Col span={{ base: 6, md: 3 }}>
                 <Select
                   placeholder="Metode"
-                  data={["Midtrans", "Xendit", "Manual"]}
+                  data={methodOptions.map((m) => ({
+                    value: m,
+                    label: displayMethod(m),
+                  }))}
                   value={method}
                   onChange={setMethod}
                   clearable
@@ -360,6 +500,7 @@ export default function AdminEarningsPage() {
           </Collapse>
         </Paper>
 
+        {/* Transactions */}
         <Paper
           p="md"
           radius="md"
@@ -369,9 +510,6 @@ export default function AdminEarningsPage() {
           <Group justify="space-between" align="center" mb="md">
             <Title order={3}>Transaksi</Title>
           </Group>
-
-          {/* Duplicate filter form removed (already present above) */}
-
           <div
             style={{
               borderRadius: 8,
@@ -410,7 +548,6 @@ export default function AdminEarningsPage() {
                         ))}
                     </div>
                   </Table.Th>
-
                   <Table.Th
                     onClick={() => changeSort("userName")}
                     style={{ cursor: "pointer", whiteSpace: "nowrap" }}
@@ -431,7 +568,6 @@ export default function AdminEarningsPage() {
                         ))}
                     </div>
                   </Table.Th>
-
                   <Table.Th
                     onClick={() => changeSort("courseTitle")}
                     style={{ cursor: "pointer", whiteSpace: "nowrap" }}
@@ -452,7 +588,6 @@ export default function AdminEarningsPage() {
                         ))}
                     </div>
                   </Table.Th>
-
                   <Table.Th
                     onClick={() => changeSort("method")}
                     style={{ cursor: "pointer", whiteSpace: "nowrap" }}
@@ -473,7 +608,6 @@ export default function AdminEarningsPage() {
                         ))}
                     </div>
                   </Table.Th>
-
                   <Table.Th
                     onClick={() => changeSort("status")}
                     style={{ cursor: "pointer", whiteSpace: "nowrap" }}
@@ -494,7 +628,6 @@ export default function AdminEarningsPage() {
                         ))}
                     </div>
                   </Table.Th>
-
                   <Table.Th
                     onClick={() => changeSort("amount")}
                     style={{ cursor: "pointer", whiteSpace: "nowrap" }}
@@ -535,15 +668,15 @@ export default function AdminEarningsPage() {
                     <Table.Td>
                       <Badge
                         color={
-                          t.status === "paid"
-                            ? "teal"
-                            : t.status === "pending"
+                          t.status.toLowerCase() === "paid"
+                            ? "green"
+                            : t.status.toLowerCase() === "pending"
                             ? "yellow"
                             : "red"
                         }
                         variant="light"
                       >
-                        {t.status}
+                        {statusLabel(t.status)}
                       </Badge>
                     </Table.Td>
                     <Table.Td align="right">{rupiah(t.amount)}</Table.Td>
@@ -557,20 +690,31 @@ export default function AdminEarningsPage() {
                         >
                           Lihat
                         </Button>
-                        <Tooltip label="Cetak" withArrow>
+                        <Tooltip label="Cetak detail" withArrow>
                           <ActionIcon
                             variant="light"
                             size="sm"
                             onClick={() => printTransaction(t)}
+                            aria-label="Print transaksi"
                           >
                             <IconPrinter size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label="Struk thermal" withArrow>
+                          <ActionIcon
+                            variant="light"
+                            size="sm"
+                            onClick={() => printThermalReceipt(t)}
+                            aria-label="Print struk thermal"
+                          >
+                            <IconReceipt2 size={14} />
                           </ActionIcon>
                         </Tooltip>
                       </Group>
                     </Table.Td>
                   </Table.Tr>
                 ))}
-                {paged.length === 0 && (
+                {!paged.length && (
                   <Table.Tr>
                     <Table.Td colSpan={7}>
                       <Text ta="center" c="dimmed" size="sm">
@@ -582,97 +726,23 @@ export default function AdminEarningsPage() {
               </Table.Tbody>
             </Table>
           </div>
-          <Group
-            justify="space-between"
-            mt="sm"
-            className="no-print"
-            style={{ display: sorted.length ? "flex" : "none" }}
-          >
-            <Text size="xs" c="dimmed">
-              Menampilkan {(page - 1) * pageSize + 1} -{" "}
-              {Math.min(page * pageSize, sorted.length)} dari {sorted.length}{" "}
-              transaksi
-            </Text>
-            <Pagination
-              total={totalPages}
-              value={page}
-              onChange={setPage}
-              size="sm"
-              radius="md"
-            />
-          </Group>
+          {transactions.length > 0 && (
+            <Group justify="space-between" mt="sm" className="no-print">
+              <Text size="xs" c="dimmed">
+                Halaman {page} dari {totalPages}
+              </Text>
+              <Pagination
+                total={totalPages}
+                value={page}
+                onChange={setPage}
+                size="sm"
+                radius="md"
+              />
+            </Group>
+          )}
         </Paper>
 
-        <Paper
-          p="md"
-          radius="md"
-          withBorder
-          style={{ position: "relative", overflow: "hidden" }}
-        >
-          <Group justify="space-between" mb="md">
-            <Title order={3}>Payout Instruktur</Title>
-          </Group>
-
-          <div
-            style={{
-              borderRadius: 8,
-              overflow: "hidden",
-              border: "1px solid var(--mantine-color-gray-3)",
-            }}
-          >
-            <Table
-              striped
-              highlightOnHover
-              withTableBorder
-              withColumnBorders
-              horizontalSpacing="md"
-              verticalSpacing={6}
-              style={{ fontSize: 13 }}
-            >
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Tanggal</Table.Th>
-                  <Table.Th>Instruktur</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th align="right">Jumlah</Table.Th>
-                  <Table.Th>Aksi</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {payouts.map((p) => (
-                  <Table.Tr key={p.id}>
-                    <Table.Td>
-                      {new Date(p.date).toLocaleDateString("id-ID")}
-                    </Table.Td>
-                    <Table.Td>{p.instructorName}</Table.Td>
-                    <Table.Td>
-                      <Badge
-                        color={p.status === "paid" ? "teal" : "yellow"}
-                        variant="light"
-                      >
-                        {p.status}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td align="right">{rupiah(p.amount)}</Table.Td>
-                    <Table.Td>
-                      {p.status === "pending" && (
-                        <Button
-                          size="xs"
-                          variant="light"
-                          onClick={() => markPayoutPaid(p.id)}
-                        >
-                          Tandai Dibayar
-                        </Button>
-                      )}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </div>
-        </Paper>
-
-        {/* Modal LIHAT (view & print only) */}
+        {/* Detail modal */}
         <Modal
           opened={!!viewItem}
           onClose={() => setViewItem(null)}
@@ -695,14 +765,14 @@ export default function AdminEarningsPage() {
                 <Text>Status</Text>
                 <Badge
                   color={
-                    viewItem.status === "paid"
-                      ? "teal"
-                      : viewItem.status === "pending"
+                    viewItem.status.toLowerCase() === "paid"
+                      ? "green"
+                      : viewItem.status.toLowerCase() === "pending"
                       ? "yellow"
                       : "red"
                   }
                 >
-                  {viewItem.status}
+                  {statusLabel(viewItem.status)}
                 </Badge>
               </Group>
               <Group justify="space-between">
@@ -728,9 +798,27 @@ export default function AdminEarningsPage() {
             </Stack>
           )}
         </Modal>
+
+        {error && (
+          <Paper
+            p="sm"
+            radius="md"
+            withBorder
+            style={{ borderColor: "var(--mantine-color-red-5)" }}
+          >
+            <Text c="red" size="sm">
+              {error}
+            </Text>
+          </Paper>
+        )}
+        {loading && (
+          <Paper p="sm" radius="md" withBorder>
+            <Text size="sm" c="dimmed">
+              Memuat data...
+            </Text>
+          </Paper>
+        )}
       </Stack>
     </Container>
   );
 }
-
-// Edit / Add forms removed per requirement (view + print only)

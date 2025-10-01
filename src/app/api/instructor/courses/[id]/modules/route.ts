@@ -8,13 +8,11 @@ const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 const supabase = createClient(url, serviceRole);
 
 // GET /api/instructor/courses/[id]/modules?instructorId=...
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: Request, context: { params: { id: string } }) {
+  const { id } = context.params;
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
-  const courseId = params.id;
+  const courseId = id;
   if (!instructorId) {
     return NextResponse.json(
       { success: false, error: "instructorId wajib" },
@@ -78,11 +76,9 @@ async function uploadToStorage(
 
 // POST /api/instructor/courses/[id]/modules
 // Supports multipart (for materi+file) and JSON (for materi link/text, quiz, tugas)
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  const courseId = params.id;
+export async function POST(req: Request, context: { params: { id: string } }) {
+  const { id } = context.params;
+  const courseId = id;
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
   if (!instructorId) {

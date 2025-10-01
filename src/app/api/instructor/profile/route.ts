@@ -44,7 +44,10 @@ export async function GET(req: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Gagal memuat profil";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
   }
 }
 
@@ -61,19 +64,26 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const updatesUser: Record<string, any> = {};
-    if (typeof body.fullName === "string") updatesUser.full_name = body.fullName.trim();
-    if (typeof body.username === "string") updatesUser.username = body.username.trim();
+    const updatesUser: Record<string, string> = {};
+    if (typeof body.fullName === "string")
+      updatesUser.full_name = body.fullName.trim();
+    if (typeof body.username === "string")
+      updatesUser.username = body.username.trim();
     if (typeof body.phone === "string") updatesUser.phone = body.phone.trim();
     if (typeof body.bio === "string") updatesUser.bio = body.bio.trim();
-    if (typeof body.avatarUrl === "string") updatesUser.avatar = body.avatarUrl.trim();
+    if (typeof body.avatarUrl === "string")
+      updatesUser.avatar = body.avatarUrl.trim();
 
-    const updatesInst: Record<string, any> = {};
-    if (typeof body.bankAccount === "string") updatesInst.bank_account = body.bankAccount.trim();
+    const updatesInst: Record<string, string> = {};
+    if (typeof body.bankAccount === "string")
+      updatesInst.bank_account = body.bankAccount.trim();
 
     // Update users
     if (Object.keys(updatesUser).length) {
-      const u = await supabase.from("users").update(updatesUser).eq("id", instructorId);
+      const u = await supabase
+        .from("users")
+        .update(updatesUser)
+        .eq("id", instructorId);
       if (u.error) {
         return NextResponse.json(
           { success: false, error: `Gagal update users: ${u.error.message}` },
@@ -85,10 +95,16 @@ export async function PATCH(req: Request) {
     if (Object.keys(updatesInst).length) {
       const i = await supabase
         .from("instructors")
-        .upsert({ user_id: instructorId, ...updatesInst }, { onConflict: "user_id" });
+        .upsert(
+          { user_id: instructorId, ...updatesInst },
+          { onConflict: "user_id" }
+        );
       if (i.error) {
         return NextResponse.json(
-          { success: false, error: `Gagal update instructors: ${i.error.message}` },
+          {
+            success: false,
+            error: `Gagal update instructors: ${i.error.message}`,
+          },
           { status: 400 }
         );
       }
@@ -123,7 +139,11 @@ export async function PATCH(req: Request) {
       instructor: instQ.data || null,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Gagal menyimpan profil";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const message =
+      err instanceof Error ? err.message : "Gagal menyimpan profil";
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
   }
 }

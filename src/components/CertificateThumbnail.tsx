@@ -22,10 +22,8 @@ export const CertificateThumbnail: React.FC<{
         const pdfjs = await import("pdfjs-dist");
         // worker setup (only once globally) - guard on window
         if (typeof window !== "undefined") {
-          // @ts-expect-error dynamic worker assignment
-          const w = await import("pdfjs-dist/build/pdf.worker.min.js");
-
-          pdfjs.GlobalWorkerOptions.workerSrc = w;
+          const pdfjs = await import("pdfjs-dist");
+          pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         }
 
         const doc = await pdfjs.getDocument({ url, withCredentials: false })

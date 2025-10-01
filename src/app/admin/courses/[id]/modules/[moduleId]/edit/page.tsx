@@ -1,5 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/rules-of-hooks */
 "use client";
-import React, { useEffect, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  use as usePromise,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   ActionIcon,
@@ -18,6 +25,7 @@ import {
 } from "@mantine/core";
 import { IconArrowLeft, IconDeviceFloppy } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
+import { DateTimePicker } from "@mantine/dates";
 
 interface QuizQuestion {
   id?: string;
@@ -49,11 +57,29 @@ interface ModuleFull {
   live_session_link?: string | null;
 }
 
+interface LiveSessionDetail {
+  id: string;
+  agenda: string | null;
+  start_at: string | null;
+  duration_min: number | null;
+  join_url: string | null;
+  status: string | null;
+  created_by?: string | null;
+  passcode?: string | null;
+  time_zone?: string | null;
+}
+
 export default function AdminEditModulePage({
   params,
 }: {
-  params: { id: string; moduleId: string };
+  params:
+    | Promise<{ id: string; moduleId: string }>
+    | { id: string; moduleId: string };
 }) {
+  const resolvedParams = (params as any)?.then
+    ? usePromise(params as Promise<{ id: string; moduleId: string }>)
+    : (params as { id: string; moduleId: string });
+  const { id: courseId, moduleId } = resolvedParams;
   const router = useRouter();
   const { user } = useAuth();
   const adminId = user?.id || "";
@@ -70,7 +96,12 @@ export default function AdminEditModulePage({
   const [content, setContent] = useState("");
   const [quizQuestions, setQuizQuestions] = useState<string>("[]");
   const [assignment, setAssignment] = useState<string>("{}");
-  const [liveLink, setLiveLink] = useState("");
+  const [, setLiveLink] = useState("");
+  const [liveAgenda, setLiveAgenda] = useState("");
+  const [liveStartAt, setLiveStartAt] = useState<Date | null>(null);
+  const [liveDuration, setLiveDuration] = useState<number>(60);
+  const [liveJoinUrl, setLiveJoinUrl] = useState<string>("");
+  const [livePasscode, setLivePasscode] = useState<string>("");
 
   const fetchModule = useCallback(async () => {
     if (!adminId) return;
@@ -78,7 +109,7 @@ export default function AdminEditModulePage({
     setError(null);
     try {
       const res = await fetch(
-        `/api/admin/modules/${params.moduleId}?userId=${adminId}`
+        `/api/admin/modules/${moduleId}?userId=${adminId}`
       );
       if (!res.ok) throw new Error("Gagal memuat modul");
       const json = await res.json();
@@ -92,13 +123,23 @@ export default function AdminEditModulePage({
       setQuizQuestions(JSON.stringify(m.quiz_questions ?? [], null, 2));
       setAssignment(JSON.stringify(m.assignment ?? {}, null, 2));
       setLiveLink(m.live_session_link || "");
+      if ((m as any).live) {
+        const lv = (m as any).live as LiveSessionDetail;
+        setLiveAgenda(lv.agenda || "");
+        setLiveDuration(lv.duration_min ?? 60);
+        setLiveJoinUrl(lv.join_url || "");
+        // passcode retrieval
+        setLivePasscode(lv.passcode || "");
+        setLiveStartAt(lv.start_at ? new Date(lv.start_at) : null);
+        setLiveLink(lv.join_url || "");
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gagal memuat modul";
       setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [adminId, params.moduleId]);
+  }, [adminId, moduleId]);
 
   useEffect(() => {
     fetchModule();
@@ -130,9 +171,16 @@ export default function AdminEditModulePage({
           throw new Error("Format assignment tidak valid JSON");
         }
       }
-      if (moduleData.module_kind === "live")
-        body.live_session_link = liveLink || null;
-
+      if (moduleData.module_kind === "live") {
+        if (!liveAgenda.trim() || !liveStartAt || !liveJoinUrl.trim()) {
+          throw new Error("Field wajib live: agenda, waktu mulai, link live");
+        }
+        // Use flat snake_case like instructor route for consistency
+        body.live_agenda = liveAgenda.trim();
+        body.live_start_at = liveStartAt.toISOString();
+        body.live_join_url = liveJoinUrl.trim();
+        if (livePasscode.trim()) body.live_passcode = livePasscode.trim();
+      }
       const res = await fetch(
         `/api/admin/modules/${moduleData.id}?userId=${adminId}`,
         {
@@ -145,7 +193,7 @@ export default function AdminEditModulePage({
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || "Gagal menyimpan");
       }
-      router.push(`/admin/courses/${params.id}`);
+      router.push(`/admin/courses/${courseId}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gagal menyimpan";
       setError(msg);
@@ -237,11 +285,45 @@ export default function AdminEditModulePage({
               />
             )}
             {moduleData.module_kind === "live" && (
-              <TextInput
-                label="Live Session Link"
-                value={liveLink}
-                onChange={(e) => setLiveLink(e.currentTarget.value)}
-              />
+              <Card withBorder p="md">
+                <Title order={5}>Live Session</Title>
+                <Stack gap="sm" mt="xs">
+                  <Textarea
+                    label="Agenda"
+                    value={liveAgenda}
+                    onChange={(e) => setLiveAgenda(e.currentTarget.value)}
+                    minRows={3}
+                  />
+                  <DateTimePicker
+                    label="Waktu Mulai"
+                    value={liveStartAt}
+                    onChange={(val: unknown) => {
+                      if (val instanceof Date) setLiveStartAt(val);
+                      else if (typeof val === "string" && val)
+                        setLiveStartAt(new Date(val));
+                      else setLiveStartAt(null);
+                    }}
+                  />
+                  <NumberInput
+                    label="Durasi (menit)"
+                    value={liveDuration}
+                    onChange={(v) => setLiveDuration(Number(v || 60))}
+                    min={1}
+                  />
+                  <TextInput
+                    label="Link Live"
+                    placeholder="https://zoom.us/j/..."
+                    value={liveJoinUrl}
+                    onChange={(e) => setLiveJoinUrl(e.currentTarget.value)}
+                    required
+                  />
+                  <TextInput
+                    label="Passcode (opsional)"
+                    value={livePasscode}
+                    onChange={(e) => setLivePasscode(e.currentTarget.value)}
+                  />
+                </Stack>
+              </Card>
             )}
 
             <Group justify="flex-end" mt="md">
@@ -249,7 +331,11 @@ export default function AdminEditModulePage({
                 leftSection={<IconDeviceFloppy size={16} />}
                 loading={saving}
                 onClick={handleSave}
-                disabled={!title}
+                disabled={
+                  !title ||
+                  (moduleData.module_kind === "live" &&
+                    (!liveAgenda.trim() || !liveStartAt || !liveJoinUrl.trim()))
+                }
               >
                 Simpan Perubahan
               </Button>

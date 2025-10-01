@@ -47,6 +47,7 @@ type ApiCourse = {
   enrolledCount?: number | null;
   rating?: number | null;
   instructor?: { id: string; fullName: string; avatar?: string | null } | null;
+  points?: number | null; // new: points from courses.points
 };
 
 type ApiEnrollmentItem = {
@@ -153,12 +154,13 @@ export default function UserCoursesPage() {
     const total = items.length;
     const completed = items.filter((i) => i.progress.percentage >= 100).length;
     const active = total - completed;
-    const totalXP = items.reduce(
-      (sum, i) => sum + Math.round(((i.course?.durationMin || 0) / 60) * 80),
-      0
-    );
+    const totalPoints = items.reduce((sum, i) => {
+      if (i.course?.points != null) return sum + Number(i.course.points) || 0;
+      // fallback: derive from duration formula
+      return sum + Math.round(((i.course?.durationMin || 0) / 60) * 80);
+    }, 0);
     const achievements = completed; // simple proxy
-    return { total, completed, active, totalXP, achievements };
+    return { total, completed, active, totalPoints, achievements };
   }, [items]);
 
   return (
@@ -190,7 +192,11 @@ export default function UserCoursesPage() {
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <StatCard label="Total XP" value={stats.totalXP} Icon={IconAward} />
+            <StatCard
+              label="Total Points"
+              value={stats.totalPoints}
+              Icon={IconAward}
+            />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <StatCard
@@ -295,7 +301,12 @@ export default function UserCoursesPage() {
                       <Group gap="xs">
                         <IconAward size="1rem" />
                         <Text size="sm">
-                          {Math.round(((course.durationMin || 0) / 60) * 80)} XP
+                          {course.points != null
+                            ? course.points
+                            : Math.round(
+                                ((course.durationMin || 0) / 60) * 80
+                              )}{" "}
+                          Points
                         </Text>
                       </Group>
 
@@ -312,21 +323,24 @@ export default function UserCoursesPage() {
                                   `/api/user/certificates?userId=${user?.id}&courseId=${course.id}`
                                 );
                                 const json = await res.json();
-                                if (
-                                  res.ok &&
-                                  json.success &&
+                                if (!res.ok || !json.success) return;
+                                // API (single) returns certificate or list depending on implementation; normalize
+                                const url =
+                                  json.certificate?.url ||
+                                  json.certificateUrl ||
+                                  (Array.isArray(json.items) &&
                                   json.items.length > 0
-                                ) {
-                                  const cert = json.items[0];
-                                  if (cert.certificate_url) {
-                                    const link = document.createElement("a");
-                                    link.href = cert.certificate_url;
-                                    link.download = `sertifikat-${course.title.replace(
-                                      /\s+/g,
-                                      "-"
-                                    )}.pdf`;
-                                    link.click();
-                                  }
+                                    ? json.items[0].certificate_url ||
+                                      json.items[0].url
+                                    : null);
+                                if (url) {
+                                  const link = document.createElement("a");
+                                  link.href = url;
+                                  link.download = `sertifikat-${course.title.replace(
+                                    /\s+/g,
+                                    "-"
+                                  )}.pdf`;
+                                  link.click();
                                 }
                               } catch (error) {
                                 console.error(
@@ -400,21 +414,23 @@ export default function UserCoursesPage() {
                               `/api/user/certificates?userId=${user?.id}&courseId=${i.course?.id}`
                             );
                             const json = await res.json();
-                            if (
-                              res.ok &&
-                              json.success &&
+                            if (!res.ok || !json.success) return;
+                            const url =
+                              json.certificate?.url ||
+                              json.certificateUrl ||
+                              (Array.isArray(json.items) &&
                               json.items.length > 0
-                            ) {
-                              const cert = json.items[0];
-                              if (cert.certificate_url) {
-                                const link = document.createElement("a");
-                                link.href = cert.certificate_url;
-                                link.download = `sertifikat-${i.course?.title.replace(
-                                  /\s+/g,
-                                  "-"
-                                )}.pdf`;
-                                link.click();
-                              }
+                                ? json.items[0].certificate_url ||
+                                  json.items[0].url
+                                : null);
+                            if (url) {
+                              const link = document.createElement("a");
+                              link.href = url;
+                              link.download = `sertifikat-${i.course?.title?.replace(
+                                /\s+/g,
+                                "-"
+                              )}.pdf`;
+                              link.click();
                             }
                           } catch (error) {
                             console.error(

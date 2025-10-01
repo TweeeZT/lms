@@ -81,7 +81,10 @@ export async function GET(
     } else if (mod.module_kind === "live") {
       const { data: l } = await supabase
         .from("module_live_sessions")
-        .select("id, title, agenda, start_at, provider, join_url, created_at")
+        .select(
+          // Updated to match existing columns in module_live_sessions (title/provider removed)
+          "id, agenda, start_at, join_url, passcode, duration_min, status, time_zone, recording_url, created_at, updated_at"
+        )
         .eq("module_id", moduleId)
         .maybeSingle();
       detail = l || null;
@@ -398,36 +401,44 @@ export async function PATCH(
             { status: 400 }
           );
       }
-      if (
-        mod.module_kind === "live" &&
-        Object.prototype.hasOwnProperty.call(body, "live")
-      ) {
-        const live = body.live as {
-          title?: string;
-          agenda?: string;
-          start_at?: string;
-        };
-        if (!live?.title || !live?.agenda || !live?.start_at) {
+      if (mod.module_kind === "live") {
+        // Support old nested body.live AND new flat snake_case fields
+        let agenda: string | undefined;
+        let start_at: string | undefined;
+        let join_url: string | undefined;
+        let passcode: string | undefined | null;
+        if (Object.prototype.hasOwnProperty.call(body, "live")) {
+          const live = body.live as {
+            title?: string; // legacy, ignored now
+            agenda?: string;
+            start_at?: string;
+            join_url?: string;
+            passcode?: string;
+          };
+          agenda = live.agenda?.trim();
+          start_at = live.start_at;
+          join_url = live.join_url?.trim();
+          passcode = live.passcode?.trim() || null;
+        } else {
+          agenda = (body.live_agenda as string | undefined)?.trim();
+          start_at = body.live_start_at as string | undefined;
+          join_url = (body.live_join_url as string | undefined)?.trim();
+          passcode = (body.live_passcode as string | undefined)?.trim() || null;
+        }
+        if (!agenda || !start_at || !join_url) {
           return NextResponse.json(
-            { success: false, error: "Field live wajib" },
+            {
+              success: false,
+              error: "Field wajib: agenda, waktu mulai, link live",
+            },
             { status: 400 }
           );
         }
-        // Upsert strategy: delete then insert (simple)
+        // Replace existing session row
         await supabase
           .from("module_live_sessions")
           .delete()
           .eq("module_id", moduleId);
-        const { data: modRow } = await supabase
-          .from("modules")
-          .select("course_id")
-          .eq("id", moduleId)
-          .maybeSingle();
-        const courseId = modRow?.course_id || "course";
-        const roomSlug = `${courseId}-${moduleId}`
-          .replace(/[^a-zA-Z0-9-_]/g, "-")
-          .slice(0, 120);
-        const join_url = `https://meet.jit.si/${roomSlug}`;
         const { error: lErr } = await supabase
           .from("module_live_sessions")
           .insert({
@@ -435,17 +446,21 @@ export async function PATCH(
               globalThis?.crypto?.randomUUID?.() ||
               `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             module_id: moduleId,
-            title: live.title.trim(),
-            agenda: live.agenda.trim(),
-            start_at: live.start_at,
-            provider: "jitsi",
+            agenda,
+            start_at,
             join_url,
+            passcode,
+            duration_min: 60,
+            status: "scheduled",
+            time_zone: "Asia/Jakarta",
+            created_by: instructorId,
           });
-        if (lErr)
+        if (lErr) {
           return NextResponse.json(
             { success: false, error: lErr.message },
             { status: 400 }
           );
+        }
       }
     }
 

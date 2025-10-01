@@ -1,3 +1,4 @@
+/* Admin modules route */
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../../lib/supabaseServer";
 
@@ -18,7 +19,7 @@ async function requireAdmin(userId: string) {
   return { ok: true, user: data } as const;
 }
 
-// GET /api/admin/courses/[id]/modules?userId=<admin>
+// GET list modules
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -45,7 +46,6 @@ export async function GET(
         { success: false, error: "Course not found" },
         { status: 404 }
       );
-
     const { data, error } = await supabaseAdmin
       .from("modules")
       .select(
@@ -54,27 +54,23 @@ export async function GET(
       .eq("course_id", courseId)
       .order("order_index", { ascending: true });
     if (error) throw error;
-
     return NextResponse.json({ success: true, items: data || [] });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: e instanceof Error ? e.message : "Error" },
+      { status: 500 }
+    );
   }
 }
 
-// POST create module (full persistence)
-// JSON body variants:
-//  - materi: { title, description, module_kind:"materi", order_index, is_published, content: { content_type, url?, text_content? } }
-//  - quiz:   { title, module_kind:"quiz", quiz: { title, passing_score, time_limit?, questions:[{question,q_type,options?,correct,explanation?}] } }
-//  - tugas:  { title, module_kind:"tugas", assignment: { instructions, due_date?, max_score? } }
-//  - live:   { title, module_kind:"live", live: { title, agenda, start_at } }
-// Multipart (content-type includes multipart/form-data) is only required when uploading a file for materi. Fields mirror instructor implementation.
+// POST create module
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
+  const debugMode = searchParams.get("debug") === "1";
   const auth = await requireAdmin(actorId);
   if (!auth.ok) {
     return NextResponse.json(
@@ -83,8 +79,19 @@ export async function POST(
     );
   }
   const courseId = params.id;
+
+  // helper
+  const extractPgError = (e: unknown) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const obj = e as any;
+    return {
+      error_code: typeof obj?.code === "string" ? obj.code : undefined,
+      error_details: typeof obj?.details === "string" ? obj.details : undefined,
+      error_hint: typeof obj?.hint === "string" ? obj.hint : undefined,
+    };
+  };
+
   try {
-    // Ensure course exists
     const { data: course, error: cErr } = await supabaseAdmin
       .from("courses")
       .select("id")
@@ -97,9 +104,9 @@ export async function POST(
         { status: 404 }
       );
 
-    const contentType = req.headers.get("content-type") || "";
+    const contentTypeHeader = req.headers.get("content-type") || "";
 
-    // Normalized fields
+    // Normalized core fields
     let title = "";
     let description: string | null = null;
     let module_kind: "materi" | "quiz" | "tugas" | "live" = "materi";
@@ -133,122 +140,118 @@ export async function POST(
     let max_score: number | undefined;
 
     // Live
-    let live_title: string | undefined;
     let live_agenda: string | undefined;
     let live_start_at: string | undefined;
+    let live_duration_min: number | undefined; // new: must satisfy check constraint (> 0)
+    let live_join_url: string | undefined;
+    let live_passcode: string | undefined;
 
-    if (contentType.includes("multipart/form-data")) {
+    if (contentTypeHeader.includes("multipart/form-data")) {
       const form = await req.formData();
-      title = String(form.get("title") || "").trim();
-      description = (form.get("description")?.toString() || "").trim() || null;
-      const kindVal = (form.get("module_kind") as string) || "materi";
-      if (["materi", "quiz", "tugas", "live"].includes(kindVal)) {
-        module_kind = kindVal as typeof module_kind;
+      title = (form.get("title") as string)?.trim() || "";
+      description = ((form.get("description") as string) || "").trim() || null;
+      const mkRaw = form.get("module_kind");
+      if (
+        mkRaw === "materi" ||
+        mkRaw === "quiz" ||
+        mkRaw === "tugas" ||
+        mkRaw === "live"
+      ) {
+        module_kind = mkRaw;
+      } else {
+        module_kind = "materi";
       }
       order_index = Number(form.get("order_index") || 0);
       is_published = String(form.get("is_published") || "true") === "true";
-
-      content_type = (form.get("content_type") as string) || undefined;
-      url = (form.get("url") as string) || undefined;
-      text_content = (form.get("text_content") as string) || undefined;
-      const f = form.get("file");
-      if (f && f instanceof Blob) {
-        uploadFile = f;
-        filename = (form.get("filename") as string) || "file";
-      }
-
-      quiz_title = (form.get("quiz_title") as string) || undefined;
-      passing_score = form.get("passing_score")
-        ? Number(form.get("passing_score"))
-        : undefined;
-      time_limit = form.get("time_limit")
-        ? Number(form.get("time_limit"))
-        : undefined;
-      // questions excluded via multipart (limitation)
-
-      instructions = (form.get("instructions") as string) || undefined;
-      due_date = (form.get("due_date") as string) || undefined;
-      max_score = form.get("max_score")
-        ? Number(form.get("max_score"))
-        : undefined;
-
-      live_title = (form.get("live_title") as string) || undefined;
-      live_agenda = (form.get("live_agenda") as string) || undefined;
-      live_start_at = (form.get("live_start_at") as string) || undefined;
-    } else {
-      const body = (await req.json()) as Record<string, unknown>;
-      title = String(body.title || "").trim();
-      description =
-        (body.description ? String(body.description) : "").trim() || null;
-      const mk = body.module_kind as string | undefined;
-      if (mk === "materi" || mk === "quiz" || mk === "tugas" || mk === "live")
-        module_kind = mk;
-      order_index = Number(body.order_index || 0);
-      is_published = Boolean(
-        typeof body.is_published === "boolean" ? body.is_published : true
-      );
-
       if (module_kind === "materi") {
-        const c = body.content as
-          | { content_type?: string; url?: string; text_content?: string }
-          | undefined;
-        content_type = c?.content_type;
-        url = c?.url;
-        text_content = c?.text_content;
+        content_type = (form.get("content_type") as string) || undefined;
+        url = (form.get("url") as string) || undefined;
+        text_content = (form.get("text_content") as string) || undefined;
+        const f = form.get("file");
+        if (f instanceof Blob) {
+          uploadFile = f;
+          filename =
+            (form.get("filename") as string) ||
+            ("name" in f ? (f as File).name : "upload.bin");
+        }
       } else if (module_kind === "quiz") {
-        const q = body.quiz as
-          | {
-              title?: string;
-              passing_score?: number | string;
-              time_limit?: number | string;
-              questions?: Array<{
-                question: string;
-                q_type: "multiple-choice" | "true-false" | "short-answer";
-                options?: string[];
-                correct: string;
-                explanation?: string;
-              }>;
-            }
-          | undefined;
-        quiz_title = q?.title;
-        passing_score =
-          q?.passing_score !== undefined ? Number(q.passing_score) : undefined;
-        time_limit =
-          q?.time_limit !== undefined ? Number(q.time_limit) : undefined;
-        questions = Array.isArray(q?.questions) ? q!.questions : undefined;
+        quiz_title = (form.get("quiz_title") as string) || undefined;
+        passing_score = form.get("passing_score")
+          ? Number(form.get("passing_score"))
+          : undefined;
+        time_limit = form.get("time_limit")
+          ? Number(form.get("time_limit"))
+          : undefined;
+        const qsRaw = form.get("questions") as string;
+        if (qsRaw) {
+          try {
+            const parsed = JSON.parse(qsRaw);
+            if (Array.isArray(parsed)) questions = parsed;
+          } catch {}
+        }
       } else if (module_kind === "tugas") {
-        const a = body.assignment as
-          | {
-              instructions?: string;
-              due_date?: string;
-              max_score?: number | string;
-            }
-          | undefined;
-        instructions = a?.instructions;
-        due_date = a?.due_date;
-        max_score = a?.max_score !== undefined ? Number(a.max_score) : 100;
+        instructions = (form.get("instructions") as string) || undefined;
+        due_date = (form.get("due_date") as string) || undefined;
+        max_score = form.get("max_score") ? Number(form.get("max_score")) : 100;
       } else if (module_kind === "live") {
-        const l = body.live as
-          | { title?: string; agenda?: string; start_at?: string }
-          | undefined;
-        live_title = l?.title?.trim();
-        live_agenda = l?.agenda?.trim();
-        live_start_at = l?.start_at;
+        live_agenda = (form.get("live_agenda") as string)?.trim();
+        live_start_at = (form.get("live_start_at") as string) || undefined;
+        if (form.get("live_duration_min")) {
+          const v = Number(form.get("live_duration_min"));
+          if (Number.isFinite(v) && v > 0) live_duration_min = v;
+        }
+        live_join_url = (form.get("live_join_url") as string) || undefined;
+        live_passcode = (form.get("live_passcode") as string) || undefined;
+      }
+    } else {
+      const body = await req.json().catch(() => ({}));
+      title = (body.title || "").trim();
+      description = (body.description || "").trim() || null;
+      module_kind = body.module_kind || "materi";
+      order_index = Number(body.order_index || 0);
+      is_published = body.is_published !== false;
+      if (module_kind === "materi") {
+        const c = body.content || {};
+        content_type = c.content_type;
+        url = c.url;
+        text_content = c.text_content;
+      } else if (module_kind === "quiz") {
+        const q = body.quiz || {};
+        quiz_title = q.title;
+        if (q.passing_score !== undefined)
+          passing_score = Number(q.passing_score);
+        if (q.time_limit !== undefined) time_limit = Number(q.time_limit);
+        if (Array.isArray(q.questions)) questions = q.questions;
+      } else if (module_kind === "tugas") {
+        const a = body.assignment || {};
+        instructions = a.instructions;
+        due_date = a.due_date;
+        if (a.max_score !== undefined) max_score = Number(a.max_score);
+      } else if (module_kind === "live") {
+        const l = body.live || {};
+        live_agenda = l.agenda?.trim();
+        live_start_at = l.start_at;
+        if (l.duration_min !== undefined) {
+          const v = Number(l.duration_min);
+          if (Number.isFinite(v) && v > 0) live_duration_min = v;
+        }
+        live_join_url = l.join_url;
+        live_passcode = l.passcode;
       }
     }
 
-    // Validation
+    // validation
     const missing: string[] = [];
     if (!title) missing.push("judul modul");
-    if (!module_kind) missing.push("jenis modul");
     if (module_kind === "materi" && !content_type) missing.push("tipe konten");
     if (module_kind === "quiz" && !quiz_title) missing.push("judul kuis");
     if (module_kind === "tugas" && !instructions)
       missing.push("instruksi tugas");
     if (module_kind === "live") {
-      if (!live_title) missing.push("judul live");
       if (!live_agenda) missing.push("agenda");
       if (!live_start_at) missing.push("waktu mulai");
+      if (!live_join_url) missing.push("link live");
+      if (!live_duration_min) live_duration_min = 60; // default
     }
     if (missing.length) {
       return NextResponse.json(
@@ -257,7 +260,30 @@ export async function POST(
       );
     }
 
-    // Insert module
+    // order_index normalization / collision resolution
+    if (order_index < 0 || !Number.isFinite(order_index)) order_index = 0;
+    const { data: existingSameOrder } = await supabaseAdmin
+      .from("modules")
+      .select("order_index")
+      .eq("course_id", courseId)
+      .eq("order_index", order_index)
+      .limit(1);
+    if (existingSameOrder && existingSameOrder.length) {
+      const { data: allOrders } = await supabaseAdmin
+        .from("modules")
+        .select("order_index")
+        .eq("course_id", courseId);
+      const maxOrder = (allOrders || []).reduce(
+        (m, r) =>
+          typeof r.order_index === "number" && r.order_index > m
+            ? r.order_index
+            : m,
+        0
+      );
+      order_index = maxOrder + 1;
+    }
+
+    // insert module
     const moduleId =
       globalThis?.crypto?.randomUUID?.() ||
       `mod-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -271,8 +297,20 @@ export async function POST(
       is_published,
     });
     if (modErr) {
+      const meta = extractPgError(modErr);
       return NextResponse.json(
-        { success: false, error: modErr.message },
+        {
+          success: false,
+          error: modErr.message,
+          ...meta,
+          ...(debugMode && {
+            debug: {
+              stage: "insert-module",
+              module_kind,
+              payload: { title, description, order_index, is_published },
+            },
+          }),
+        },
         { status: 400 }
       );
     }
@@ -362,45 +400,82 @@ export async function POST(
           });
         if (aErr) throw aErr;
       } else if (module_kind === "live") {
-        const roomSlug = `${courseId}-${moduleId}`
-          .replace(/[^a-zA-Z0-9-_]/g, "-")
-          .slice(0, 120);
-        const join_url = `https://meet.jit.si/${roomSlug}`;
+        const providedJoin = live_join_url && String(live_join_url).trim();
+        if (!providedJoin) {
+          return NextResponse.json(
+            { success: false, error: "Link live (join_url) wajib diisi" },
+            { status: 400 }
+          );
+        }
+        const passcodeVal = live_passcode ? String(live_passcode).trim() : null;
         const { error: lErr } = await supabaseAdmin
           .from("module_live_sessions")
           .insert({
-            id:
-              globalThis?.crypto?.randomUUID?.() ||
-              `live-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             module_id: moduleId,
-            title: live_title!,
             agenda: live_agenda!,
             start_at: live_start_at!,
-            join_url,
+            join_url: providedJoin,
+            duration_min: live_duration_min!,
+            passcode: passcodeVal || null,
             created_by: actorId,
           });
         if (lErr) throw lErr;
       }
-    } catch (innerErr: unknown) {
-      // rollback module
+    } catch (detailErr) {
       try {
         await supabaseAdmin.from("modules").delete().eq("id", moduleId);
       } catch {}
+      const meta = {
+        ...extractPgError(detailErr),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        constraint: (detailErr as any)?.constraint,
+        message: detailErr instanceof Error ? detailErr.message : undefined,
+      };
       return NextResponse.json(
         {
           success: false,
           error:
-            innerErr instanceof Error
-              ? innerErr.message
+            detailErr instanceof Error
+              ? detailErr.message
               : "Gagal membuat modul",
+          ...meta,
+          ...(debugMode && {
+            debug: {
+              stage: "post-insert-detail",
+              module_kind,
+              raw_error: detailErr,
+            },
+          }),
         },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ success: true, id: moduleId });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      id: moduleId,
+      ...(debugMode && {
+        debug: {
+          stage: "done",
+          module_kind,
+          hasDetail: module_kind !== "materi" ? true : !!content_type,
+          order_index,
+        },
+      }),
+    });
+  } catch (outerErr) {
+    const meta = extractPgError(outerErr);
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          outerErr instanceof Error ? outerErr.message : "Gagal membuat modul",
+        ...meta,
+        ...(debugMode && {
+          debug: { stage: "outer-catch", raw_error: outerErr },
+        }),
+      },
+      { status: 500 }
+    );
   }
 }

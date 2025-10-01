@@ -143,9 +143,12 @@ export async function POST(
     let max_score: number | undefined;
 
     // Live session specifics
-    let live_title: string | undefined;
+    // live_title removed (no longer in schema)
+    let duration_min: number | undefined;
     let live_agenda: string | undefined;
     let live_start_at: string | undefined; // ISO datetime
+    let live_join_url: string | undefined;
+    let live_passcode: string | undefined;
 
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
@@ -246,12 +249,18 @@ export async function POST(
             ? Number(assignment.max_score)
             : 100;
       } else if (module_kind === "live") {
-        const live = body.live as
-          | { title?: string; agenda?: string; start_at?: string }
-          | undefined;
-        live_title = live?.title?.trim();
-        live_agenda = live?.agenda?.trim();
-        live_start_at = live?.start_at;
+        // Expect flat snake_case keys from client: live_agenda, live_start_at, live_join_url, live_passcode, optional duration_min
+        live_agenda = (body.live_agenda as string | undefined)?.trim();
+        live_start_at = (body.live_start_at as string | undefined) || undefined;
+        live_join_url = (body.live_join_url as string | undefined) || undefined;
+        live_passcode = (body.live_passcode as string | undefined) || undefined;
+        const durRaw = body.duration_min as number | string | undefined;
+        if (durRaw !== undefined) {
+          const parsed = Number(durRaw);
+          duration_min = Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
+        } else {
+          duration_min = 60;
+        }
       }
     }
 
@@ -264,10 +273,11 @@ export async function POST(
     if (module_kind === "tugas" && !instructions)
       missing.push("instruksi tugas");
     if (module_kind === "live") {
-      if (!live_title) missing.push("judul sesi live");
       if (!live_agenda) missing.push("agenda");
       if (!live_start_at) missing.push("waktu mulai");
+      if (!live_join_url) missing.push("link live");
     }
+
     if (missing.length) {
       return NextResponse.json(
         { success: false, error: `Field wajib: ${missing.join(", ")}` },
@@ -374,44 +384,36 @@ export async function POST(
           });
         if (aErr) throw aErr;
       } else if (module_kind === "live") {
-        // Deterministic Jitsi room name: courseId + moduleId (sanitized)
-        const roomSlug = `${courseId}-${moduleId}`
-          .replace(/[^a-zA-Z0-9-_]/g, "-")
-          .slice(0, 120);
-        const join_url = `https://meet.jit.si/${roomSlug}`;
-        // 'id' column in module_live_sessions is uuid; let DB default generate it.
+        const providedJoin = live_join_url && String(live_join_url).trim();
+        // Should already be caught in missing list; safeguard only
+        if (!providedJoin) throw new Error("Link live wajib diisi");
+        const passcodeVal = live_passcode ? String(live_passcode).trim() : null;
         const { error: lErr } = await supabase
           .from("module_live_sessions")
           .insert({
             module_id: moduleId,
-            title: live_title!,
             agenda: live_agenda!,
             start_at: live_start_at!,
-            join_url,
+            duration_min: duration_min ?? 60,
+            join_url: providedJoin,
+            passcode: passcodeVal,
             created_by: instructorId,
           });
         if (lErr) throw lErr;
       }
-    } catch (innerErr: unknown) {
-      // Rollback module on any failure
-      try {
-        await supabase.from("modules").delete().eq("id", moduleId);
-      } catch {}
+
+      return NextResponse.json({ success: true, id: moduleId });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Gagal menyimpan modul";
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            innerErr instanceof Error
-              ? innerErr.message
-              : "Gagal membuat modul",
-        },
-        { status: 400 }
+        { success: false, error: message },
+        { status: 500 }
       );
     }
-
-    return NextResponse.json({ success: true, id: moduleId });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal membuat modul";
+    const message =
+      err instanceof Error ? err.message : "Gagal menyimpan modul";
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

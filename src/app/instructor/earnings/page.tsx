@@ -374,21 +374,7 @@ export default function InstructorEarningsPage() {
         )}
 
         <Grid gutter="lg">
-          <Grid.Col span={{ base: 12, md: 4 }}>
-            <StatCard
-              label="Total Kotor"
-              value={formatCurrency(totals.gross)}
-              Icon={IconCash}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 4 }}>
-            <StatCard
-              label={`Komisi Admin (${commissionPercent}%)`}
-              value={formatCurrency(totals.commission)}
-              Icon={IconTrendingUp}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 4 }}>
+          <Grid.Col span={{ base: 12, md: 12 }}>
             <StatCard
               label="Pendapatan Instruktur"
               value={formatCurrency(totals.net)}

@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   const { data, error, count } = await supabaseAdmin
     .from("enrollments")
     .select(
-      "id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, created_at, updated_at, instructor_id, users:instructor_id ( id, full_name, avatar ) ), progress:user_progress!left ( id, completed_modules, current_module_id )",
+      "id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, points, is_published, created_at, updated_at, instructor_id, users:instructor_id ( id, full_name, avatar ) ), progress:user_progress!left ( id, completed_modules, current_module_id )",
       { count: "exact" }
     )
     .eq("user_id", userId)
@@ -53,6 +53,7 @@ export async function GET(req: Request) {
     rating: number | null;
     is_published: boolean | null;
     users?: JoinedInstructor | null;
+    points?: number | null;
   };
   type ProgressJoined = {
     id?: string;
@@ -110,6 +111,7 @@ export async function GET(req: Request) {
               enrolledCount: c.enrolled_count,
               rating: Number(c.rating || 0),
               isPublished: c.is_published,
+              points: c.points ?? null,
               instructor: c.users
                 ? {
                     id: c.users.id,
@@ -143,7 +145,7 @@ export async function GET(req: Request) {
   const { data: upRows, error: upErr } = await supabaseAdmin
     .from("user_progress")
     .select(
-      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )"
+      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, points, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )"
     )
     .eq("user_id", userId)
     .range(from, to);
@@ -205,6 +207,7 @@ export async function GET(req: Request) {
             enrolledCount: c.enrolled_count,
             rating: Number(c.rating || 0),
             isPublished: c.is_published,
+            points: c.points ?? null,
             instructor: c.users
               ? {
                   id: c.users.id,

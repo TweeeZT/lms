@@ -13,10 +13,11 @@ export async function GET(req: Request) {
     | "popular"
     | "price_asc"
     | "price_desc";
+  const userId = (searchParams.get("userId") || "").trim();
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(
     50,
-    Math.max(1, parseInt(searchParams.get("limit") || "12", 10))
+    Math.max(1, parseInt(searchParams.get("limit") || "9", 10))
   );
   const from = (page - 1) * limit;
   const to = from + limit - 1;
@@ -48,6 +49,53 @@ export async function GET(req: Request) {
   else if (sort === "price_desc")
     query = query.order("price", { ascending: false });
   else query = query.order("created_at", { ascending: false });
+
+  // Exclude courses already purchased/enrolled by user if userId provided
+  let purchasedIds: string[] = [];
+  if (userId) {
+    // gather from enrollments
+    interface EnrollRow {
+      course_id?: string | null;
+    }
+    const { data: enrRows } = await supabaseAdmin
+      .from("enrollments")
+      .select("course_id")
+      .eq("user_id", userId);
+    if (Array.isArray(enrRows)) {
+      purchasedIds.push(
+        ...enrRows
+          .map((r: EnrollRow) => r.course_id)
+          .filter(
+            (v: string | null | undefined): v is string =>
+              typeof v === "string" && !!v
+          )
+      );
+    }
+    // gather from user_progress as fallback (legacy)
+    interface ProgressRow {
+      course_id?: string | null;
+    }
+    const { data: progRows } = await supabaseAdmin
+      .from("user_progress")
+      .select("course_id")
+      .eq("user_id", userId);
+    if (Array.isArray(progRows)) {
+      purchasedIds.push(
+        ...progRows
+          .map((r: ProgressRow) => r.course_id)
+          .filter(
+            (v: string | null | undefined): v is string =>
+              typeof v === "string" && !!v
+          )
+      );
+    }
+    // dedupe
+    purchasedIds = Array.from(new Set(purchasedIds));
+    if (purchasedIds.length) {
+      // Supabase does not allow NOT IN with empty list, safe here
+      query = query.not("id", "in", `(${purchasedIds.join(",")})`);
+    }
+  }
 
   const { data, error, count } = await query.range(from, to);
   if (error) {
@@ -89,5 +137,6 @@ export async function GET(req: Request) {
     total: count || 0,
     page,
     limit,
+    excludedPurchased: purchasedIds.length,
   });
 }

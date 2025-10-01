@@ -14,16 +14,14 @@ import {
   Radio,
   FileInput,
   NumberInput,
-  Badge,
   Divider,
   ActionIcon,
   SimpleGrid,
-  Switch,
   Alert,
   Card,
 } from "@mantine/core";
-import { DateTimePicker } from "@mantine/dates";
 import { useParams, useRouter } from "next/navigation";
+import { DateTimePicker } from "@mantine/dates";
 import Link from "next/link";
 import {
   IconPlus,
@@ -80,10 +78,10 @@ export default function NewModulePage() {
   const [maxScore] = useState<number | "">(100);
 
   // Live session
-  const [liveTitle, setLiveTitle] = useState("");
   const [liveAgenda, setLiveAgenda] = useState("");
-  // Live start time stored as Date|null. If a string sneaks in (from old value), we will coerce.
   const [liveStartAt, setLiveStartAt] = useState<Date | null>(null);
+  const [liveJoinUrl, setLiveJoinUrl] = useState("");
+  const [livePasscode, setLivePasscode] = useState("");
 
   // addQuestion logic now inline in button handler
   const removeQuestion = (idx: number) => {
@@ -152,26 +150,20 @@ export default function NewModulePage() {
             max_score: Number(maxScore || 100),
           };
         } else if (safeKind === "live") {
-          if (!liveTitle || !liveAgenda || !liveStartAt) {
-            throw new Error("Field live session wajib");
+          if (
+            !liveAgenda ||
+            !liveStartAt ||
+            !(liveStartAt instanceof Date) ||
+            isNaN(liveStartAt.getTime()) ||
+            !liveJoinUrl
+          ) {
+            throw new Error("Agenda, waktu mulai, dan link live wajib diisi");
           }
-          // Defensive: always coerce liveStartAt to Date
-          let liveDate: Date;
-          if (liveStartAt instanceof Date) {
-            liveDate = liveStartAt;
-          } else if (typeof liveStartAt === "string") {
-            liveDate = new Date(liveStartAt);
-          } else {
-            throw new Error("Tanggal/waktu live tidak valid");
-          }
-          if (isNaN(liveDate.getTime())) {
-            throw new Error("Tanggal/waktu live tidak valid");
-          }
-          payload.live = {
-            title: liveTitle,
-            agenda: liveAgenda,
-            start_at: liveDate.toISOString(),
-          };
+          payload.live_agenda = liveAgenda;
+          // ensure ISO string without milliseconds for consistency
+          payload.live_start_at = new Date(liveStartAt.getTime()).toISOString();
+          payload.live_join_url = liveJoinUrl.trim();
+          if (livePasscode) payload.live_passcode = livePasscode.trim();
         }
         res = await fetch(
           `/api/instructor/courses/${id}/modules?instructorId=${user.id}`,
@@ -475,37 +467,54 @@ export default function NewModulePage() {
                 </Stack>
               )}
               {moduleKind === "live" && (
-                <Stack>
-                  <TextInput
-                    label="Judul Live"
-                    value={liveTitle}
-                    onChange={(e) => setLiveTitle(e.currentTarget.value)}
-                    required
-                  />
-                  <Textarea
-                    label="Agenda"
-                    value={liveAgenda}
-                    onChange={(e) => setLiveAgenda(e.currentTarget.value)}
-                    minRows={3}
-                    required
-                  />
-                  <DateTimePicker
-                    label="Mulai"
-                    placeholder="Pilih tanggal & waktu"
-                    value={liveStartAt}
-                    onChange={(val) => setLiveStartAt(val as Date | null)}
-                    valueFormat="DD MMM YYYY HH:mm"
-                    required
-                  />
-                  <Badge variant="light" color="blue">
-                    Link otomatis dibuat setelah simpan
-                  </Badge>
-                  <Switch
-                    label="Published"
-                    checked={isPublished}
-                    onChange={(e) => setIsPublished(e.currentTarget.checked)}
-                  />
-                </Stack>
+                <Paper p="md" radius="md" withBorder>
+                  <Stack gap="sm">
+                    <Textarea
+                      label="Agenda"
+                      value={liveAgenda}
+                      onChange={(e) => setLiveAgenda(e.currentTarget.value)}
+                      minRows={3}
+                      required
+                    />
+                    <DateTimePicker
+                      label="Waktu Mulai"
+                      placeholder="Pilih tanggal & waktu"
+                      value={liveStartAt}
+                      onChange={(val) => {
+                        if (!val) {
+                          setLiveStartAt(null);
+                          return;
+                        }
+                        // runtime guard: detect Date object via toString tag
+                        const isDateObject =
+                          Object.prototype.toString.call(val) ===
+                          "[object Date]";
+                        if (isDateObject) {
+                          const d = val as unknown as Date;
+                          setLiveStartAt(isNaN(d.getTime()) ? null : d);
+                          return;
+                        }
+                        const parsed = new Date(val as unknown as string);
+                        setLiveStartAt(isNaN(parsed.getTime()) ? null : parsed);
+                      }}
+                      valueFormat="DD/MM/YYYY HH:mm"
+                      required
+                      clearable
+                    />
+                    <TextInput
+                      required
+                      label="Link Live"
+                      placeholder="https://..."
+                      value={liveJoinUrl}
+                      onChange={(e) => setLiveJoinUrl(e.currentTarget.value)}
+                    />
+                    <TextInput
+                      label="Passcode (opsional)"
+                      value={livePasscode}
+                      onChange={(e) => setLivePasscode(e.currentTarget.value)}
+                    />
+                  </Stack>
+                </Paper>
               )}
               {moduleKind === "tugas" && (
                 <Textarea
@@ -522,7 +531,11 @@ export default function NewModulePage() {
                   type="submit"
                   leftSection={<IconDeviceFloppy size={16} />}
                   loading={saving}
-                  disabled={!title}
+                  disabled={
+                    !title ||
+                    (moduleKind === "live" &&
+                      (!liveAgenda || !liveStartAt || !liveJoinUrl))
+                  }
                 >
                   Simpan
                 </Button>

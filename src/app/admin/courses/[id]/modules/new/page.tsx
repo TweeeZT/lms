@@ -18,8 +18,6 @@ import {
   Select,
   Divider,
   SimpleGrid,
-  Switch,
-  Badge,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
 import {
@@ -79,10 +77,11 @@ export default function AdminNewModulePage() {
   const [timeLimit, setTimeLimit] = useState<number | "">(10);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
 
-  // Live session
-  const [liveTitle, setLiveTitle] = useState("");
+  // Live session (schema tanpa title; gunakan agenda, start_at, join_url, passcode)
   const [liveAgenda, setLiveAgenda] = useState("");
-  const [liveStartAt, setLiveStartAt] = useState<Date | null>(null); // Date picker value
+  const [liveStartAt, setLiveStartAt] = useState<Date | null>(null);
+  const [liveJoinUrl, setLiveJoinUrl] = useState("");
+  const [livePasscode, setLivePasscode] = useState("");
 
   const addQuestion = () => {
     setQuestions((q) => [
@@ -116,6 +115,12 @@ export default function AdminNewModulePage() {
 
   const handleCreate = async () => {
     if (!adminId) return;
+    if (moduleKind === "live") {
+      if (!liveAgenda.trim() || !liveStartAt || !liveJoinUrl.trim()) {
+        setError("Field wajib: agenda, waktu mulai, link live");
+        return;
+      }
+    }
     setLoading(true);
     setError(null);
     try {
@@ -134,78 +139,47 @@ export default function AdminNewModulePage() {
         fd.set("file", contentFile);
         fd.set("filename", contentFile.name);
         res = await fetch(
-          `/api/admin/courses/${courseId}/modules?userId=${adminId}`,
+          `/api/admin/courses/${courseId}/modules?userId=${adminId}&debug=1`,
           { method: "POST", body: fd }
         );
       } else {
-        const payload: Record<string, unknown> = {
+        const body: Record<string, unknown> = {
           title,
           description,
           module_kind: moduleKind,
           order_index: orderIndex ?? 0,
           is_published: isPublished,
         };
-        if (moduleKind === "materi") {
-          payload.content = {
-            content_type: contentType,
-            url: contentUrl || undefined,
-            text_content: contentText || undefined,
-          };
-        } else if (moduleKind === "quiz") {
-          payload.quiz = {
-            title: quizTitle,
-            passing_score: typeof passingScore === "number" ? passingScore : 0,
-            time_limit: typeof timeLimit === "number" ? timeLimit : undefined,
-            questions: questions.map((q) => ({
-              question: q.question,
-              q_type: q.q_type,
-              options: q.options,
-              correct: q.correct,
-              explanation: q.explanation,
-            })),
-          };
-        } else if (moduleKind === "tugas") {
-          payload.assignment = {
-            instructions: contentText,
-            // future: due_date, max_score
-          };
-        } else if (moduleKind === "live") {
-          // Safeguard: liveStartAt must be a valid Date object
-          let liveDate: Date | null = null;
-          if (liveStartAt instanceof Date) liveDate = liveStartAt;
-          else if (typeof liveStartAt === "string") {
-            // In some edge cases Mantine DateTimePicker may emit string (SSR hydration issues)
-            const parsed = new Date(liveStartAt);
-            if (!isNaN(parsed.getTime())) liveDate = parsed;
-          }
-          if (!liveTitle || !liveAgenda || !liveDate) {
-            throw new Error(
-              "Field live (Judul Live, Agenda, Waktu Mulai) wajib & waktu harus valid"
-            );
-          }
-          payload.live = {
-            title: liveTitle.trim(),
-            agenda: liveAgenda.trim(),
-            start_at: liveDate.toISOString(),
-          };
+        if (moduleKind === "live") {
+          body.live_agenda = liveAgenda.trim();
+          body.live_start_at = liveStartAt?.toISOString();
+          body.live_join_url = liveJoinUrl.trim();
+          if (livePasscode.trim()) body.live_passcode = livePasscode.trim();
         }
+        // quiz/tugas fields unaffected
         res = await fetch(
           `/api/admin/courses/${courseId}/modules?userId=${adminId}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(body),
           }
         );
       }
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
         let msg = json.error || "Gagal membuat modul";
+        if (json.debug) {
+          console.warn("[AdminNewModule Debug]", json);
+        }
         if (typeof msg === "string" && msg.includes("toISOString")) {
           msg =
             "Waktu mulai live tidak valid. Silakan pilih ulang tanggal & waktu.";
         }
         throw new Error(msg);
+      }
+      if (json.debug) {
+        console.info("[AdminNewModule Debug Success]", json.debug);
       }
       router.push(`/admin/courses/${courseId}`);
     } catch (e) {
@@ -217,230 +191,253 @@ export default function AdminNewModulePage() {
   };
 
   const renderExtra = () => {
-    if (moduleKind === "materi") {
-      return (
-        <Stack>
-          <Select
-            label="Tipe Konten"
-            data={[
-              { value: "link", label: "Link" },
-              { value: "file", label: "File" },
-              { value: "text", label: "Teks" },
-              { value: "video", label: "Video" },
-              { value: "pdf", label: "PDF" },
-              { value: "ppt", label: "PPT" },
-              { value: "image", label: "Gambar" },
-            ]}
-            value={contentType}
-            onChange={(v) => setContentType((v as ContentType) || "link")}
-            required
-          />
-          {contentType === "link" && (
+    switch (moduleKind) {
+      case "materi":
+        return (
+          <Card withBorder p="md" mt="md">
+            <Title order={5}>Konten Materi</Title>
+            <Stack gap="sm" mt="xs">
+              <Select
+                label="Tipe Konten"
+                data={[
+                  { value: "link", label: "Link" },
+                  { value: "text", label: "Teks" },
+                  { value: "file", label: "File" },
+                  { value: "video", label: "Video" },
+                  { value: "pdf", label: "PDF" },
+                  { value: "ppt", label: "PPT" },
+                  { value: "image", label: "Gambar" },
+                ]}
+                value={contentType}
+                onChange={(v) => setContentType((v as ContentType) || "link")}
+              />
+              {contentType === "link" && (
+                <TextInput
+                  label="URL"
+                  placeholder="https://..."
+                  value={contentUrl}
+                  onChange={(e) => setContentUrl(e.currentTarget.value)}
+                  required
+                />
+              )}
+              {contentType === "text" && (
+                <Textarea
+                  label="Konten Teks"
+                  minRows={4}
+                  value={contentText}
+                  onChange={(e) => setContentText(e.currentTarget.value)}
+                  required
+                />
+              )}
+              {contentType === "file" && (
+                <FileInput
+                  label="Upload File"
+                  placeholder="Pilih file"
+                  value={contentFile}
+                  onChange={setContentFile}
+                  required
+                />
+              )}
+              {(["video", "pdf", "ppt", "image"] as ContentType[]).includes(
+                contentType
+              ) && (
+                <>
+                  <FileInput
+                    label={`Upload ${contentType.toUpperCase()}`}
+                    placeholder={`Pilih ${contentType}`}
+                    value={contentFile}
+                    onChange={setContentFile}
+                  />
+                  <TextInput
+                    label="Atau URL (opsional)"
+                    placeholder="https://..."
+                    value={contentUrl}
+                    onChange={(e) => setContentUrl(e.currentTarget.value)}
+                  />
+                </>
+              )}
+            </Stack>
+          </Card>
+        );
+      case "quiz":
+        return (
+          <Stack>
             <TextInput
-              label="URL"
-              placeholder="https://..."
-              value={contentUrl}
-              onChange={(e) => setContentUrl(e.currentTarget.value)}
+              label="Judul Kuis"
+              value={quizTitle}
+              onChange={(e) => setQuizTitle(e.currentTarget.value)}
               required
             />
-          )}
-          {contentType === "text" && (
-            <Textarea
-              label="Konten Teks"
-              minRows={4}
-              value={contentText}
-              onChange={(e) => setContentText(e.currentTarget.value)}
-              required
-            />
-          )}
-          {contentType === "file" && (
-            <FileInput
-              label="Upload File"
-              placeholder="Pilih file"
-              value={contentFile}
-              onChange={setContentFile}
-              required
-            />
-          )}
-          {(["video", "pdf", "ppt", "image"] as ContentType[]).includes(
-            contentType
-          ) && (
-            <>
-              <FileInput
-                label={`Upload ${contentType.toUpperCase()}`}
-                placeholder={`Pilih ${contentType}`}
-                value={contentFile}
-                onChange={setContentFile}
+            <Group grow>
+              <NumberInput
+                label="Passing Score (%)"
+                value={passingScore}
+                onChange={(v) =>
+                  setPassingScore(typeof v === "number" ? v : "")
+                }
+                min={0}
+                max={100}
+              />
+              <NumberInput
+                label="Waktu (menit)"
+                value={timeLimit}
+                onChange={(v) => setTimeLimit(typeof v === "number" ? v : "")}
+                min={0}
+                max={999}
+              />
+            </Group>
+            <Divider label={`Pertanyaan (${questions.length})`} />
+            <Stack>
+              {questions.map((q, qi) => (
+                <Card key={qi} withBorder padding="sm">
+                  <Stack>
+                    <Group justify="space-between" align="flex-start">
+                      <TextInput
+                        label={`Pertanyaan ${qi + 1}`}
+                        value={q.question}
+                        onChange={(e) =>
+                          updateQuestion(qi, {
+                            question: e.currentTarget.value,
+                          })
+                        }
+                        required
+                        style={{ flex: 1 }}
+                      />
+                      <ActionIcon
+                        color="red"
+                        variant="subtle"
+                        onClick={() => removeQuestion(qi)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Group>
+                    <Select
+                      label="Tipe"
+                      data={[
+                        { value: "multiple-choice", label: "Multiple Choice" },
+                        { value: "true-false", label: "True / False" },
+                        { value: "short-answer", label: "Jawaban Singkat" },
+                      ]}
+                      value={q.q_type}
+                      onChange={(v) =>
+                        updateQuestion(qi, {
+                          q_type:
+                            (v as QuizQuestion["q_type"]) || "multiple-choice",
+                        })
+                      }
+                    />
+                    {q.q_type === "multiple-choice" && (
+                      <SimpleGrid cols={2} spacing="xs">
+                        {q.options?.map((opt, oi) => (
+                          <TextInput
+                            key={oi}
+                            label={`Opsi ${oi + 1}`}
+                            value={opt}
+                            onChange={(e) =>
+                              updateOption(qi, oi, e.currentTarget.value)
+                            }
+                          />
+                        ))}
+                      </SimpleGrid>
+                    )}
+                    <TextInput
+                      label={
+                        q.q_type === "multiple-choice"
+                          ? "Jawaban Benar (index)"
+                          : "Jawaban Benar"
+                      }
+                      value={q.correct}
+                      onChange={(e) =>
+                        updateQuestion(qi, { correct: e.currentTarget.value })
+                      }
+                    />
+                    <Textarea
+                      label="Penjelasan (opsional)"
+                      value={q.explanation || ""}
+                      onChange={(e) =>
+                        updateQuestion(qi, {
+                          explanation: e.currentTarget.value,
+                        })
+                      }
+                      minRows={2}
+                    />
+                  </Stack>
+                </Card>
+              ))}
+              <Button
+                leftSection={<IconPlus size={16} />}
+                variant="light"
+                onClick={addQuestion}
+              >
+                Tambah Pertanyaan
+              </Button>
+            </Stack>
+          </Stack>
+        );
+      case "live":
+        return (
+          <Card withBorder p="md" mt="md">
+            <Title order={5}>Live Session</Title>
+            <Stack gap="sm" mt="xs">
+              <Textarea
+                label="Agenda"
+                value={liveAgenda}
+                onChange={(e) => setLiveAgenda(e.currentTarget.value)}
+                minRows={3}
+                required
+              />
+              <DateTimePicker
+                required
+                label="Waktu Mulai"
+                value={liveStartAt}
+                onChange={(val) => {
+                  if (!val) {
+                    setLiveStartAt(null);
+                    return;
+                  }
+                  const isDate =
+                    Object.prototype.toString.call(val) === "[object Date]";
+                  if (isDate) {
+                    const d = val as unknown as Date;
+                    setLiveStartAt(isNaN(d.getTime()) ? null : d);
+                  } else if (typeof val === "string") {
+                    const d = new Date(val);
+                    setLiveStartAt(isNaN(d.getTime()) ? null : d);
+                  }
+                }}
               />
               <TextInput
-                label="Atau URL (opsional)"
+                label="Link Live"
                 placeholder="https://..."
-                value={contentUrl}
-                onChange={(e) => setContentUrl(e.currentTarget.value)}
+                value={liveJoinUrl}
+                onChange={(e) => setLiveJoinUrl(e.currentTarget.value)}
+                required
               />
-            </>
-          )}
-        </Stack>
-      );
+              <TextInput
+                label="Passcode (opsional)"
+                value={livePasscode}
+                onChange={(e) => setLivePasscode(e.currentTarget.value)}
+              />
+            </Stack>
+          </Card>
+        );
+      case "tugas":
+        return (
+          <Card withBorder p="md" mt="md">
+            <Title order={5}>Tugas</Title>
+            <Stack gap="sm" mt="xs">
+              <Textarea
+                label="Deskripsi Tugas"
+                value={description}
+                onChange={(e) => setDescription(e.currentTarget.value)}
+                minRows={4}
+              />
+            </Stack>
+          </Card>
+        );
+      default:
+        return null;
     }
-    if (moduleKind === "quiz") {
-      return (
-        <Stack>
-          <TextInput
-            label="Judul Kuis"
-            value={quizTitle}
-            onChange={(e) => setQuizTitle(e.currentTarget.value)}
-            required
-          />
-          <Group grow>
-            <NumberInput
-              label="Passing Score (%)"
-              value={passingScore}
-              onChange={(v) => setPassingScore(typeof v === "number" ? v : "")}
-              min={0}
-              max={100}
-            />
-            <NumberInput
-              label="Waktu (menit)"
-              value={timeLimit}
-              onChange={(v) => setTimeLimit(typeof v === "number" ? v : "")}
-              min={0}
-              max={999}
-            />
-          </Group>
-          <Divider label={`Pertanyaan (${questions.length})`} />
-          <Stack>
-            {questions.map((q, qi) => (
-              <Card key={qi} withBorder padding="sm">
-                <Stack>
-                  <Group justify="space-between" align="flex-start">
-                    <TextInput
-                      label={`Pertanyaan ${qi + 1}`}
-                      value={q.question}
-                      onChange={(e) =>
-                        updateQuestion(qi, { question: e.currentTarget.value })
-                      }
-                      required
-                      style={{ flex: 1 }}
-                    />
-                    <ActionIcon
-                      color="red"
-                      variant="subtle"
-                      onClick={() => removeQuestion(qi)}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Group>
-                  <Select
-                    label="Tipe"
-                    data={[
-                      { value: "multiple-choice", label: "Multiple Choice" },
-                      { value: "true-false", label: "True / False" },
-                      { value: "short-answer", label: "Jawaban Singkat" },
-                    ]}
-                    value={q.q_type}
-                    onChange={(v) =>
-                      updateQuestion(qi, {
-                        q_type:
-                          (v as QuizQuestion["q_type"]) || "multiple-choice",
-                      })
-                    }
-                  />
-                  {q.q_type === "multiple-choice" && (
-                    <SimpleGrid cols={2} spacing="xs">
-                      {q.options?.map((opt, oi) => (
-                        <TextInput
-                          key={oi}
-                          label={`Opsi ${oi + 1}`}
-                          value={opt}
-                          onChange={(e) =>
-                            updateOption(qi, oi, e.currentTarget.value)
-                          }
-                        />
-                      ))}
-                    </SimpleGrid>
-                  )}
-                  <TextInput
-                    label={
-                      q.q_type === "multiple-choice"
-                        ? "Jawaban Benar (index)"
-                        : "Jawaban Benar"
-                    }
-                    value={q.correct}
-                    onChange={(e) =>
-                      updateQuestion(qi, { correct: e.currentTarget.value })
-                    }
-                  />
-                  <Textarea
-                    label="Penjelasan (opsional)"
-                    value={q.explanation || ""}
-                    onChange={(e) =>
-                      updateQuestion(qi, { explanation: e.currentTarget.value })
-                    }
-                    minRows={2}
-                  />
-                </Stack>
-              </Card>
-            ))}
-            <Button
-              leftSection={<IconPlus size={16} />}
-              variant="light"
-              onClick={addQuestion}
-            >
-              Tambah Pertanyaan
-            </Button>
-          </Stack>
-        </Stack>
-      );
-    }
-    if (moduleKind === "live") {
-      return (
-        <Stack>
-          <TextInput
-            label="Judul Live"
-            value={liveTitle}
-            onChange={(e) => setLiveTitle(e.currentTarget.value)}
-            required
-          />
-          <Textarea
-            label="Agenda"
-            minRows={3}
-            value={liveAgenda}
-            onChange={(e) => setLiveAgenda(e.currentTarget.value)}
-            required
-          />
-          <DateTimePicker
-            label="Waktu Mulai"
-            placeholder="Pilih tanggal & waktu"
-            value={liveStartAt}
-            onChange={(v) => setLiveStartAt(v as Date | null)}
-            valueFormat="DD MMM YYYY HH:mm"
-            required
-          />
-          <Badge variant="light" color="blue">
-            Link meeting akan dibuat otomatis saat disimpan.
-          </Badge>
-          <Switch
-            label="Published"
-            checked={isPublished}
-            onChange={(e) => setIsPublished(e.currentTarget.checked)}
-          />
-        </Stack>
-      );
-    }
-    if (moduleKind === "tugas") {
-      return (
-        <Textarea
-          label="Instruksi Tugas"
-          minRows={4}
-          placeholder="Jelaskan tugas..."
-          value={contentText}
-          onChange={(e) => setContentText(e.currentTarget.value)}
-          required
-        />
-      );
-    }
-    return null;
   };
 
   return (
@@ -512,7 +509,11 @@ export default function AdminNewModulePage() {
               leftSection={<IconDeviceFloppy size={16} />}
               loading={loading}
               onClick={handleCreate}
-              disabled={!title}
+              disabled={
+                !title ||
+                (moduleKind === "live" &&
+                  (!liveAgenda.trim() || !liveStartAt || !liveJoinUrl.trim()))
+              }
             >
               Simpan
             </Button>

@@ -61,10 +61,10 @@ function Navbar() {
   // Handle scroll effect and active section
   useEffect(() => {
     const handleScroll = () => {
-      const isScrolled = window.scrollY > 50;
+      const scrollY = window.scrollY;
+      const isScrolled = scrollY > 50;
       setScrolled(isScrolled);
 
-      // Find active section
       const sections = [
         "hero",
         "programs",
@@ -72,16 +72,18 @@ function Navbar() {
         "learning-method",
         "testimonials",
       ];
-      for (const section of sections) {
-        const element = document.getElementById(section);
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          if (rect.top <= 100 && rect.bottom >= 100) {
-            setActiveSection(section);
-            break;
-          }
-        }
+      // Only activate non-hero highlighting once user passes a small threshold below hero
+      const thresholdOffset = 120; // px down from top triggers leaving hero
+      let current = "hero";
+      for (const id of sections) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top;
+        if (top <= 120) current = id; // near viewport top
       }
+      // If still at hero near top and not scrolled enough, keep hero
+      if (scrollY < thresholdOffset) current = "hero";
+      setActiveSection(current);
     };
 
     window.addEventListener("scroll", handleScroll);
@@ -124,23 +126,33 @@ function Navbar() {
           </Flex>
 
           {/* Desktop Navigation */}
-          <Group gap="xl" visibleFrom="md">
+          <Group gap="sm" visibleFrom="md">
             {navLinks.map((link) => {
               const isActive = activeSection === link.href.replace("#", "");
+              const leavingHero = activeSection !== "hero"; // only show filled style after leaving hero
               return (
-                <Anchor
+                <Button
                   key={link.label}
+                  variant={isActive && leavingHero ? "filled" : "subtle"}
                   onClick={() => scrollToSection(link.href)}
-                  c={"var(--secondary-color)"}
-                  fw={isActive ? 600 : 500}
-                  style={{
-                    textDecoration: "none",
-                    cursor: "pointer",
-                    transition: "all 0.3s ease",
+                  size="sm"
+                  styles={{
+                    root: {
+                      backgroundColor:
+                        isActive && leavingHero
+                          ? "var(--secondary-color)"
+                          : "transparent",
+                      color:
+                        isActive && leavingHero
+                          ? "var(--primary-color)"
+                          : "var(--secondary-color)",
+                      fontWeight: isActive ? 600 : 500,
+                      transition: "background-color .25s, color .25s",
+                    },
                   }}
                 >
                   {link.label}
-                </Anchor>
+                </Button>
               );
             })}
           </Group>
@@ -457,7 +469,7 @@ function ProgramsSection() {
   ];
 
   return (
-    <Container size="xl" py={80}>
+    <Container id="programs" size="xl" py={80}>
       <Stack align="center" gap="xl">
         <Box ta="center" maw={700}>
           <Text size="lg" c="var(--secondary-color)" fw={600} mb="sm">

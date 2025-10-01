@@ -87,6 +87,12 @@ export default function UserPostDetailPage() {
   const postId = params.id as string;
 
   const [post, setPost] = useState<ApiPost | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [myOtherPosts, setMyOtherPosts] = useState<ApiPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
   const likeKey = (id: string) => `disc-liked-${id}`;
@@ -104,9 +110,30 @@ export default function UserPostDetailPage() {
       setLoading(false);
     }
   }
+  async function loadMyOthers(currentUserId: string) {
+    try {
+      const res = await fetch(
+        `/api/user/discussions?userId=${currentUserId}&mine=true&limit=5&page=1`
+      );
+      const json = await res.json();
+      if (res.ok && json.success) {
+        const items: ApiPost[] = json.items || [];
+        type MaybeComments = ApiPost & { comments?: ApiComment[] };
+        setMyOtherPosts(
+          (items as MaybeComments[])
+            .filter((p) => p.id !== postId)
+            .map((p) => ({
+              ...p,
+              comments: Array.isArray(p.comments) ? p.comments : [],
+            }))
+        );
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     load();
+    if (user) loadMyOthers(user.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, postId]);
 
@@ -127,6 +154,64 @@ export default function UserPostDetailPage() {
     });
     localStorage.setItem(likeKey(post.id), liked ? "0" : "1");
     load();
+  };
+
+  const startEdit = () => {
+    if (!post) return;
+    setEditTitle(post.title);
+    setEditContent(post.content.replaceAll("\\r\\n", "\n"));
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+  };
+
+  const saveEdit = async () => {
+    if (!user || !post) return;
+    if (!editTitle.trim() || !editContent.trim()) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/user/discussions/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          action: "update",
+          title: editTitle.trim(),
+          content: editContent.trim(),
+          tags: post.tags || [],
+        }),
+      });
+      if (res.ok) {
+        setPost({
+          ...post,
+          title: editTitle.trim(),
+          content: editContent.trim(),
+        });
+        setEditing(false);
+      }
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deletePost = async () => {
+    if (!user || !post) return;
+    if (!confirm("Hapus postingan ini beserta semua komentar & media?")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/user/discussions/${postId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      if (res.ok) {
+        router.push("/user/discussions");
+      }
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const addComment = async () => {
@@ -205,6 +290,21 @@ export default function UserPostDetailPage() {
           >
             Kembali ke Forum
           </Button>
+          {user && post && user.id === post.user_id && !editing && (
+            <Group gap="sm">
+              <Button size="sm" variant="outline" onClick={startEdit}>
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                color="red"
+                loading={deleting}
+                onClick={deletePost}
+              >
+                Hapus
+              </Button>
+            </Group>
+          )}
         </Group>
 
         <Card
@@ -265,14 +365,49 @@ export default function UserPostDetailPage() {
                     {relativeTime(post.created_at)}
                   </Text>
                 </Group>
-                <Text
-                  size="sm"
-                  style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
-                >
-                  {post.content
-                    .replaceAll("\\r\\n", "\n")
-                    .replaceAll("\\n\\n", "\n")}
-                </Text>
+                {editing ? (
+                  <Stack gap={8} mt="sm">
+                    <TextInput
+                      placeholder="Judul"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.currentTarget.value)}
+                    />
+                    <TextInput
+                      placeholder="Konten"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.currentTarget.value)}
+                      styles={{ input: { minHeight: 80 } }}
+                      multiple
+                    />
+                    <Group gap="sm" justify="flex-end">
+                      <Button
+                        size="sm"
+                        variant="subtle"
+                        onClick={cancelEdit}
+                        disabled={savingEdit}
+                      >
+                        Batal
+                      </Button>
+                      <Button
+                        size="sm"
+                        loading={savingEdit}
+                        onClick={saveEdit}
+                        disabled={!editTitle.trim() || !editContent.trim()}
+                      >
+                        Simpan
+                      </Button>
+                    </Group>
+                  </Stack>
+                ) : (
+                  <Text
+                    size="sm"
+                    style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
+                  >
+                    {post.content
+                      .replaceAll("\\r\\n", "\n")
+                      .replaceAll("\\n\\n", "\n")}
+                  </Text>
+                )}
                 {post.tags?.length > 0 && (
                   <Group gap={8} wrap="wrap" mt="xs">
                     {post.tags.map((t) => (
@@ -353,6 +488,43 @@ export default function UserPostDetailPage() {
         </Card>
 
         <Divider />
+
+        {myOtherPosts.length > 0 && (
+          <Stack gap="md">
+            <Title order={5}>Postingan Saya Lainnya</Title>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {myOtherPosts.map((p) => (
+                <Card
+                  key={p.id}
+                  withBorder
+                  radius="md"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => router.push(`/user/discussions/${p.id}`)}
+                >
+                  <Stack gap={6}>
+                    <Text fw={600} size="sm" lineClamp={1}>
+                      {p.title}
+                    </Text>
+                    <Text size="xs" c="dimmed" lineClamp={3}>
+                      {p.content.replaceAll("\\r\\n", " ").slice(0, 160)}
+                    </Text>
+                    <Group gap={6}>
+                      <Badge size="xs" variant="light">
+                        {p.likes} suka
+                      </Badge>
+                      <Badge size="xs" variant="outline">
+                        {p.comments && Array.isArray(p.comments)
+                          ? p.comments.length
+                          : 0}{" "}
+                        komentar
+                      </Badge>
+                    </Group>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
+          </Stack>
+        )}
 
         <Stack gap="lg">
           <Title order={4}>Komentar ({post.comments.length})</Title>

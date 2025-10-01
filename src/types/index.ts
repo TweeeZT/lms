@@ -15,7 +15,8 @@ export interface User {
   updatedAt: Date;
 }
 
-// Course Types
+export type BasicStatus = "completed" | "pending" | "cancelled";
+
 export interface Course {
   id: string;
   title: string;
@@ -259,7 +260,6 @@ export type RoleDistribution = {
   role: "admin" | "instructor" | "user";
   value: number;
 };
-
 export type FinanceTransaction = {
   id: string;
   date: string; // ISO
@@ -268,8 +268,12 @@ export type FinanceTransaction = {
   courseId: string;
   courseTitle: string;
   amount: number;
-  method: "Midtrans" | "Xendit" | "Manual";
-  status: "paid" | "pending" | "failed";
+  // Normalized payment method / channel. Historically values like 'Midtrans', 'Xendit', 'Manual'.
+  // New Xendit flow collapses all bank channels to an accepted enum subset (e.g., 'BCA', 'BRI', 'BNI').
+  // Keep as string to avoid friction with evolving enum.
+  method: string;
+  // Payment status normalized: completed | pending | cancelled
+  status: BasicStatus;
 };
 
 export type Payout = {

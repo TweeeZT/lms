@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { DateTimePicker } from "@mantine/dates";
 import { IconChevronLeft, IconUpload } from "@tabler/icons-react";
 // Use absolute import via root alias; adjust if your tsconfig paths differ
 import PrimeLoader from "@/components/PrimeLoader";
@@ -66,10 +67,10 @@ export default function EditModulePage() {
   const [maxScore, setMaxScore] = useState<number | "">(100);
 
   // Live session
-  const [liveTitle, setLiveTitle] = useState("");
   const [liveAgenda, setLiveAgenda] = useState("");
-  const [liveStartAt, setLiveStartAt] = useState("");
+  const [liveStartAt, setLiveStartAt] = useState<Date | null>(null);
   const [liveJoinUrl, setLiveJoinUrl] = useState("");
+  const [livePasscode, setLivePasscode] = useState("");
 
   useEffect(() => {
     if (!user?.id) return;
@@ -175,16 +176,25 @@ export default function EditModulePage() {
         } else if (m.module_kind === "live") {
           const l = json.detail as {
             id: string;
-            title: string;
-            agenda: string;
-            start_at: string;
-            join_url?: string;
+            agenda?: string | null;
+            start_at?: string | null;
+            join_url?: string | null;
+            passcode?: string | null;
+            duration_min?: number | null;
+            status?: string | null;
+            time_zone?: string | null;
           } | null;
           if (l) {
-            setLiveTitle(l.title || "");
             setLiveAgenda(l.agenda || "");
-            setLiveStartAt(l.start_at ? l.start_at.slice(0, 16) : "");
+            setLiveStartAt(
+              l.start_at
+                ? isNaN(new Date(l.start_at).getTime())
+                  ? null
+                  : new Date(l.start_at)
+                : null
+            );
             setLiveJoinUrl(l.join_url || "");
+            setLivePasscode(l.passcode || "");
           }
         }
       } catch (e) {
@@ -256,14 +266,18 @@ export default function EditModulePage() {
             max_score: Number(maxScore || 100),
           };
         } else if (moduleKind === "live") {
-          if (!liveTitle || !liveAgenda || !liveStartAt) {
-            throw new Error("Field live wajib");
+          if (
+            !liveAgenda ||
+            !liveStartAt ||
+            isNaN(liveStartAt.getTime()) ||
+            !liveJoinUrl
+          ) {
+            throw new Error("Field wajib: agenda, waktu mulai, link live");
           }
-          payload.live = {
-            title: liveTitle,
-            agenda: liveAgenda,
-            start_at: new Date(liveStartAt).toISOString(),
-          };
+          payload.live_agenda = liveAgenda;
+          payload.live_start_at = new Date(liveStartAt.getTime()).toISOString();
+          payload.live_join_url = liveJoinUrl.trim();
+          if (livePasscode) payload.live_passcode = livePasscode.trim();
         }
         const res = await fetch(baseUrl, {
           method: "PATCH",
@@ -694,12 +708,6 @@ export default function EditModulePage() {
               {moduleKind === "live" && (
                 <Paper p="md" radius="md" withBorder>
                   <Stack gap="sm">
-                    <TextInput
-                      label="Judul Sesi"
-                      value={liveTitle}
-                      onChange={(e) => setLiveTitle(e.currentTarget.value)}
-                      required
-                    />
                     <Textarea
                       label="Agenda"
                       value={liveAgenda}
@@ -707,33 +715,44 @@ export default function EditModulePage() {
                       minRows={3}
                       required
                     />
-                    <TextInput
+                    <DateTimePicker
                       label="Waktu Mulai"
-                      type="datetime-local"
+                      placeholder="Pilih tanggal & waktu"
                       value={liveStartAt}
-                      onChange={(e) => setLiveStartAt(e.currentTarget.value)}
+                      onChange={(val) => {
+                        if (!val) {
+                          setLiveStartAt(null);
+                          return;
+                        }
+                        const isDateObj =
+                          Object.prototype.toString.call(val) ===
+                          "[object Date]";
+                        if (isDateObj) {
+                          const d = val as unknown as Date;
+                          setLiveStartAt(isNaN(d.getTime()) ? null : d);
+                        } else {
+                          const parsed = new Date(val as unknown as string);
+                          setLiveStartAt(
+                            isNaN(parsed.getTime()) ? null : parsed
+                          );
+                        }
+                      }}
+                      valueFormat="DD/MM/YYYY HH:mm"
                       required
+                      clearable
                     />
-                    {liveJoinUrl && (
-                      <Group gap="xs">
-                        <TextInput
-                          label="Join URL"
-                          value={liveJoinUrl}
-                          readOnly
-                          style={{ flex: 1 }}
-                        />
-                        <Button
-                          variant="light"
-                          onClick={() => {
-                            navigator.clipboard
-                              .writeText(liveJoinUrl)
-                              .catch(() => {});
-                          }}
-                        >
-                          Copy
-                        </Button>
-                      </Group>
-                    )}
+                    <TextInput
+                      required
+                      label="Link Live"
+                      placeholder="https://..."
+                      value={liveJoinUrl}
+                      onChange={(e) => setLiveJoinUrl(e.currentTarget.value)}
+                    />
+                    <TextInput
+                      label="Passcode (opsional)"
+                      value={livePasscode}
+                      onChange={(e) => setLivePasscode(e.currentTarget.value)}
+                    />
                   </Stack>
                 </Paper>
               )}
@@ -752,7 +771,12 @@ export default function EditModulePage() {
                   type="submit"
                   className="btn-primary"
                   loading={saving}
-                  disabled={saving}
+                  disabled={
+                    saving ||
+                    !title ||
+                    (moduleKind === "live" &&
+                      (!liveAgenda || !liveStartAt || !liveJoinUrl))
+                  }
                 >
                   Update Modul
                 </Button>

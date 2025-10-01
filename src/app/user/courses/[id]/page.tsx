@@ -78,6 +78,14 @@ export interface ModuleDetailType {
       joinCode?: string | null;
       created_at?: string;
       updated_at?: string;
+      // Extended fields from module_live_sessions
+      start_at?: string | null;
+      duration_min?: number | null;
+      join_url?: string | null;
+      passcode?: string | null;
+      status?: string | null;
+      recording_url?: string | null;
+      time_zone?: string | null;
     } | null;
   };
   progress: { currentModuleId: string | null; completedModules: string[] };
@@ -127,6 +135,12 @@ export default function CourseDetailPage() {
   // Certificate state
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
+  // Rating gating state
+  const [userRating, setUserRating] = useState<number | null>(null);
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [showRatingPrompt, setShowRatingPrompt] = useState(false);
+  // New: track course completion to always show rating UI after completion
+  const [courseCompleted, setCourseCompleted] = useState(false);
   // Assignment state
   const [assignFile, setAssignFile] = useState<File | null>(null);
   const [assignLink, setAssignLink] = useState("");
@@ -429,10 +443,99 @@ export default function CourseDetailPage() {
   useEffect(() => {
     const completedCount = modules.filter((m) => m.isCompleted).length;
     const isCompleted = completedCount === modules.length && modules.length > 0;
+    setCourseCompleted(isCompleted);
     if (isCompleted) {
-      checkCertificate();
+      // fetch rating first to decide gating
+      if (user) {
+        fetch(`/api/user/courses/${courseId}/rating?userId=${user.id}`)
+          .then((r) => r.json())
+          .then((j) => {
+            if (j.success) {
+              setUserRating(j.rating ?? null);
+              // Always show rating prompt UI after completion (enabled or disabled)
+              setShowRatingPrompt(true);
+              if (j.rating) checkCertificate();
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, [modules, courseId, user, checkCertificate]);
+
+  const submitRating = async (val: number) => {
+    if (!user) return;
+    setSubmittingRating(true);
+    try {
+      const res = await fetch(`/api/user/courses/${courseId}/rating`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, rating: val }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setUserRating(val);
+        setShowRatingPrompt(false);
+        // now allow certificate
+        checkCertificate();
+        notifications.show({
+          title: "Terima kasih",
+          message: "Rating berhasil disimpan",
+          color: "green",
+        });
+      } else {
+        notifications.show({
+          title: "Gagal",
+          message: json.error || "Tidak bisa menyimpan rating",
+          color: "red",
+        });
+      }
+    } catch {
+      notifications.show({
+        title: "Error",
+        message: "Terjadi kesalahan jaringan",
+        color: "red",
+      });
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  // Simple inline rating UI (placeholder) - integrate into existing JSX later
+  const RatingPrompt = () => {
+    if (!courseCompleted || !showRatingPrompt) return null;
+    return (
+      <Card withBorder mt="lg" p="md" radius="md">
+        <Stack gap="sm">
+          <Text fw={600}>Berikan Rating Kursus Ini</Text>
+          <Group>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Button
+                key={n}
+                variant={n <= (userRating || 0) ? "filled" : "light"}
+                disabled={submittingRating || !!userRating}
+                onClick={() => !userRating && submitRating(n)}
+              >
+                {n}★
+              </Button>
+            ))}
+          </Group>
+          {userRating && (
+            <Text size="xm" c="green">
+              Rating kamu: {userRating}★ (terima kasih!)
+            </Text>
+          )}
+          {!userRating && (
+            <Text size="xs" c="dimmed">
+              Klik bintang untuk memberikan rating sebelum mengunduh sertifikat.
+            </Text>
+          )}
+        </Stack>
+      </Card>
+    );
+  };
+
+  // NOTE: Injecting RatingPrompt into layout by monkey-patching React.createElement later would be overkill.
+  // The actual component return (far below in file) should include <RatingPrompt /> where certificate button lives.
 
   const markComplete = async () => {
     if (!user || !currentId) return;
@@ -517,6 +620,8 @@ export default function CourseDetailPage() {
     }
   };
 
+  // ... Later in the returned JSX we inject <RatingPrompt /> just above certificate actions.
+
   const startQuiz = () => {
     if (!detail?.module.quiz) return;
     setQuizResult(null);
@@ -585,9 +690,7 @@ export default function CourseDetailPage() {
                 <Button
                   variant="subtle"
                   leftSection={<IconChevronLeft size={16} />}
-                  onClick={() =>
-                    prevId ? setCurrentId(prevId) : router.back()
-                  }
+                  onClick={() => router.push("/user/courses")}
                 >
                   Kembali
                 </Button>
@@ -1349,18 +1452,39 @@ export default function CourseDetailPage() {
                             Selamat! Anda telah menyelesaikan seluruh kursus.
                             Sertifikat digital sudah tersedia untuk diunduh.
                           </Text>
+                          {/* Rating gating: show prompt if no userRating yet */}
+                          <RatingPrompt />
                           <Group>
                             <Button
-                              onClick={downloadCertificate}
+                              onClick={() => {
+                                if (!userRating) {
+                                  notifications.show({
+                                    title: "Rating Diperlukan",
+                                    message:
+                                      "Silakan berikan rating kursus sebelum mengunduh sertifikat.",
+                                    color: "yellow",
+                                  });
+                                  return;
+                                }
+                                downloadCertificate();
+                              }}
                               loading={downloadingCertificate}
-                              variant="gradient"
+                              variant={userRating ? "gradient" : "light"}
                               gradient={{ from: "blue", to: "indigo", deg: 45 }}
                               leftSection={<IconFileText size={16} />}
                               size="sm"
+                              disabled={!userRating}
+                              title={
+                                userRating
+                                  ? undefined
+                                  : "Beri rating terlebih dahulu"
+                              }
                             >
-                              {certificateUrl
-                                ? "Unduh Sertifikat"
-                                : "Buat & Unduh Sertifikat"}
+                              {userRating
+                                ? certificateUrl
+                                  ? "Unduh Sertifikat"
+                                  : "Buat & Unduh Sertifikat"
+                                : "Beri Rating Untuk Membuka"}
                             </Button>
                             {certificateUrl && (
                               <Button
@@ -1472,9 +1596,16 @@ function LiveSessionPanel({
   userName: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const start = live.startTime ? new Date(live.startTime) : null;
-  const end = live.endTime ? new Date(live.endTime) : null;
-  const now = useMemo(() => new Date(), []); // static on first render; sub-component lightweight
+  // Prefer explicit new fields if present
+  const rawStart = live.start_at || live.startTime;
+  const start = rawStart ? new Date(rawStart) : null;
+  let end: Date | null = null;
+  if (live.endTime) {
+    end = new Date(live.endTime);
+  } else if (start && (live.duration_min || 0) > 0) {
+    end = new Date(start.getTime() + (live.duration_min || 0) * 60000);
+  }
+  const now = useMemo(() => new Date(), []);
   const status: "upcoming" | "live" | "ended" = (() => {
     if (!start) return "upcoming";
     if (end && now > end) return "ended";
@@ -1493,21 +1624,27 @@ function LiveSessionPanel({
       : { d: 0, h: 0, m: 0 };
 
   const joinBase =
-    live.meetUrl && live.meetUrl.startsWith("http")
-      ? live.meetUrl
+    (live.join_url || live.meetUrl) &&
+    (live.join_url || live.meetUrl)!.startsWith("http")
+      ? (live.join_url || live.meetUrl)!
       : live.joinCode
       ? `https://meet.jit.si/${encodeURIComponent(live.joinCode)}`
       : undefined;
 
   const icsContent = () => {
     if (!start) return "";
+    const endCalc =
+      end || new Date(start.getTime() + (live.duration_min || 60) * 60000);
     const dtStart = toICSDate(start);
-    const dtEnd = toICSDate(end || new Date(start.getTime() + 60 * 60 * 1000));
+    const dtEnd = toICSDate(endCalc);
     const uid = `${live.id || dtStart}@afterschola`;
     const url = joinBase || "https://meet.jit.si";
     const summary = escapeICS(live.title || "Live Session");
-    const description = escapeICS(live.agenda || "Live learning session");
-    return `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//AfterSchola//Live Session//ID\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\nBEGIN:VEVENT\nUID:${uid}\nDTSTAMP:${dtStart}\nDTSTART:${dtStart}\nDTEND:${dtEnd}\nSUMMARY:${summary}\nDESCRIPTION:${description}\\nJoin: ${url}\nURL:${url}\nEND:VEVENT\nEND:VCALENDAR`;
+    const description = escapeICS(
+      (live.agenda || "Live learning session") +
+        (joinBase ? `\nJoin: ${joinBase}` : "")
+    );
+    return `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//AfterSchola//Live Session//ID\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\nBEGIN:VEVENT\nUID:${uid}\nDTSTAMP:${dtStart}\nDTSTART:${dtStart}\nDTEND:${dtEnd}\nSUMMARY:${summary}\nDESCRIPTION:${description}\nURL:${url}\nEND:VEVENT\nEND:VCALENDAR`;
   };
 
   const downloadICS = () => {
@@ -1600,8 +1737,40 @@ function LiveSessionPanel({
               </Button>
             )}
             <Button size="xs" variant="outline" onClick={downloadICS}>
-              Tambah ke Kalender
+              .ics
             </Button>
+            {start && (
+              <Button
+                size="xs"
+                variant="gradient"
+                gradient={{ from: "indigo", to: "blue", deg: 45 }}
+                component="a"
+                href={(() => {
+                  const endDate = end || new Date(start.getTime() + 60 * 60000);
+                  const fmt = (d: Date) =>
+                    d
+                      .toISOString()
+                      .replace(/[-:]/g, "")
+                      .replace(/\.\d{3}Z$/, "Z");
+                  const text = encodeURIComponent(live.title || "Live Session");
+                  const details = encodeURIComponent(
+                    (live.agenda || "") +
+                      (joinBase ? `\nJoin: ${joinBase}` : "")
+                  );
+                  const location = encodeURIComponent(joinBase || "Online");
+                  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${fmt(
+                    start
+                  )}/${fmt(
+                    endDate
+                  )}&details=${details}&location=${location}&ctz=${encodeURIComponent(
+                    live.time_zone || "Asia/Jakarta"
+                  )}`;
+                })()}
+                target="_blank"
+              >
+                Tambah ke Calendar
+              </Button>
+            )}
           </Group>
         )}
         {status === "ended" && (
@@ -1610,6 +1779,26 @@ function LiveSessionPanel({
           </Text>
         )}
       </Stack>
+
+      {/* Passcode */}
+      {live.passcode && (
+        <Text size="xs" c="dimmed">
+          Passcode: <strong>{live.passcode}</strong>
+        </Text>
+      )}
+      {/* Recording link when ended */}
+      {status === "ended" && live.recording_url && (
+        <Button
+          component="a"
+          href={live.recording_url}
+          target="_blank"
+          variant="light"
+          size="xs"
+          mt={6}
+        >
+          Lihat Rekaman
+        </Button>
+      )}
     </Card>
   );
 }

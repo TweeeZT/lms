@@ -25,7 +25,6 @@ import {
   IconUsers,
   IconClock,
   IconShoppingCart,
-  IconHeart,
 } from "@tabler/icons-react";
 import { useAuth } from "../../../hooks/useAuth";
 
@@ -35,8 +34,9 @@ export default function UserExplorePage() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>("all");
   const [levelFilter, setLevelFilter] = useState<string | null>("all");
   const [sort] = useState<string | null>("latest");
-  const [page] = useState(1);
-  const [limit] = useState(12);
+  const [page, setPage] = useState(1);
+  const limit = 9;
+  const [total, setTotal] = useState(0);
   type ExploreCourse = {
     id: string;
     title: string;
@@ -68,30 +68,28 @@ export default function UserExplorePage() {
         sort: sort || "latest",
         page: String(page),
         limit: String(limit),
+        userId: user?.id || "",
       });
       const res = await fetch(`/api/user/courses/explore?${params.toString()}`);
       const json = await res.json();
       if (res.ok && json.success) {
         setItems(json.items);
+        setTotal(json.total || 0);
       }
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, categoryFilter, levelFilter, sort, page, limit]);
+  }, [searchQuery, categoryFilter, levelFilter, sort, page, limit, user?.id]);
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
 
-  const onEnroll = async (courseId: string) => {
-    if (!user) return; // optionally redirect to login
-    await fetch("/api/user/enrollments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, courseId }),
-    });
-    // no toast for brevity
-  };
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, categoryFilter, levelFilter, sort]);
+
+  // enroll handled via checkout flow now
 
   return (
     <Container size="xl">
@@ -238,14 +236,21 @@ export default function UserExplorePage() {
                       </Text>
                     </div>
                     <Group gap="xs">
-                      <Button variant="light" size="sm" p={8}>
-                        <IconHeart size="1rem" />
+                      <Button
+                        variant="light"
+                        size="sm"
+                        p={8}
+                        component="a"
+                        href={`/user/explore/${course.id}`}
+                      >
+                        Detail
                       </Button>
                       <Button
                         className="btn-primary"
                         size="sm"
                         leftSection={<IconShoppingCart size="1rem" />}
-                        onClick={() => onEnroll(course.id)}
+                        component="a"
+                        href={`/user/checkout/${course.id}`}
                       >
                         Beli
                       </Button>
@@ -271,82 +276,25 @@ export default function UserExplorePage() {
           </Card>
         )}
 
-        {/* Featured Categories */}
-        <Card padding="lg" radius="md">
-          <Title order={3} mb="md">
-            Kategori Populer
-          </Title>
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            <Card
-              p="md"
-              radius="sm"
-              className="card-hover"
-              style={{ cursor: "pointer" }}
-            >
-              <Group>
-                <div
-                  style={{
-                    width: 60,
-                    height: 60,
-                    background:
-                      "linear-gradient(135deg, #ff6b35 0%, #f7931e 100%)",
-                    borderRadius: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "1.5rem",
-                  }}
+        {total > limit && (
+          <Group justify="center" mt="lg">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {Array.from(
+                { length: Math.ceil(total / limit) },
+                (_, i) => i + 1
+              ).map((p) => (
+                <Button
+                  key={p}
+                  variant={p === page ? "filled" : "light"}
+                  size="xs"
+                  onClick={() => setPage(p)}
                 >
-                  🎨
-                </div>
-                <div>
-                  <Text fw={600}>Scratch Programming</Text>
-                  <Text size="sm" c="dimmed">
-                    Visual coding untuk pemula
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {items.filter((c) => c.category === "scratch").length}{" "}
-                    kursus
-                  </Text>
-                </div>
-              </Group>
-            </Card>
-
-            <Card
-              p="md"
-              radius="sm"
-              className="card-hover"
-              style={{ cursor: "pointer" }}
-            >
-              <Group>
-                <div
-                  style={{
-                    width: 60,
-                    height: 60,
-                    background:
-                      "linear-gradient(135deg, #00d4ff 0%, #090979 100%)",
-                    borderRadius: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "1.5rem",
-                  }}
-                >
-                  🎮
-                </div>
-                <div>
-                  <Text fw={600}>Roblox Development</Text>
-                  <Text size="sm" c="dimmed">
-                    Buat game 3D yang amazing
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {items.filter((c) => c.category === "roblox").length} kursus
-                  </Text>
-                </div>
-              </Group>
-            </Card>
-          </SimpleGrid>
-        </Card>
+                  {p}
+                </Button>
+              ))}
+            </div>
+          </Group>
+        )}
       </Stack>
     </Container>
   );

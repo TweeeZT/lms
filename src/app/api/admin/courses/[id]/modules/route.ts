@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* Admin modules route */
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../../lib/supabaseServer";
@@ -20,10 +21,8 @@ async function requireAdmin(userId: string) {
 }
 
 // GET list modules
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest, context: any) {
+  const { id: courseId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);
@@ -33,7 +32,6 @@ export async function GET(
       { status: auth.error === "Forbidden" ? 403 : 400 }
     );
   }
-  const { id: courseId } = await context.params;
   try {
     const { data: course, error: cErr } = await supabaseAdmin
       .from("courses")
@@ -64,10 +62,7 @@ export async function GET(
 }
 
 // POST create module
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, context: any) {
   const { id: courseId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();

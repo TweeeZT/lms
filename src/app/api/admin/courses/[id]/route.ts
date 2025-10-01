@@ -18,8 +18,9 @@ async function requireAdmin(userId: string) {
 // GET /api/admin/courses/[id]?userId=<admin>
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id: courseId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);
@@ -30,7 +31,6 @@ export async function GET(
     );
   }
 
-  const courseId = params.id;
   try {
     const { data, error } = await supabaseAdmin
       .from("courses")

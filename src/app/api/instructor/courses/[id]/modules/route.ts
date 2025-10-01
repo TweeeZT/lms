@@ -10,9 +10,10 @@ const supabase = createClient(url, serviceRole);
 // GET /api/instructor/courses/[id]/modules?instructorId=...
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const courseId = params.id;
+  const { id } = await context.params;
+  const courseId = id;
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
 
@@ -81,9 +82,10 @@ async function uploadToStorage(
 // Supports multipart (for materi+file) and JSON (for materi link/text, quiz, tugas)
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
-  const courseId = params.id;
+  const { id } = await context.params;
+  const courseId = id;
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
 

@@ -86,11 +86,12 @@ async function fetchModule(moduleId: string) {
   return mod;
 }
 
-// GET single module
+// GET single module (adapted to Next.js 15 param Promise signature)
 export async function GET(
   req: NextRequest,
-  { params }: { params: { moduleId: string } }
+  context: { params: Promise<{ moduleId: string }> }
 ) {
+  const { moduleId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);
@@ -101,7 +102,7 @@ export async function GET(
     );
   }
   try {
-    const modData = await fetchModule(params.moduleId);
+    const modData = await fetchModule(moduleId);
     if (!modData)
       return NextResponse.json(
         { success: false, error: "Module not found" },
@@ -122,8 +123,9 @@ export async function GET(
 // Live: live (title, agenda, start_at, duration_min, status)
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { moduleId: string } }
+  context: { params: Promise<{ moduleId: string }> }
 ) {
+  const { moduleId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);
@@ -134,7 +136,7 @@ export async function PATCH(
     );
   }
   try {
-    const existing = await fetchModule(params.moduleId);
+    const existing = await fetchModule(moduleId);
     if (!existing)
       return NextResponse.json(
         { success: false, error: "Module not found" },
@@ -290,8 +292,9 @@ export async function PATCH(
 // DELETE module
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { moduleId: string } }
+  context: { params: Promise<{ moduleId: string }> }
 ) {
+  const { moduleId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);
@@ -302,7 +305,7 @@ export async function DELETE(
     );
   }
   try {
-    const existing = await fetchModule(params.moduleId);
+    const existing = await fetchModule(moduleId);
     if (!existing)
       return NextResponse.json(
         { success: false, error: "Module not found" },

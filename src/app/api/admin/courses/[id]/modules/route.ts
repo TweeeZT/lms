@@ -22,7 +22,7 @@ async function requireAdmin(userId: string) {
 // GET list modules
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
@@ -33,7 +33,7 @@ export async function GET(
       { status: auth.error === "Forbidden" ? 403 : 400 }
     );
   }
-  const courseId = params.id;
+  const { id: courseId } = await context.params;
   try {
     const { data: course, error: cErr } = await supabaseAdmin
       .from("courses")
@@ -66,8 +66,9 @@ export async function GET(
 // POST create module
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id: courseId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const debugMode = searchParams.get("debug") === "1";
@@ -78,7 +79,6 @@ export async function POST(
       { status: auth.error === "Forbidden" ? 403 : 400 }
     );
   }
-  const courseId = params.id;
 
   // helper
   const extractPgError = (e: unknown) => {

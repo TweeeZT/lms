@@ -18,7 +18,7 @@ async function requireAdmin(userId: string) {
 // GET /api/admin/courses/[id]?userId=<admin>
 export async function GET(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: { id: string } }
 ) {
   const { id: courseId } = await context.params;
   const { searchParams } = new URL(req.url);

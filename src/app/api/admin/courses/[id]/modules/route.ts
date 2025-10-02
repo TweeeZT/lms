@@ -21,8 +21,11 @@ async function requireAdmin(userId: string) {
 }
 
 // GET list modules
-export async function GET(req: NextRequest, context: any) {
-  const { id: courseId } = await context.params;
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { id: courseId } = params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);
@@ -62,8 +65,11 @@ export async function GET(req: NextRequest, context: any) {
 }
 
 // POST create module
-export async function POST(req: NextRequest, context: any) {
-  const { id: courseId } = await context.params;
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { id: courseId } = params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const debugMode = searchParams.get("debug") === "1";

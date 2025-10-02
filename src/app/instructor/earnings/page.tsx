@@ -19,8 +19,6 @@ import {
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import {
-  IconCash,
-  IconTrendingUp,
   IconWallet,
   IconArrowsSort,
   IconArrowLeft,

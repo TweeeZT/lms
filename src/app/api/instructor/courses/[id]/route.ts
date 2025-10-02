@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -6,14 +6,13 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 const supabase = createClient(url, serviceRole);
 
-// GET /api/instructor/courses/[id]?instructorId=...
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
-  const id = params.id;
+  const id: string = params.id;
   if (!instructorId) {
     return NextResponse.json(
       { success: false, error: "instructorId wajib" },
@@ -47,12 +46,12 @@ export async function GET(
 
 // PATCH /api/instructor/courses/[id]?instructorId=...
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
-  const id = params.id;
+  const id: string = params.id;
   if (!instructorId) {
     return NextResponse.json(
       { success: false, error: "instructorId wajib" },
@@ -226,12 +225,12 @@ export async function PATCH(
 
 // DELETE /api/instructor/courses/[id]?instructorId=...
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
-  const id = params.id;
+  const id: string = params.id;
   if (!instructorId) {
     return NextResponse.json(
       { success: false, error: "instructorId wajib" },

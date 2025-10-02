@@ -18,9 +18,9 @@ async function requireAdmin(userId: string) {
 // GET /api/admin/courses/[id]?userId=<admin>
 export async function GET(
   req: NextRequest,
-  context: { params: { id: string } }
+  { params }: { params: { id: string } }
 ) {
-  const { id: courseId } = await context.params;
+  const { id: courseId } = params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
   const auth = await requireAdmin(actorId);

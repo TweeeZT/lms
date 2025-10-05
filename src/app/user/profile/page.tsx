@@ -33,10 +33,12 @@ import {
   IconCrown,
   IconTrophy,
   IconLock,
+  IconPrinter,
 } from "@tabler/icons-react";
 import NextImage from "next/image";
 import Cropper from "react-easy-crop";
 import CertificateThumbnail from "../../../components/CertificateThumbnail";
+import { notifications } from "@mantine/notifications";
 
 export default function UserProfilePage() {
   const { user, updateUser } = useAuth();
@@ -187,6 +189,146 @@ export default function UserProfilePage() {
       canvas.toBlob((b) => resolve(b as Blob), "image/jpeg", 0.92)
     );
   }
+
+  // Thermal Receipt Print for purchases
+  const RECEIPT_INFO = {
+    addressLines: [
+      "AfterSchola Learning Platform",
+      "Jl. Pendidikan No. 123",
+      "Jakarta Selatan, Indonesia",
+      "Telp: (021) 123-4567",
+    ],
+    footer: [
+      "Terima kasih atas kepercayaan Anda",
+      "www.afterschola.com",
+      "support@afterschola.com",
+    ],
+  };
+
+  const displayMethod = (method?: string) => {
+    if (!method) return "Transfer Bank";
+    const m = method.toLowerCase();
+    if (m.includes("qris")) return "QRIS";
+    if (m.includes("bca")) return "BCA Virtual Account";
+    if (m.includes("mandiri")) return "Mandiri Virtual Account";
+    if (m.includes("bni")) return "BNI Virtual Account";
+    if (m.includes("bri")) return "BRI Virtual Account";
+    if (m.includes("gopay")) return "GoPay";
+    if (m.includes("ovo")) return "OVO";
+    if (m.includes("dana")) return "DANA";
+    return method;
+  };
+
+  const statusLabel = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "completed" || s === "paid") return "Berhasil";
+    if (s === "pending") return "Menunggu";
+    if (s === "cancelled" || s === "failed") return "Gagal";
+    return status;
+  };
+
+  const printThermalReceipt = (t: {
+    id: string;
+    date: string;
+    courseTitle: string;
+    amount: number;
+    status: string;
+  }) => {
+    const w = window.open("", "_blank", "width=800,height=1000");
+    if (!w) {
+      notifications.show({
+        title: "Gagal",
+        message: "Popup diblokir oleh browser",
+        color: "red",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    const timeStr = now.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const line = (text = "") => `<div class="ln">${text}</div>`;
+    const hr = `<pre style="margin:0;text-align:center;">------------------------------------------</pre>`;
+    const pad = (label: string, value: string) => {
+      const max = 40;
+      const raw = `${label}${value}`;
+      return raw.length > max ? raw.slice(0, max) : raw;
+    };
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Struk Pembayaran</title>
+      <style>
+        @page {
+          size: A5;
+          margin: 0;
+        }
+        body {
+          font-family: 'Courier New', monospace;
+          font-size: 13px;
+          width: 80mm;
+          margin: 0 auto;
+          padding: 10mm;
+          color: #000;
+        }
+        .logo { text-align: center; margin-bottom: 8px; }
+        .logo img { width: 90px; height: auto; }
+        h1 { font-size: 16px; text-align: center; margin: 6px 0; }
+        .addr, .ftr { text-align: center; white-space: pre-line; margin-bottom: 6px; }
+        .sep {
+          text-align: center;
+          font-size: 12px;
+          margin: 0;
+          line-height: 1;
+        }
+        .ln { display: block; }
+        .center { text-align: center; }
+        @media print {
+          header, footer { display: none !important; }
+          body { -webkit-print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="logo"><img src="/logo-text.png" alt="Logo" /></div>
+      <h1>STRUK PEMBAYARAN</h1>
+      <div class="addr">${RECEIPT_INFO.addressLines.join("<br>")}</div>
+      ${hr}
+      ${line(pad("ID Transaksi: ", t.id))}
+      ${line(pad("Tanggal: ", dateStr))}
+      ${line(pad("Waktu: ", timeStr))}
+      ${line(pad("Nama: ", user?.fullName || "User"))}
+      ${line(pad("Kursus: ", t.courseTitle))}
+      ${line(pad("Metode: ", displayMethod()))}
+      ${line(pad("Status: ", statusLabel(t.status)))}
+      ${hr}
+      ${line(pad("Total Bayar: ", formatCurrency(t.amount)))}
+      ${hr}
+      <div class="ftr">${RECEIPT_INFO.footer.join("<br>")}</div>
+      <div class="center" style="margin-top:16px;font-size:10px;">Dicetak: ${dateStr} ${timeStr}</div>
+      <script>
+        window.onload = () => {
+          window.print();
+          window.onafterprint = () => window.close();
+        };
+      </script>
+    </body>
+    </html>
+    `;
+
+    w.document.write(html);
+    w.document.close();
+  };
 
   // fetch profile + related lists
   useEffect(() => {
@@ -616,8 +758,8 @@ export default function UserProfilePage() {
                 p="lg"
                 className="card-hover"
               >
-                <Group justify="space-between">
-                  <div>
+                <Group justify="space-between" align="start">
+                  <div style={{ flex: 1 }}>
                     <Text fw={600} mb={6}>
                       {t.courseTitle}
                     </Text>
@@ -630,7 +772,7 @@ export default function UserProfilePage() {
                       </Text>
                     </Group>
                   </div>
-                  <div style={{ textAlign: "right" }}>
+                  <Stack gap="xs" align="flex-end">
                     <Text fw={700} size="lg" c="green">
                       {formatCurrency(t.amount)}
                     </Text>
@@ -639,7 +781,16 @@ export default function UserProfilePage() {
                         ? "Berhasil"
                         : t.status}
                     </Badge>
-                  </div>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="blue"
+                      leftSection={<IconPrinter size={14} />}
+                      onClick={() => printThermalReceipt(t)}
+                    >
+                      Print Struk
+                    </Button>
+                  </Stack>
                 </Group>
               </Card>
             ))}

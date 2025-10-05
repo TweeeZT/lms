@@ -16,6 +16,7 @@ import {
   SimpleGrid,
   Image,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import { useAuth } from "../../../../hooks/useAuth";
 
@@ -29,6 +30,7 @@ export default function NewUserDiscussionPage() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const words = useMemo(
     () => content.trim().split(/\s+/).filter(Boolean).length,
@@ -37,9 +39,21 @@ export default function NewUserDiscussionPage() {
   const maxWords = 1500;
 
   const addFiles = (incoming: File[]) => {
-    const accepted = incoming.filter(
-      (f) => /^image\//i.test(f.type) || /^video\//i.test(f.type)
-    );
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    const accepted = incoming.filter((f) => {
+      if (!/^image\//i.test(f.type) && !/^video\//i.test(f.type)) {
+        return false;
+      }
+      if (f.size > MAX_SIZE) {
+        notifications.show({
+          title: "File terlalu besar",
+          message: `File ${f.name} melebihi batas maksimal 10MB`,
+          color: "red",
+        });
+        return false;
+      }
+      return true;
+    });
     setFiles((prev) => [...prev, ...accepted]);
     const urls = accepted.map((f) => URL.createObjectURL(f));
     setPreviews((p) => [...p, ...urls]);
@@ -63,20 +77,44 @@ export default function NewUserDiscussionPage() {
     title.trim().length >= 3 &&
     (content.trim().length >= 10 || files.length > 0);
   const submit = async () => {
-    if (!user || !isValid()) return;
-    const fd = new FormData();
-    fd.set("userId", user.id);
-    fd.set("title", title.trim());
-    const normalized = content.replaceAll("\r\n", "\n");
-    fd.set("content", normalized);
-    if (tags.length) fd.set("tags", JSON.stringify(tags));
-    files.forEach((f) => fd.append("files", f));
-    const res = await fetch("/api/user/discussions", {
-      method: "POST",
-      body: fd,
-    });
-    const json = await res.json();
-    if (res.ok && json.success) router.push("/user/discussions");
+    if (!user || !isValid() || submitting) return;
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.set("userId", user.id);
+      fd.set("title", title.trim());
+      const normalized = content.replaceAll("\r\n", "\n");
+      fd.set("content", normalized);
+      if (tags.length) fd.set("tags", JSON.stringify(tags));
+      files.forEach((f) => fd.append("files", f));
+      const res = await fetch("/api/user/discussions", {
+        method: "POST",
+        body: fd,
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        notifications.show({
+          title: "Berhasil",
+          message: "Diskusi berhasil dibuat",
+          color: "green",
+        });
+        router.push("/user/discussions");
+      } else {
+        notifications.show({
+          title: "Gagal",
+          message: json.error || "Gagal membuat diskusi",
+          color: "red",
+        });
+      }
+    } catch (err) {
+      notifications.show({
+        title: "Error",
+        message: "Terjadi kesalahan saat membuat diskusi",
+        color: "red",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -106,6 +144,7 @@ export default function NewUserDiscussionPage() {
               required
               value={title}
               onChange={(e) => setTitle(e.currentTarget.value)}
+              disabled={submitting}
             />
             <Stack gap="xs">
               <Text fw={500} size="sm">
@@ -139,6 +178,7 @@ export default function NewUserDiscussionPage() {
                 accept="image/*,video/*"
                 multiple
                 hidden
+                disabled={submitting}
                 onChange={(e) => {
                   const sel = Array.from(e.currentTarget.files || []);
                   addFiles(sel as File[]);
@@ -177,6 +217,7 @@ export default function NewUserDiscussionPage() {
                 placeholder="Tambahkan tag lalu Enter"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.currentTarget.value)}
+                disabled={submitting}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -218,19 +259,22 @@ export default function NewUserDiscussionPage() {
                 autosize
                 value={content}
                 onChange={(e) => setContent(e.currentTarget.value)}
+                disabled={submitting}
               />
             </Stack>
             <Group justify="flex-end">
               <Button
                 variant="light"
                 onClick={() => router.push("/user/discussions")}
+                disabled={submitting}
               >
                 Batal
               </Button>
               <Button
                 className="btn-primary"
                 onClick={submit}
-                disabled={!isValid() || words > maxWords}
+                disabled={!isValid() || words > maxWords || submitting}
+                loading={submitting}
               >
                 Publikasikan
               </Button>

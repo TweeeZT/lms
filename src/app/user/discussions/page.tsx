@@ -16,8 +16,10 @@ import {
   Select,
   Pagination,
   Skeleton,
+  Modal,
 } from "@mantine/core";
-import { IconHeart, IconPlus, IconVideo } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
 import { useCallback, useEffect, useState } from "react";
@@ -56,6 +58,11 @@ export default function UserDiscussionsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
+
+  // Modal zoom image
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+  // Modal video playback
+  const [playVideo, setPlayVideo] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     if (!user) return;
@@ -108,18 +115,26 @@ export default function UserDiscussionsPage() {
   };
   const isLiked = (id: string) => localStorage.getItem(likedKey(id)) === "1";
 
-  function relativeTime(date: Date | string) {
+  function relativeTime(date: string | Date) {
     const d = typeof date === "string" ? new Date(date) : date;
     const diff = Date.now() - d.getTime();
     const sec = Math.floor(diff / 1000);
-    if (sec < 60) return `${sec}s`;
     const m = Math.floor(sec / 60);
-    if (m < 60) return `${m}m`;
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h`;
     const dd = Math.floor(h / 24);
-    if (dd < 7) return `${dd}d`;
-    return d.toLocaleDateString("id-ID", { dateStyle: "medium" });
+
+    if (sec < 60) return "baru saja";
+    if (m < 60) return `${m} menit lalu`;
+    if (h < 24) return `${h} jam lalu`;
+
+    return d.toLocaleString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   return (
@@ -251,70 +266,97 @@ export default function UserDiscussionsPage() {
                           {post.content.replace(/\\n/g, "\n")}
                         </Text>
                       </div>
-                      {hasActualMedia && (
+
+                      {/* Tampilkan 3 gambar pertama */}
+                      {post.media && post.media.length > 0 && (
                         <div style={{ marginBottom: 15 }}>
-                          <div
-                            style={{
-                              position: "relative",
-                              maxWidth: 400,
-                              height: 200,
-                              borderRadius: 12,
-                              overflow: "hidden",
-                              border: "1px solid #e9ecef",
-                            }}
-                          >
-                            <Image
-                              src={coverSrc}
-                              alt={
-                                isVideo
-                                  ? `Video ${post.title}`
-                                  : `Gambar ${post.title}`
-                              }
-                              height={200}
-                              fit="cover"
-                              fallbackSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDQwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjVmNWY1Ii8+CjxwYXRoIGQ9Ik0xNzUgODBIMjI1VjEyMEgxNzVWODBaIiBmaWxsPSIjYzljOWM5Ii8+CjxwYXRoIGQ9Ik0xODUgOTBIMjE1VjExMEgxODVWOTBaIiBmaWxsPSIjYTlhOWE5Ii8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTQwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjEyIiBmb250LWZhbWlseT0iLXdlYmtpdC1waWN0b2dyYXBoLCBzeXN0ZW0tdWkiPkdhbWJhciB0aWRhayB0ZXJzZWRpYTwvdGV4dD4KPC9zdmc+"
-                            />
-                            {isVideo && (
-                              <div
-                                style={{
-                                  position: "absolute",
-                                  inset: 0,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  background: "rgba(0,0,0,0.3)",
-                                }}
-                              >
+                          <Group gap="xs" wrap="nowrap">
+                            {post.media.slice(0, 3).map((m, idx) => {
+                              const isVid = m.m_type === "video";
+                              // Untuk video tanpa thumbnail, gunakan placeholder
+                              const src = isVid
+                                ? m.thumbnail ||
+                                  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect fill='%231e3769' width='120' height='120'/%3E%3C/svg%3E"
+                                : m.url;
+                              const remaining = post.media.length - 3;
+                              const isLast = idx === 2 && remaining > 0;
+
+                              return (
                                 <div
+                                  key={m.id}
                                   style={{
-                                    background: "rgba(255,255,255,0.9)",
-                                    borderRadius: "50%",
-                                    width: 48,
-                                    height: 48,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
+                                    position: "relative",
+                                    width: 120,
+                                    height: 120,
+                                    borderRadius: 8,
+                                    overflow: "hidden",
+                                    border: "1px solid #e9ecef",
+                                    flexShrink: 0,
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isVid) {
+                                      setPlayVideo(m.url);
+                                    } else {
+                                      setZoomImage(m.url);
+                                    }
                                   }}
                                 >
-                                  <IconVideo size={20} color="#1e3769" />
+                                  <Image
+                                    src={src}
+                                    alt={`Media ${idx + 1}`}
+                                    height={120}
+                                    width={120}
+                                    fit="cover"
+                                    style={{ objectFit: "cover" }}
+                                  />
+                                  {isVid && (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        inset: 0,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        background: "rgba(0,0,0,0.3)",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          background: "rgba(255,255,255,0.9)",
+                                          borderRadius: "50%",
+                                          width: 32,
+                                          height: 32,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <IconVideo size={16} color="#1e3769" />
+                                      </div>
+                                    </div>
+                                  )}
+                                  {isLast && (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        inset: 0,
+                                        background: "rgba(0,0,0,0.6)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <Text c="white" fw={700} size="xl">
+                                        +{remaining}
+                                      </Text>
+                                    </div>
+                                  )}
                                 </div>
-                              </div>
-                            )}
-                            {extraCount > 0 && (
-                              <Badge
-                                variant="filled"
-                                color="dark"
-                                style={{
-                                  position: "absolute",
-                                  top: 8,
-                                  right: 8,
-                                }}
-                                size="sm"
-                              >
-                                +{extraCount}
-                              </Badge>
-                            )}
-                          </div>
+                              );
+                            })}
+                          </Group>
                         </div>
                       )}
                       <Group gap="lg">
@@ -362,6 +404,94 @@ export default function UserDiscussionsPage() {
           />
         </Group>
       </Stack>
+
+      {/* Modal Zoom Image */}
+      <Modal
+        opened={!!zoomImage}
+        onClose={() => setZoomImage(null)}
+        size="xl"
+        padding={0}
+        withCloseButton={false}
+        centered
+        overlayProps={{ opacity: 0.9, blur: 3 }}
+        styles={{
+          body: { padding: 0 },
+          content: { background: "transparent", boxShadow: "none" },
+        }}
+      >
+        <div style={{ position: "relative" }}>
+          <ActionIcon
+            variant="filled"
+            color="dark"
+            size="lg"
+            radius="xl"
+            style={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              zIndex: 10,
+            }}
+            onClick={() => setZoomImage(null)}
+          >
+            <IconX size={20} />
+          </ActionIcon>
+          {zoomImage && (
+            <Image
+              src={zoomImage}
+              alt="Zoom"
+              fit="contain"
+              style={{ maxHeight: "90vh", width: "100%" }}
+            />
+          )}
+        </div>
+      </Modal>
+
+      {/* Modal Video Playback */}
+      <Modal
+        opened={!!playVideo}
+        onClose={() => setPlayVideo(null)}
+        size="xl"
+        padding={0}
+        withCloseButton={false}
+        centered
+        overlayProps={{ opacity: 0.9, blur: 3 }}
+        styles={{
+          body: { padding: 0 },
+          content: { background: "#000", boxShadow: "none" },
+        }}
+      >
+        <div style={{ position: "relative" }}>
+          <ActionIcon
+            variant="filled"
+            color="dark"
+            size="lg"
+            radius="xl"
+            style={{
+              position: "absolute",
+              top: 16,
+              right: 16,
+              zIndex: 10,
+            }}
+            onClick={() => setPlayVideo(null)}
+          >
+            <IconX size={20} />
+          </ActionIcon>
+          {playVideo && (
+            <video
+              src={playVideo}
+              controls
+              autoPlay
+              style={{
+                width: "100%",
+                maxHeight: "90vh",
+                display: "block",
+              }}
+            >
+              <track kind="captions" />
+            </video>
+          )}
+        </div>
+      </Modal>
     </Container>
   );
 }

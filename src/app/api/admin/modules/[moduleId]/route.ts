@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../lib/supabaseServer";
 
@@ -37,32 +36,64 @@ async function fetchModule(moduleId: string) {
     return { ...mod, content: contentRow || null };
   }
   if (mod.module_kind === "quiz") {
-    const { data: quizRow } = await supabaseAdmin
+    const { data: quizRow, error: quizError } = await supabaseAdmin
       .from("module_quizzes")
       .select("id, title, passing_score, time_limit")
       .eq("module_id", moduleId)
       .maybeSingle();
-    const { data: questions } = await supabaseAdmin
-      .from("module_quiz_questions")
-      .select("id, question, q_type, options_json, correct, explanation")
-      .eq("quiz_id", quizRow?.id || "")
-      .order("created_at", { ascending: true });
-    return {
-      ...mod,
-      quiz: quizRow
-        ? {
-            ...quizRow,
-            questions: (questions || []).map((q) => ({
-              id: q.id,
-              question: q.question,
-              q_type: q.q_type,
-              options: q.options_json ? JSON.parse(q.options_json) : [],
-              correct: q.correct,
-              explanation: q.explanation,
-            })),
-          }
-        : null,
-    };
+
+    console.log("[API Get Module Quiz] moduleId:", moduleId);
+    console.log("[API Get Module Quiz] quizRow:", JSON.stringify(quizRow));
+    console.log("[API Get Module Quiz] quizError:", quizError);
+
+    if (quizRow) {
+      console.log(
+        "[API Get Module Quiz] Querying questions with quiz_id:",
+        quizRow.id
+      );
+
+      // Try direct query without filters first to test RLS
+      const { data: allQuestions, error: allError } = await supabaseAdmin
+        .from("module_quiz_questions")
+        .select("id, quiz_id");
+      console.log(
+        "[API Get Module Quiz] ALL questions in table:",
+        JSON.stringify(allQuestions)
+      );
+      console.log("[API Get Module Quiz] ALL questions error:", allError);
+
+      const { data: questions, error: questionsError } = await supabaseAdmin
+        .from("module_quiz_questions")
+        .select("id, question, q_type, options_json, correct, explanation")
+        .eq("quiz_id", quizRow.id);
+
+      console.log(
+        "[API Get Module Quiz] questions count:",
+        questions?.length || 0
+      );
+      console.log(
+        "[API Get Module Quiz] questions:",
+        JSON.stringify(questions)
+      );
+      console.log("[API Get Module Quiz] questionsError:", questionsError);
+
+      return {
+        ...mod,
+        quiz: {
+          ...quizRow,
+          questions: (questions || []).map((q) => ({
+            id: q.id,
+            question: q.question,
+            q_type: q.q_type,
+            options: q.options_json ? JSON.parse(q.options_json) : [],
+            correct: q.correct,
+            explanation: q.explanation,
+          })),
+        },
+      };
+    }
+
+    return { ...mod, quiz: null };
   }
   if (mod.module_kind === "tugas") {
     const { data: assignRow } = await supabaseAdmin
@@ -212,7 +243,55 @@ export async function PATCH(
       }
     }
     if (existing.module_kind === "materi" && body.content) {
-      // simple text content update not implemented; skip
+      // Update module_contents table
+      const contentUpdate: Record<string, unknown> = {};
+      if (typeof body.content === "string") {
+        // If content is JSON string, parse it
+        try {
+          const parsed = JSON.parse(body.content);
+          if (parsed.type) contentUpdate.content_type = parsed.type;
+          if (parsed.url !== undefined) contentUpdate.url = parsed.url;
+          if (parsed.text !== undefined)
+            contentUpdate.text_content = parsed.text;
+        } catch {
+          // If not JSON, treat as text content
+          contentUpdate.text_content = body.content;
+        }
+      } else if (typeof body.content === "object") {
+        // Direct object
+        if (body.content.type) contentUpdate.content_type = body.content.type;
+        if (body.content.url !== undefined)
+          contentUpdate.url = body.content.url;
+        if (body.content.text !== undefined)
+          contentUpdate.text_content = body.content.text;
+      }
+
+      if (Object.keys(contentUpdate).length) {
+        // Check if content row exists
+        const { data: existingContent } = await supabaseAdmin
+          .from("module_contents")
+          .select("id")
+          .eq("module_id", existing.id)
+          .maybeSingle();
+
+        if (existingContent) {
+          // Update existing
+          const { error: contentErr } = await supabaseAdmin
+            .from("module_contents")
+            .update(contentUpdate)
+            .eq("module_id", existing.id);
+          if (contentErr) throw contentErr;
+        } else {
+          // Insert new
+          const { error: insertErr } = await supabaseAdmin
+            .from("module_contents")
+            .insert({
+              module_id: existing.id,
+              ...contentUpdate,
+            });
+          if (insertErr) throw insertErr;
+        }
+      }
     }
     if (existing.module_kind === "quiz" && body.quiz) {
       const q = body.quiz;

@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../../../../lib/supabaseServer";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { sendCertificateEmail } from "../../../../lib/mailer";
 
 export const runtime = "nodejs";
 
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     // Get user and course information
     const { data: user, error: userError } = await supabaseAdmin
       .from("users")
-      .select("full_name")
+      .select("full_name, email")
       .eq("id", userId)
       .single();
 
@@ -210,6 +211,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Kirim email sertifikat setelah berhasil generate
+    try {
+      await sendCertificateEmail({
+        to: user.email,
+        fullName: user.full_name,
+        courseTitle: course.title,
+        certificateUrl,
+        isRegenerate: !!existingCert, // true jika sudah ada sertifikat sebelumnya
+      });
+      console.log("[certificates] Email sertifikat terkirim ke:", user.email);
+    } catch (emailErr) {
+      // Jangan fail request jika email gagal
+      console.error("[certificates] Gagal kirim email sertifikat:", emailErr);
+    }
+
     return NextResponse.json({
       success: true,
       certificateUrl,
@@ -254,6 +270,8 @@ export async function GET(req: NextRequest) {
 
     // If courseId is provided, return specific certificate
     if (courseId) {
+      const sendEmail = searchParams.get("sendEmail") === "true"; // Query param untuk kirim email
+
       const { data: certificate, error } = await supabaseAdmin
         .from("certificates")
         .select("id, certificate_url, issued_date")
@@ -274,6 +292,43 @@ export async function GET(req: NextRequest) {
           certificate: null,
           message: "No certificate found",
         });
+      }
+
+      // Kirim email jika diminta
+      if (sendEmail) {
+        try {
+          // Ambil user dan course info
+          const { data: user } = await supabaseAdmin
+            .from("users")
+            .select("email, full_name")
+            .eq("id", userId)
+            .single();
+
+          const { data: course } = await supabaseAdmin
+            .from("courses")
+            .select("title")
+            .eq("id", courseId)
+            .single();
+
+          if (user && course) {
+            await sendCertificateEmail({
+              to: user.email,
+              fullName: user.full_name,
+              courseTitle: course.title,
+              certificateUrl: certificate.certificate_url,
+              isRegenerate: false,
+            });
+            console.log(
+              "[certificates] Email sertifikat terkirim (download) ke:",
+              user.email
+            );
+          }
+        } catch (emailErr) {
+          console.error(
+            "[certificates] Gagal kirim email saat download:",
+            emailErr
+          );
+        }
       }
 
       return NextResponse.json({

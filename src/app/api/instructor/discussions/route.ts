@@ -184,11 +184,11 @@ export async function POST(req: Request) {
         const isVideo = /^video\//i.test(ct);
         if (!isImage && !isVideo) continue;
         const ext = (ct.split("/").pop() || "bin").toLowerCase();
-        const objectPath = `discussions/${postId}/${Date.now()}-${Math.random()
+        const objectPath = `${postId}/${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage
-          .from("lessons-content")
+          .from("discussion")
           .upload(objectPath, file, {
             cacheControl: "3600",
             upsert: false,
@@ -203,7 +203,7 @@ export async function POST(req: Request) {
           );
         }
         const { data: urlData } = supabase.storage
-          .from("lessons-content")
+          .from("discussion")
           .getPublicUrl(objectPath);
         uploaded.push({
           id: globalThis.crypto?.randomUUID?.() || `med-${Date.now()}`,

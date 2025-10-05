@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     let query = supabaseAdmin
       .from("courses")
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, created_at, updated_at, users:instructor_id(full_name)",
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, points, created_at, updated_at, users:instructor_id(full_name)",
         { count: "exact" }
       )
       .order("created_at", { ascending: false });
@@ -135,6 +135,7 @@ export async function POST(req: NextRequest) {
     const price = Number(form.get("price") || 0);
     const total_modules = Number(form.get("total_modules") || 0);
     const duration_min = Number(form.get("duration_min") || 0);
+    const points = Number(form.get("points") || 0);
     const is_published = String(form.get("is_published") || "false") === "true";
     const file = form.get("file");
 
@@ -223,6 +224,7 @@ export async function POST(req: NextRequest) {
       duration_min: Number(duration_min),
       level,
       total_modules: Number(total_modules),
+      points: Number(points),
       enrolled_count: 0,
       rating: 0,
       is_published: Boolean(is_published),
@@ -232,7 +234,7 @@ export async function POST(req: NextRequest) {
       .from("courses")
       .insert(insertPayload)
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, created_at, updated_at"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, points, enrolled_count, rating, is_published, created_at, updated_at"
       )
       .single();
     if (error) {
@@ -281,6 +283,7 @@ export async function PATCH(req: NextRequest) {
       const price = form.get("price");
       const total_modules = form.get("total_modules");
       const duration_min = form.get("duration_min");
+      const points = form.get("points");
       const is_published = form.get("is_published");
       const instructor_id = String(form.get("instructor_id") || "").trim();
       const file = form.get("file");
@@ -292,6 +295,7 @@ export async function PATCH(req: NextRequest) {
       if (price !== null) allowed.price = Number(price);
       if (total_modules !== null) allowed.total_modules = Number(total_modules);
       if (duration_min !== null) allowed.duration_min = Number(duration_min);
+      if (points !== null) allowed.points = Number(points);
       if (is_published !== null)
         allowed.is_published = String(is_published) === "true";
       if (instructor_id) {
@@ -358,6 +362,7 @@ export async function PATCH(req: NextRequest) {
         "level",
         "total_modules",
         "duration_min",
+        "points",
         "is_published",
         "thumbnail",
         "instructor_id",
@@ -415,7 +420,7 @@ export async function PATCH(req: NextRequest) {
       .update(allowed)
       .eq("id", id)
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, created_at, updated_at"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, points, enrolled_count, rating, is_published, created_at, updated_at"
       )
       .maybeSingle();
     if (error) {

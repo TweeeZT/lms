@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/supabaseServer";
+import { sendPurchaseResultEmail } from "../../../../lib/mailer";
 import crypto from "crypto";
+
+export const runtime = "nodejs";
 
 // Xendit invoice webhook
 // Docs: https://docs.xendit.co/api-reference/#invoices
@@ -138,11 +141,39 @@ export async function POST(req: NextRequest) {
   if (!existingTx) {
     console.log("no existing transaction, creating new one");
     try {
+      // If missing payer_name we'll attempt to derive from users table after parsing external id
+      let derivedUserName: string | null = payload.payer_name || null;
+      if (!derivedUserName && parsedUser) {
+        try {
+          const { data: uMeta } = await supabaseAdmin
+            .from("users")
+            .select("full_name")
+            .eq("id", parsedUser)
+            .maybeSingle();
+          if (uMeta?.full_name) derivedUserName = uMeta.full_name;
+        } catch {}
+      }
+      // Ensure students row exists before inserting (FK constraint)
+      if (parsedUser) {
+        try {
+          const studRes = await supabaseAdmin
+            .from("students")
+            .upsert(
+              { user_id: parsedUser, points: 0, coins: 0 },
+              { onConflict: "user_id" }
+            );
+          if (studRes.error) {
+            console.error("webhook students upsert failed", studRes.error);
+          }
+        } catch (e) {
+          console.error("webhook students upsert exception", e);
+        }
+      }
       const insertRes = await supabaseAdmin.from("transactions").insert({
         id: invoiceId,
         date: new Date().toISOString(),
         user_id: parsedUser,
-        user_name: payload.payer_name || null,
+        user_name: derivedUserName,
         course_id: parsedCourse,
         course_title: courseMeta.title || null,
         amount: payload.amount || 0,
@@ -194,7 +225,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // If paid: auto-enroll (only if not yet enrolled)
+  // If paid: auto-enroll (only if not yet enrolled) + kirim email sukses (best-effort)
   if (internalStatus === "completed") {
     console.log("status is completed, processing enrollment");
     let courseId: string | undefined = existingTx?.course_id || undefined;
@@ -212,6 +243,28 @@ export async function POST(req: NextRequest) {
     console.log("enrollment data - userId:", userId, "course:", course);
 
     if (userId && course) {
+      // Ambil meta user + course untuk email (non-blocking error)
+      let userMeta: { email?: string | null; full_name?: string | null } = {};
+      let courseTitle: string | null = null;
+      try {
+        const [{ data: u }, { data: c }] = await Promise.all([
+          supabaseAdmin
+            .from("users")
+            .select("email,full_name")
+            .eq("id", userId)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("courses")
+            .select("title")
+            .eq("id", course)
+            .maybeSingle(),
+        ]);
+        if (u) userMeta = u;
+        if (c) courseTitle = c.title || null;
+      } catch (e) {
+        console.log("email meta fetch failed", e);
+      }
+
       // check existing enrollment
       try {
         const { data: existing, error: enrollFetchErr } = await supabaseAdmin
@@ -287,6 +340,17 @@ export async function POST(req: NextRequest) {
         }
       } catch (e) {
         console.error("webhook user_progress insert failed", e);
+      }
+
+      // Kirim email sukses (tidak blokir proses)
+      if (userMeta.email && courseTitle) {
+        sendPurchaseResultEmail({
+          to: userMeta.email,
+          fullName: userMeta.full_name || "User",
+          courseTitle: courseTitle,
+          amount: payload.amount || 0,
+          status: "completed",
+        }).catch((e) => console.log("send purchase email failed", e));
       }
     } else {
       console.log("missing userId or course for enrollment:", {

@@ -602,7 +602,7 @@ export default function AdminUsersPage() {
                             <IconPencil size={14} />
                           </ActionIcon>
                         </Tooltip>
-                        <Tooltip label="Hapus" withArrow>
+                        {/* <Tooltip label="Hapus" withArrow>
                           <ActionIcon
                             variant="light"
                             size="sm"
@@ -612,7 +612,7 @@ export default function AdminUsersPage() {
                           >
                             <IconTrash size={14} />
                           </ActionIcon>
-                        </Tooltip>
+                        </Tooltip> */}
                       </Group>
                     </Table.Td>
                   </Table.Tr>

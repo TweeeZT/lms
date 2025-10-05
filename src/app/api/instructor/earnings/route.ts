@@ -119,11 +119,22 @@ export async function GET(req: Request) {
       net: Number(r.net_revenue || 0),
     }));
 
-    const totals = trend.reduce(
+    // Calculate totals from transactions with instructors_id filter
+    // First get all completed transactions for this instructor regardless of date filter
+    const { data: allTrx } = await supabase
+      .from("transactions")
+      .select("amount, status")
+      .eq("instructors_id", instructorId)
+      .eq("status", "completed");
+
+    const totals = (allTrx || []).reduce(
       (a, x) => {
-        a.gross += x.gross;
-        a.commission += x.commission;
-        a.net += x.net;
+        const gross = Number(x.amount || 0);
+        const commission = Math.round((gross * commissionPercent) / 100);
+        const net = gross - commission;
+        a.gross += gross;
+        a.commission += commission;
+        a.net += net;
         return a;
       },
       { gross: 0, commission: 0, net: 0 }

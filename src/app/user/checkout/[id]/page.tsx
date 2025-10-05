@@ -14,7 +14,10 @@ import {
   Image,
   Alert,
   Badge,
+  Modal,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { IconArrowLeft } from "@tabler/icons-react";
 
 export default function CheckoutCoursePage() {
   const { id } = useParams<{ id: string }>();
@@ -35,6 +38,7 @@ export default function CheckoutCoursePage() {
   const [course, setCourse] = useState<CheckoutCourse | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -63,6 +67,48 @@ export default function CheckoutCoursePage() {
       router.push("/login");
       return;
     }
+
+    // Check if free course
+    const price = course?.price || 0;
+    if (price === 0) {
+      // Handle free course - create transaction directly and enroll
+      setCreatingInvoice(true);
+      setInvoiceError(null);
+      try {
+        const res = await fetch("/api/user/checkout/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            courseId: id,
+            isFree: true,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Gagal mendaftar kursus gratis");
+        }
+
+        notifications.show({
+          color: "green",
+          title: "Berhasil!",
+          message: "Anda berhasil terdaftar di kursus gratis ini",
+        });
+
+        // Redirect to success page
+        router.push(`/success`);
+      } catch (e) {
+        setInvoiceError(
+          e instanceof Error ? e.message : "Gagal mendaftar kursus"
+        );
+      } finally {
+        setCreatingInvoice(false);
+        setConfirmOpen(false);
+      }
+      return;
+    }
+
+    // Handle paid course with Xendit
     setCreatingInvoice(true);
     setInvoiceError(null);
     try {
@@ -87,11 +133,45 @@ export default function CheckoutCoursePage() {
       setInvoiceError(
         e instanceof Error ? e.message : "Gagal memulai pembayaran"
       );
+    } finally {
       setCreatingInvoice(false);
+      setConfirmOpen(false);
     }
   };
+
+  // Helper function to translate level to Indonesian
+  const getLevelIndonesia = (level: string | null | undefined) => {
+    if (!level) return "";
+    const levelMap: Record<string, string> = {
+      beginner: "Pemula",
+      intermediate: "Menengah",
+      advanced: "Lanjutan",
+    };
+    return levelMap[level.toLowerCase()] || level;
+  };
+
+  // Helper function to translate category
+  const getCategoryDisplay = (category: string | null | undefined) => {
+    if (!category) return "";
+    const categoryMap: Record<string, string> = {
+      scratch: "Scratch",
+      roblox: "Roblox",
+    };
+    return categoryMap[category.toLowerCase()] || category;
+  };
+
   return (
     <Container size="md" py="lg" style={{ position: "relative" }}>
+      {/* Back button */}
+      <Button
+        variant="subtle"
+        leftSection={<IconArrowLeft size={18} />}
+        onClick={() => router.push("/user/explore")}
+        mb="md"
+        style={{ color: "var(--primary-color)" }}
+      >
+        Kembali ke Explore
+      </Button>
       {loading && (
         <Stack>
           <Skeleton height={220} radius="lg" />
@@ -186,12 +266,12 @@ export default function CheckoutCoursePage() {
                           course.category === "scratch" ? "orange" : "cyan"
                         }
                       >
-                        {course.category}
+                        {getCategoryDisplay(course.category)}
                       </Badge>
                     )}
                     {course.level && (
                       <Badge variant="outline" color="blue">
-                        {course.level}
+                        {getLevelIndonesia(course.level)}
                       </Badge>
                     )}
                     {typeof course.totalModules === "number" && (
@@ -245,60 +325,65 @@ export default function CheckoutCoursePage() {
               className="checkout-desktop-bar"
             >
               <Text fw={800} size="xl" c="green" style={{ letterSpacing: 0.5 }}>
-                Rp {(course.price || 0).toLocaleString()}
+                {(course.price || 0) === 0
+                  ? "GRATIS"
+                  : `Rp ${(course.price || 0).toLocaleString()}`}
               </Text>
               <Button
                 className="btn-primary"
                 loading={creatingInvoice}
-                onClick={startPayment}
+                onClick={() => setConfirmOpen(true)}
                 size="md"
                 radius="md"
                 style={{ minWidth: 180 }}
               >
-                Bayar Sekarang
+                {(course.price || 0) === 0
+                  ? "Daftar Sekarang"
+                  : "Bayar Sekarang"}
               </Button>
             </Group>
           </Stack>
         </Card>
       )}
 
-      {/* Sticky Mobile Bottom Bar */}
-      {!loading && course && (
-        <div
-          className="checkout-price-bar"
-          style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: "none",
-            padding: "12px 16px",
-            background: "rgba(255,255,255,0.94)",
-            backdropFilter: "blur(8px)",
-            borderTop: "1px solid var(--border-color)",
-            zIndex: 1200,
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <Text fw={700} size="lg" c="green" style={{ lineHeight: 1 }}>
-              Rp {(course.price || 0).toLocaleString()}
-            </Text>
-            <Text size="xs" c="dimmed">
-              Termasuk semua modul
-            </Text>
-          </div>
-          <Button
-            className="btn-primary"
-            loading={creatingInvoice}
-            onClick={startPayment}
-            size="sm"
-            radius="md"
-            style={{ minWidth: 140 }}
-          >
-            Bayar
-          </Button>
-        </div>
-      )}
+      {/* Confirmation Modal */}
+      <Modal
+        opened={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title={
+          <Text fw={700} size="lg">
+            Konfirmasi{" "}
+            {(course?.price || 0) === 0 ? "Pendaftaran" : "Pembayaran"}
+          </Text>
+        }
+        centered
+      >
+        <Stack gap="md">
+          <Text>
+            {(course?.price || 0) === 0
+              ? "Anda akan terdaftar di kursus gratis ini. Lanjutkan?"
+              : `Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi sebesar Rp ${(
+                  course?.price || 0
+                ).toLocaleString()}. Lanjutkan?`}
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              onClick={() => setConfirmOpen(false)}
+              disabled={creatingInvoice}
+            >
+              Batal
+            </Button>
+            <Button
+              className="btn-primary"
+              onClick={startPayment}
+              loading={creatingInvoice}
+            >
+              {(course?.price || 0) === 0 ? "Ya, Daftar" : "Ya, Bayar"}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Container>
   );
 }

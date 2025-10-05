@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Paper,
@@ -64,6 +64,9 @@ export function LoginForm() {
   const router = useRouter();
   const { login, loading } = useAuth();
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [providerLoading, setProviderLoading] = useState<
+    "google" | "github" | null
+  >(null);
 
   const {
     register,
@@ -124,9 +127,18 @@ export function LoginForm() {
   };
 
   // OAuth login-only: If user exists, proceed; if new, block and sign out
+  // Tentukan path redirect berdasarkan role
+  const getRedirectPath = (role?: string | null) => {
+    if (role === "admin") return "/admin/dashboard";
+    if (role === "instructor") return "/instructor/dashboard";
+    if (role === "user") return "/user/dashboard";
+    return "/";
+  };
+
   const signInWithProvider = async (provider: "google" | "github") => {
     try {
       setLoginError(null);
+      setProviderLoading(provider);
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -138,19 +150,33 @@ export function LoginForm() {
         },
       });
       if (error) throw error;
+      // Poll ringan untuk menunggu session (kadang delay setelah redirect)
+      let userId: string | undefined;
+      for (let i = 0; i < 10; i++) {
+        // up to ~2s total
+        const session = await supabase.auth.getSession();
+        userId = session.data.session?.user?.id;
+        if (userId) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      if (!userId) {
+        setLoginError("Gagal mendapatkan sesi OAuth. Coba lagi.");
+        return;
+      }
 
-      // After redirect back, session should be present; guard via server
-      const session = await supabase.auth.getSession();
-      const userId = session.data.session?.user?.id;
-      if (!userId) return; // waiting for redirect
-
+      // Panggil guard untuk memastikan profil ada
       const res = await fetch(`/api/auth/guard?userId=${userId}`);
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
+        // Jika not_found -> user belum terdaftar (kebijakan login-only)
+        if (json?.error === "not_found") {
+          setLoginError(
+            "Akun OAuth belum terdaftar di sistem. Silakan daftar manual dengan email."
+          );
+        } else {
+          setLoginError(json?.error || "Login OAuth gagal");
+        }
         await supabase.auth.signOut();
-        setLoginError(
-          "Akun tidak ditemukan. Silakan gunakan akun yang sudah terdaftar."
-        );
         return;
       }
 
@@ -191,17 +217,70 @@ export function LoginForm() {
         )}; Path=/; Max-Age=${maxAge}`;
       } catch {}
 
-      if (mapped.role === "admin") router.push("/admin/dashboard");
-      else if (mapped.role === "instructor")
-        router.push("/instructor/dashboard");
-      else if (mapped.role === "user") router.push("/user/dashboard");
-      else router.push("/");
+      router.push(getRedirectPath(mapped.role));
     } catch (e: unknown) {
       setLoginError(
         e instanceof Error ? e.message : "Gagal login dengan provider"
       );
+    } finally {
+      setProviderLoading(null);
     }
   };
+
+  // Auto finalize jika user kembali dari redirect OAuth dan sudah punya session tapi belum terset local storage
+  useEffect(() => {
+    let cancelled = false;
+    const finalize = async () => {
+      try {
+        // Hindari override kalau sudah ada userRole di localStorage
+        if (typeof window === "undefined") return;
+        const existingRole = localStorage.getItem("userRole");
+        if (existingRole) return; // sudah selesai sebelumnya
+        const session = await supabase.auth.getSession();
+        const userId = session.data.session?.user?.id;
+        if (!userId) return;
+        const res = await fetch(`/api/auth/guard?userId=${userId}`);
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.success) {
+          if (json?.error === "not_found") {
+            await supabase.auth.signOut();
+            if (!cancelled)
+              setLoginError(
+                "Akun OAuth belum terdaftar. Silakan daftar manual."
+              );
+          }
+          return;
+        }
+        if (cancelled) return;
+        const mapped = json.user;
+        localStorage.setItem(
+          "afterschola_user",
+          JSON.stringify({
+            id: mapped.id,
+            email: mapped.email,
+            username: mapped.username,
+            fullName: mapped.fullName,
+            role: mapped.role,
+            avatar: mapped.avatar,
+            phone: mapped.phone,
+            bio: mapped.bio,
+            level: 1,
+            points: 0,
+            balance: 0,
+            createdAt: mapped.createdAt,
+            updatedAt: mapped.updatedAt,
+          })
+        );
+        localStorage.setItem("userRole", mapped.role || "user");
+        // Redirect sesuai role
+        router.push(getRedirectPath(mapped.role));
+      } catch {}
+    };
+    finalize();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <Paper
@@ -239,6 +318,7 @@ export function LoginForm() {
               type="button"
               variant="default"
               leftSection={<IconBrandGoogle size={16} />}
+              loading={providerLoading === "google"}
               onClick={() => signInWithProvider("google")}
             >
               Google
@@ -247,6 +327,7 @@ export function LoginForm() {
               type="button"
               variant="default"
               leftSection={<IconBrandGithub size={16} />}
+              loading={providerLoading === "github"}
               onClick={() => signInWithProvider("github")}
             >
               GitHub

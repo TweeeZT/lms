@@ -56,6 +56,7 @@ export default function AdminCoursesPage() {
     enrolled_count?: number | null;
     rating?: number | null;
     is_published?: boolean | null;
+    points?: number | null;
     created_at: string;
     updated_at?: string;
   };
@@ -78,6 +79,7 @@ export default function AdminCoursesPage() {
     description: "",
     category: "scratch" as "scratch" | "roblox",
     durationMin: 0,
+    points: 0,
   });
   const [errors, setErrors] = useState<{ [k: string]: string | undefined }>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -97,6 +99,7 @@ export default function AdminCoursesPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(6);
   const [total, setTotal] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
 
   const myCourses: CourseRow[] = courses;
   const filteredCourses = myCourses; // server filtered
@@ -113,6 +116,7 @@ export default function AdminCoursesPage() {
       description: "",
       category: "scratch",
       durationMin: 0,
+      points: 0,
     });
     setEditingId(null);
     setErrors({});
@@ -142,6 +146,7 @@ export default function AdminCoursesPage() {
       description: c.description || "",
       category: (c.category as "scratch" | "roblox") || "scratch",
       durationMin: Number(c.duration_min || 0),
+      points: Number(c.points || 0),
     });
     setSelectedFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -241,9 +246,22 @@ export default function AdminCoursesPage() {
     }
   }, [user?.id, search, statusFilter, page, limit, instructorFilter]);
 
+  const fetchTotalStudents = useCallback(async () => {
+    try {
+      const res = await fetch("/api/user/stats/count");
+      const json = await res.json();
+      if (json.success) {
+        setTotalStudents(json.total || 0);
+      }
+    } catch (e) {
+      console.error("Failed to fetch total students:", e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchCourses();
-  }, [fetchCourses]);
+    fetchTotalStudents();
+  }, [fetchCourses, fetchTotalStudents]);
   useEffect(() => {
     const t = setTimeout(() => fetchCourses(), 300);
     return () => clearTimeout(t);
@@ -288,6 +306,7 @@ export default function AdminCoursesPage() {
           fd.append("description", form.description);
           fd.append("category", form.category);
           fd.append("duration_min", String(form.durationMin));
+          fd.append("points", String(form.points ?? 0));
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
           res = await fetch(
@@ -307,6 +326,7 @@ export default function AdminCoursesPage() {
             description: form.description,
             category: form.category,
             duration_min: form.durationMin,
+            points: form.points,
           };
           res = await fetch(
             `/api/admin/courses?userId=${encodeURIComponent(user.id)}`,
@@ -337,6 +357,7 @@ export default function AdminCoursesPage() {
         fd.append("description", form.description);
         fd.append("category", form.category);
         fd.append("duration_min", String(form.durationMin));
+        fd.append("points", String(form.points ?? 0));
         if (selectedFile) {
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
@@ -457,10 +478,6 @@ export default function AdminCoursesPage() {
     );
   };
 
-  const totalStudents = myCourses.reduce(
-    (sum: number, c: CourseRow) => sum + (c.enrolled_count ?? 0),
-    0
-  );
   const avgRating = myCourses.length
     ? (
         myCourses.reduce((s: number, c: CourseRow) => s + (c.rating ?? 0), 0) /
@@ -873,6 +890,15 @@ export default function AdminCoursesPage() {
             min={0}
             withAsterisk
             error={errors.durationMin}
+            disabled={saving}
+          />
+          <NumberInput
+            label="Poin Reward"
+            value={form.points}
+            onChange={(v) => setForm({ ...form, points: Number(v || 0) })}
+            min={0}
+            description="Poin yang didapat siswa setelah menyelesaikan kursus"
+            withAsterisk
             disabled={saving}
           />
           <Group justify="space-between" wrap="nowrap">

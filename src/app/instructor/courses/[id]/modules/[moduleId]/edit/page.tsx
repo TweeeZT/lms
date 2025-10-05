@@ -13,6 +13,7 @@ import {
   Radio,
   FileInput,
   NumberInput,
+  Alert,
 } from "@mantine/core";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -48,9 +49,9 @@ export default function EditModulePage() {
   const [error, setError] = useState<string | null>(null);
 
   // Materi
-  const [contentType, setContentType] = useState<
-    "video" | "pdf" | "ppt" | "image" | "link" | "file" | "text"
-  >("link");
+  const [contentType, setContentType] = useState<"link" | "file" | "text">(
+    "link"
+  );
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [textContent, setTextContent] = useState("");
@@ -324,6 +325,11 @@ export default function EditModulePage() {
 
           <form onSubmit={onSubmit}>
             <Stack gap="md">
+              <Alert color="blue" title="Perhatian">
+                Jenis modul ({moduleKind}) tidak dapat diubah saat edit. Jika
+                perlu mengubah jenis modul, silakan buat modul baru.
+              </Alert>
+
               <TextInput
                 label="Judul Modul"
                 value={title}
@@ -357,15 +363,7 @@ export default function EditModulePage() {
                       label="Tipe Konten"
                       value={contentType}
                       onChange={(v: string) => {
-                        if (
-                          v === "video" ||
-                          v === "pdf" ||
-                          v === "ppt" ||
-                          v === "image" ||
-                          v === "link" ||
-                          v === "file" ||
-                          v === "text"
-                        )
+                        if (v === "link" || v === "file" || v === "text")
                           setContentType(v);
                       }}
                     >
@@ -387,9 +385,22 @@ export default function EditModulePage() {
                     ) : contentType === "text" ? (
                       <Textarea
                         label="Konten Teks"
+                        description={`${textContent.length}/65535 karakter`}
                         value={textContent}
-                        onChange={(e) => setTextContent(e.currentTarget.value)}
-                        minRows={4}
+                        onChange={(e) => {
+                          const val = e.currentTarget.value;
+                          if (val.length <= 65535) {
+                            setTextContent(val);
+                          }
+                        }}
+                        minRows={8}
+                        maxRows={20}
+                        styles={{
+                          input: {
+                            fontFamily: "monospace",
+                            fontSize: "14px",
+                          },
+                        }}
                       />
                     ) : (
                       <TextInput

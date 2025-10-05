@@ -88,9 +88,14 @@ export async function PATCH(
   try {
     const body = (await req.json()) as {
       instructorId?: string;
-      action?: "like" | "unlike";
+      action?: "like" | "unlike" | "update";
+      title?: string;
+      content?: string;
+      tags?: string[];
     };
-    const { instructorId, action } = body;
+    const { instructorId, action, title, content, tags } = body;
+    const postId = params.id;
+
     if (!instructorId || !action) {
       return NextResponse.json(
         { success: false, error: "instructorId dan action wajib" },
@@ -108,27 +113,125 @@ export async function PATCH(
         { success: false, error: "Unauthorized" },
         { status: 403 }
       );
-    const postId = params.id;
-    // naive like counter (no per-user like table implemented here)
-    const diff = action === "like" ? 1 : -1;
-    const { error } = await supabase.rpc("increment_likes", {
-      p_post_id: postId,
-      p_diff: diff,
-    });
-    if (error) {
-      // Fallback if RPC missing: fetch current, then update
-      const { data: cur } = await supabase
-        .from("discussion_posts")
-        .select("likes")
-        .eq("id", postId)
+
+    // LIKE / UNLIKE with anti-spam delay
+    if (action === "like" || action === "unlike") {
+      // Check for existing like record
+      const { data: existingLike } = await supabase
+        .from("discussion_likes")
+        .select("id, liked, update_at")
+        .eq("user_id", instructorId)
+        .eq("discussion_id", postId)
         .maybeSingle();
-      const newLikes = Math.max(0, (cur?.likes ?? 0) + diff);
+
+      const now = new Date();
+
+      // Anti-spam: jika baru update < 2 detik, tolak
+      if (existingLike && existingLike.update_at) {
+        const lastUpdate = new Date(existingLike.update_at);
+        const diffMs = now.getTime() - lastUpdate.getTime();
+        if (diffMs < 2000) {
+          // 2 detik delay
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Mohon tunggu sebentar sebelum like/unlike lagi",
+            },
+            { status: 429 } // Too Many Requests
+          );
+        }
+      }
+
+      const newLikedState = action === "like";
+
+      if (existingLike) {
+        // Update existing record
+        await supabase
+          .from("discussion_likes")
+          .update({
+            liked: newLikedState,
+            update_at: now.toISOString(),
+          })
+          .eq("id", existingLike.id);
+      } else {
+        // Create new record
+        await supabase.from("discussion_likes").insert({
+          user_id: instructorId,
+          discussion_id: postId,
+          liked: newLikedState,
+          update_at: now.toISOString(),
+        });
+      }
+
+      // Update likes count in discussion_posts
+      const { data: allLikes } = await supabase
+        .from("discussion_likes")
+        .select("liked")
+        .eq("discussion_id", postId);
+
+      const likeCount = (allLikes || []).filter((l) => l.liked === true).length;
+
       await supabase
         .from("discussion_posts")
-        .update({ likes: newLikes })
+        .update({ likes: likeCount })
         .eq("id", postId);
+
+      return NextResponse.json({ success: true, likes: likeCount });
     }
-    return NextResponse.json({ success: true });
+
+    // UPDATE POST (title, content, tags)
+    if (action === "update") {
+      const { data: post } = await supabase
+        .from("discussion_posts")
+        .select("id, user_id")
+        .eq("id", postId)
+        .maybeSingle();
+
+      if (!post)
+        return NextResponse.json(
+          { success: false, error: "Post tidak ditemukan" },
+          { status: 404 }
+        );
+
+      if (post.user_id !== instructorId) {
+        return NextResponse.json(
+          { success: false, error: "Tidak boleh mengedit posting orang lain" },
+          { status: 403 }
+        );
+      }
+
+      if (!title || !content) {
+        return NextResponse.json(
+          { success: false, error: "title & content wajib" },
+          { status: 400 }
+        );
+      }
+
+      const now = new Date();
+
+      const { error: upErr } = await supabase
+        .from("discussion_posts")
+        .update({
+          title: title.trim(),
+          content: content.trim(),
+          tags: tags || [],
+          updated_at: now.toISOString(),
+        })
+        .eq("id", postId);
+
+      if (upErr)
+        return NextResponse.json(
+          { success: false, error: upErr.message },
+          { status: 400 }
+        );
+
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json(
+      { success: false, error: "action tidak valid" },
+      { status: 400 }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal update like";
     return NextResponse.json(

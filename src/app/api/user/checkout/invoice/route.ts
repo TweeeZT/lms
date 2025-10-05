@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../lib/supabaseServer";
+
+// Force Node runtime (needed for future email / crypto, avoid edge limitations)
+export const runtime = "nodejs";
 // body: { userId, courseId }
 // Creates a Xendit invoice (mock/simple call placeholder) and inserts pending transaction.
 export async function POST(req: NextRequest) {
@@ -99,6 +102,23 @@ export async function POST(req: NextRequest) {
         },
         { status: invRes.status }
       );
+    }
+
+    // Ensure student row exists (FK on transactions.user_id points to students.user_id)
+    try {
+      if (userId) {
+        const upsertRes = await supabaseAdmin
+          .from("students")
+          .upsert(
+            { user_id: userId, points: 0, coins: 0 },
+            { onConflict: "user_id" }
+          );
+        if (upsertRes.error) {
+          console.error("students upsert (invoice) failed", upsertRes.error);
+        }
+      }
+    } catch (e) {
+      console.error("students upsert (invoice) exception", e);
     }
 
     // Insert pending transaction (id = invoice id)

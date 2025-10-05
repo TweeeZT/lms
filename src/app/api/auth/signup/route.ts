@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { sendWelcomeEmail } from "../../../../lib/mailer";
+
+// Pastikan runtime Node.js (dibutuhkan untuk nodemailer & modul node core)
+export const runtime = "nodejs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
@@ -9,17 +13,23 @@ const supabaseAdmin = createClient(url, serviceRole);
 
 export async function POST(req: Request) {
   try {
-    const { email, password, username, fullName, role, phone, bio } =
-      (await req.json()) as {
-        email?: string;
-        password?: string;
-        username?: string;
-        fullName?: string;
-        role?: "instructor" | "user";
-        phone?: string;
-        bio?: string;
-      };
-    if (!email || !password || !username || !fullName || !role)
+    const {
+      email,
+      password,
+      username,
+      fullName,
+      /* role ignored */ phone,
+      bio,
+    } = (await req.json()) as {
+      email?: string;
+      password?: string;
+      username?: string;
+      fullName?: string;
+      role?: "instructor" | "user"; // will be ignored, always 'user'
+      phone?: string;
+      bio?: string;
+    };
+    if (!email || !password || !username || !fullName)
       return NextResponse.json(
         { success: false, error: "Data tidak lengkap" },
         { status: 400 }
@@ -50,13 +60,14 @@ export async function POST(req: Request) {
         { status: 500 }
       );
 
+    const enforcedRole = "user";
     const { error: profileError } = await supabaseAdmin.from("users").insert([
       {
         id: userId,
         email,
         username,
         full_name: fullName,
-        role: role === "instructor" ? "instructor" : "user",
+        role: enforcedRole,
         phone: phone ?? null,
         bio: bio ?? null,
       },
@@ -67,11 +78,13 @@ export async function POST(req: Request) {
         { status: 400 }
       );
 
-    if (role === "instructor") {
-      await supabaseAdmin.from("instructors").insert({ user_id: userId });
-    } else {
-      await supabaseAdmin.from("students").insert({ user_id: userId });
-    }
+    // Always treat as student
+    await supabaseAdmin.from("students").insert({ user_id: userId });
+
+    // Fire and forget welcome email (do not block response)
+    sendWelcomeEmail({ to: email, fullName, role: enforcedRole }).catch((e) => {
+      console.warn("Failed to send welcome email", e);
+    });
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

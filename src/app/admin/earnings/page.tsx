@@ -37,7 +37,7 @@ import { useAuth } from "../../../hooks/useAuth";
 
 // Added constants for thermal receipt (monospaced 300px style)
 const RECEIPT_INFO = {
-  header: "AFTERSCHOLA",
+  // header: "AFTERSCHOLA",
   // Could map campus/company info; using placeholders derived from landing/user profile
   addressLines: [
     "Jl. Cisaranten Wetan No.167 A, Cisaranten Wetan,",
@@ -45,9 +45,9 @@ const RECEIPT_INFO = {
     "Telp: +62 823-3808-9915",
   ],
   footer: [
-    "Terima kasih telah belajar di",
-    "Afterschola",
-    "Terus tingkatkan skill dan kemampuan Anda!",
+    "Terima kasih atas kepercayaan Anda",
+    "www.afterschola.com",
+    "support@afterschola.com",
   ],
   width: 300,
 };
@@ -193,53 +193,92 @@ function statusLabel(id: string) {
   return id;
 }
 
-// NEW: Thermal receipt printer (simple window.print approach)
 function printThermalReceipt(t: FinanceTransaction) {
-  const w = window.open("", "_blank", "width=400,height=600");
+  const w = window.open("", "_blank", "width=800,height=1000");
   if (!w) return;
+
   const now = new Date();
-  const dateStr = now.toLocaleDateString("id-ID");
-  const timeStr = now
-    .toLocaleTimeString("id-ID", { hour12: false })
-    .replace(/\.\d+$/, "");
-  const line = (text: string = "") => `<div class="ln">${text}</div>`;
-  const hr = `<div class="sep">--------------------------------</div>`;
+  const dateStr = now.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const timeStr = now.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const line = (text = "") => `<div class="ln">${text}</div>`;
+  const hr = `<pre style="margin:0;text-align:center;">------------------------------------------</pre>`;
   const pad = (label: string, value: string) => {
-    const max = 30; // width reference
+    const max = 40;
     const raw = `${label}${value}`;
     return raw.length > max ? raw.slice(0, max) : raw;
   };
-  const html = `<!DOCTYPE html><html><head><title>Struk ${t.id}</title>
-  <style>
-    body { font-family: 'Courier New', monospace; font-size:12px; width:${
-      RECEIPT_INFO.width
-    }px; margin:0 auto; padding:8px; color:#000; }
-    h1 { font-size:14px; text-align:center; margin:0 0 4px; letter-spacing:1px; }
-    .addr, .ftr { text-align:center; white-space:pre-line; }
-    .sep { text-align:center; font-size:12px; }
-    .ln { display:block; }
-    .row { display:flex; justify-content:space-between; }
-    .amt { font-weight:700; }
-    .center { text-align:center; }
-    @media print { body { width:${RECEIPT_INFO.width}px; } }
-  </style></head><body>
-  <h1>${RECEIPT_INFO.header}</h1>
-  <div class="addr">${RECEIPT_INFO.addressLines.join("\n")}</div>
-  ${hr}
-  ${line(pad("ID: ", t.id))}
-  ${line(pad("Tanggal: ", dateStr))}
-  ${line(pad("Waktu: ", timeStr))}
-  ${line(pad("User: ", t.userName))}
-  ${line(pad("Kursus: ", t.courseTitle))}
-  ${line(pad("Metode: ", displayMethod(t.method)))}
-  ${line(pad("Status: ", statusLabel(t.status)))}
-  ${hr}
-  ${line(pad("Jumlah: ", rupiah(t.amount)))}
-  ${hr}
-  <div class="ftr">${RECEIPT_INFO.footer.join("\n")}</div>
-  <div class="center" style="margin-top:6px;font-size:10px;">Dicetak: ${dateStr} ${timeStr}</div>
-  <script>window.print(); window.onafterprint = () => window.close();</script>
-  </body></html>`;
+
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <title>Struk Pembayaran</title>
+    <style>
+      @page {
+        size: A5;
+        margin: 0; /* hilangkan margin bawaan */
+      }
+      body {
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        width: 80mm;
+        margin: 0 auto;
+        padding: 10mm;
+        color: #000;
+      }
+      .logo { text-align: center; margin-bottom: 8px; }
+      .logo img { width: 90px; height: auto; }
+      h1 { font-size: 16px; text-align: center; margin: 6px 0; }
+      .addr, .ftr { text-align: center; white-space: pre-line; margin-bottom: 6px; }
+      .sep {
+  text-align: center;
+  font-size: 12px;
+  margin: 0;
+  line-height: 1;
+}
+      .ln { display: block; }
+      .center { text-align: center; }
+      @media print {
+        header, footer { display: none !important; }
+        body { -webkit-print-color-adjust: exact; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo"><img src="/logo-text.png" alt="Logo" /></div>
+   
+    <div class="addr">${RECEIPT_INFO.addressLines.join("<br>")}</div>
+    ${hr}
+    ${line(pad("ID Transaksi: ", t.id))}
+    ${line(pad("Tanggal: ", dateStr))}
+    ${line(pad("Waktu: ", timeStr))}
+    ${line(pad("Nama: ", t.userName))}
+    ${line(pad("Kursus: ", t.courseTitle))}
+    ${line(pad("Metode: ", displayMethod(t.method)))}
+    ${line(pad("Status: ", statusLabel(t.status)))}
+    ${hr}
+    ${line(pad("Total Bayar: ", rupiah(t.amount)))}
+    ${hr}
+    <div class="ftr">${RECEIPT_INFO.footer.join("<br>")}</div>
+    <div class="center" style="margin-top:16px;font-size:10px;">Dicetak: ${dateStr} ${timeStr}</div>
+    <script>
+      window.onload = () => {
+        window.print();
+        window.onafterprint = () => window.close();
+      };
+    </script>
+  </body>
+  </html>
+  `;
+
   w.document.write(html);
   w.document.close();
 }
@@ -351,7 +390,6 @@ export default function AdminEarningsPage() {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, q, status, method, sortBy, sortDir, page]);
 
   function changeSort(col: SortCol) {

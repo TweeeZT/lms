@@ -39,7 +39,9 @@ export async function GET(
 
   const { data: modules, error: mErr } = await supabaseAdmin
     .from("modules")
-    .select("id,title,description,module_kind,order_index")
+    .select(
+      "id,title,description,module_kind,order_index, module_live_sessions(start_at,duration_min)"
+    )
     .eq("course_id", courseId)
     .eq("is_published", true)
     .order("order_index", { ascending: true });
@@ -98,12 +100,21 @@ export async function GET(
           }
         : null,
     },
-    modules: (modules || []).map((m) => ({
-      id: m.id,
-      title: m.title,
-      description: m.description,
-      kind: m.module_kind,
-      order: m.order_index,
-    })),
+    modules: (modules || []).map((m: Record<string, unknown>) => {
+      // Extract live session data if exists
+      const liveSession = Array.isArray(m.module_live_sessions)
+        ? m.module_live_sessions[0]
+        : m.module_live_sessions;
+
+      return {
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        kind: m.module_kind,
+        order: m.order_index,
+        start_at: liveSession?.start_at || null,
+        duration_min: liveSession?.duration_min || null,
+      };
+    }),
   });
 }

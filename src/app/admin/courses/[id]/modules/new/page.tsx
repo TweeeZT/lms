@@ -58,14 +58,7 @@ export default function AdminNewModulePage() {
   const [error, setError] = useState<string | null>(null);
 
   // Materi content
-  type ContentType =
-    | "link"
-    | "file"
-    | "text"
-    | "video"
-    | "pdf"
-    | "ppt"
-    | "image";
+  type ContentType = "link" | "file" | "text";
   const [contentType, setContentType] = useState<ContentType>("link");
   const [contentUrl, setContentUrl] = useState("");
   const [contentText, setContentText] = useState("");
@@ -76,6 +69,9 @@ export default function AdminNewModulePage() {
   const [passingScore, setPassingScore] = useState<number | "">(70);
   const [timeLimit, setTimeLimit] = useState<number | "">(10);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+
+  // Tugas fields
+  const [tugasInstructions, setTugasInstructions] = useState("");
 
   // Live session (schema tanpa title; gunakan agenda, start_at, join_url, passcode)
   const [liveAgenda, setLiveAgenda] = useState("");
@@ -115,12 +111,6 @@ export default function AdminNewModulePage() {
 
   const handleCreate = async () => {
     if (!adminId) return;
-    if (moduleKind === "live") {
-      if (!liveAgenda.trim() || !liveStartAt || !liveJoinUrl.trim()) {
-        setError("Field wajib: agenda, waktu mulai, link live");
-        return;
-      }
-    }
     setLoading(true);
     setError(null);
     try {
@@ -150,13 +140,38 @@ export default function AdminNewModulePage() {
           order_index: orderIndex ?? 0,
           is_published: isPublished,
         };
-        if (moduleKind === "live") {
-          body.live_agenda = liveAgenda.trim();
-          body.live_start_at = liveStartAt?.toISOString();
-          body.live_join_url = liveJoinUrl.trim();
-          if (livePasscode.trim()) body.live_passcode = livePasscode.trim();
+
+        if (moduleKind === "materi") {
+          body.content = {
+            content_type: contentType,
+            url: contentUrl || undefined,
+            text_content: contentText || undefined,
+          };
+        } else if (moduleKind === "quiz") {
+          body.quiz = {
+            title: quizTitle,
+            passing_score: Number(passingScore || 70),
+            time_limit: Number(timeLimit || 10),
+            questions: questions,
+          };
+        } else if (moduleKind === "tugas") {
+          body.assignment = {
+            instructions: tugasInstructions,
+            due_date: undefined,
+            max_score: 100,
+          };
+        } else if (moduleKind === "live") {
+          body.live = {
+            agenda: liveAgenda.trim(),
+            start_at: liveStartAt?.toISOString(),
+            join_url: liveJoinUrl.trim(),
+            duration_min: 60,
+          };
+          if (livePasscode.trim()) {
+            (body.live as any).passcode = livePasscode.trim();
+          }
         }
-        // quiz/tugas fields unaffected
+
         res = await fetch(
           `/api/admin/courses/${courseId}/modules?userId=${adminId}`,
           {
@@ -203,10 +218,6 @@ export default function AdminNewModulePage() {
                   { value: "link", label: "Link" },
                   { value: "text", label: "Teks" },
                   { value: "file", label: "File" },
-                  { value: "video", label: "Video" },
-                  { value: "pdf", label: "PDF" },
-                  { value: "ppt", label: "PPT" },
-                  { value: "image", label: "Gambar" },
                 ]}
                 value={contentType}
                 onChange={(v) => setContentType((v as ContentType) || "link")}
@@ -223,10 +234,23 @@ export default function AdminNewModulePage() {
               {contentType === "text" && (
                 <Textarea
                   label="Konten Teks"
-                  minRows={4}
+                  description={`${contentText.length}/65535 karakter`}
+                  minRows={8}
+                  maxRows={20}
                   value={contentText}
-                  onChange={(e) => setContentText(e.currentTarget.value)}
+                  onChange={(e) => {
+                    const val = e.currentTarget.value;
+                    if (val.length <= 65535) {
+                      setContentText(val);
+                    }
+                  }}
                   required
+                  styles={{
+                    input: {
+                      fontFamily: "monospace",
+                      fontSize: "14px",
+                    },
+                  }}
                 />
               )}
               {contentType === "file" && (
@@ -237,24 +261,6 @@ export default function AdminNewModulePage() {
                   onChange={setContentFile}
                   required
                 />
-              )}
-              {(["video", "pdf", "ppt", "image"] as ContentType[]).includes(
-                contentType
-              ) && (
-                <>
-                  <FileInput
-                    label={`Upload ${contentType.toUpperCase()}`}
-                    placeholder={`Pilih ${contentType}`}
-                    value={contentFile}
-                    onChange={setContentFile}
-                  />
-                  <TextInput
-                    label="Atau URL (opsional)"
-                    placeholder="https://..."
-                    value={contentUrl}
-                    onChange={(e) => setContentUrl(e.currentTarget.value)}
-                  />
-                </>
               )}
             </Stack>
           </Card>
@@ -340,17 +346,42 @@ export default function AdminNewModulePage() {
                         ))}
                       </SimpleGrid>
                     )}
-                    <TextInput
-                      label={
-                        q.q_type === "multiple-choice"
-                          ? "Jawaban Benar (index)"
-                          : "Jawaban Benar"
-                      }
-                      value={q.correct}
-                      onChange={(e) =>
-                        updateQuestion(qi, { correct: e.currentTarget.value })
-                      }
-                    />
+                    {q.q_type === "multiple-choice" ? (
+                      <NumberInput
+                        label="Jawaban Benar (Nomor Opsi)"
+                        description="Masukkan nomor opsi yang benar (1-4)"
+                        value={Number(q.correct) || 1}
+                        onChange={(v) =>
+                          updateQuestion(qi, { correct: String(v || 1) })
+                        }
+                        min={1}
+                        max={4}
+                        required
+                      />
+                    ) : q.q_type === "true-false" ? (
+                      <Select
+                        label="Jawaban Benar"
+                        data={[
+                          { value: "true", label: "True" },
+                          { value: "false", label: "False" },
+                        ]}
+                        value={q.correct}
+                        onChange={(v) =>
+                          updateQuestion(qi, { correct: v || "true" })
+                        }
+                        required
+                      />
+                    ) : (
+                      <TextInput
+                        label="Jawaban Benar"
+                        description="Masukkan teks jawaban yang benar"
+                        value={q.correct}
+                        onChange={(e) =>
+                          updateQuestion(qi, { correct: e.currentTarget.value })
+                        }
+                        required
+                      />
+                    )}
                     <Textarea
                       label="Penjelasan (opsional)"
                       value={q.explanation || ""}
@@ -428,9 +459,10 @@ export default function AdminNewModulePage() {
             <Stack gap="sm" mt="xs">
               <Textarea
                 label="Deskripsi Tugas"
-                value={description}
-                onChange={(e) => setDescription(e.currentTarget.value)}
+                value={tugasInstructions}
+                onChange={(e) => setTugasInstructions(e.currentTarget.value)}
                 minRows={4}
+                required
               />
             </Stack>
           </Card>
@@ -455,6 +487,11 @@ export default function AdminNewModulePage() {
       )}
       <Card withBorder>
         <Stack>
+          <Alert color="blue" title="Perhatian">
+            Jenis modul hanya dapat dipilih saat membuat modul baru. Saat edit
+            modul nanti, jenis modul tidak dapat diubah.
+          </Alert>
+
           <TextInput
             label="Judul"
             placeholder="Judul modul"
@@ -489,7 +526,7 @@ export default function AdminNewModulePage() {
             onChange={(val) =>
               setOrderIndex(typeof val === "number" ? val : undefined)
             }
-            min={0}
+            min={1}
           />
           <Radio.Group
             name="publish"
@@ -509,11 +546,7 @@ export default function AdminNewModulePage() {
               leftSection={<IconDeviceFloppy size={16} />}
               loading={loading}
               onClick={handleCreate}
-              disabled={
-                !title ||
-                (moduleKind === "live" &&
-                  (!liveAgenda.trim() || !liveStartAt || !liveJoinUrl.trim()))
-              }
+              disabled={!title}
             >
               Simpan
             </Button>

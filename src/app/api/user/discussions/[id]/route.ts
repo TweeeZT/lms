@@ -117,24 +117,67 @@ export async function PATCH(
     const postId = params.id;
 
     if (action === "like" || action === "unlike") {
-      const diff = action === "like" ? 1 : -1;
-      const { error } = await supabase.rpc("increment_likes", {
-        p_post_id: postId,
-        p_diff: diff,
-      });
-      if (error) {
-        const { data: cur } = await supabase
-          .from("discussion_posts")
-          .select("likes")
-          .eq("id", postId)
-          .maybeSingle();
-        const newLikes = Math.max(0, (cur?.likes ?? 0) + diff);
-        await supabase
-          .from("discussion_posts")
-          .update({ likes: newLikes })
-          .eq("id", postId);
+      // Check for existing like record
+      const { data: existingLike } = await supabase
+        .from("discussion_likes")
+        .select("id, liked, update_at")
+        .eq("user_id", userId)
+        .eq("discussion_id", postId)
+        .maybeSingle();
+
+      const now = new Date();
+
+      // Anti-spam: jika baru update < 2 detik, tolak
+      if (existingLike && existingLike.update_at) {
+        const lastUpdate = new Date(existingLike.update_at);
+        const diffMs = now.getTime() - lastUpdate.getTime();
+        if (diffMs < 2000) {
+          // 2 detik delay
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Mohon tunggu sebentar sebelum like/unlike lagi",
+            },
+            { status: 429 } // Too Many Requests
+          );
+        }
       }
-      return NextResponse.json({ success: true });
+
+      const newLikedState = action === "like";
+
+      if (existingLike) {
+        // Update existing record
+        await supabase
+          .from("discussion_likes")
+          .update({
+            liked: newLikedState,
+            update_at: now.toISOString(),
+          })
+          .eq("id", existingLike.id);
+      } else {
+        // Create new record
+        await supabase.from("discussion_likes").insert({
+          user_id: userId,
+          discussion_id: postId,
+          liked: newLikedState,
+          update_at: now.toISOString(),
+        });
+      }
+
+      // Update likes count in discussion_posts
+      const { data: allLikes } = await supabase
+        .from("discussion_likes")
+        .select("liked")
+        .eq("discussion_id", postId);
+
+      const likeCount = (allLikes || []).filter((l) => l.liked === true).length;
+
+      await supabase
+        .from("discussion_posts")
+        .update({ likes: likeCount })
+        .eq("id", postId);
+
+      return NextResponse.json({ success: true, likes: likeCount });
     }
 
     if (action === "update") {
@@ -229,6 +272,11 @@ export async function DELETE(
       .select("id, url")
       .eq("post_id", postId);
 
+    // Delete likes first (foreign key constraint)
+    await supabase
+      .from("discussion_likes")
+      .delete()
+      .eq("discussion_id", postId);
     // Delete comments
     await supabase.from("discussion_comments").delete().eq("post_id", postId);
     // Delete media rows
@@ -236,14 +284,14 @@ export async function DELETE(
     // Delete post
     await supabase.from("discussion_posts").delete().eq("id", postId);
 
-    // Best-effort delete storage objects (derive path after domain /object/public/lessons-content/)
+    // Best-effort delete storage objects (derive path after domain /object/public/discussion/)
     const paths: string[] = [];
     interface MediaRow {
       id: string;
       url: string;
     }
     (media || []).forEach((m: MediaRow) => {
-      const marker = "/object/public/lessons-content/";
+      const marker = "/object/public/discussion/";
       const idx = m.url.indexOf(marker);
       if (idx !== -1) {
         const path = m.url.substring(idx + marker.length);
@@ -251,7 +299,7 @@ export async function DELETE(
       }
     });
     if (paths.length) {
-      await supabase.storage.from("lessons-content").remove(paths);
+      await supabase.storage.from("discussion").remove(paths);
     }
 
     return NextResponse.json({ success: true });

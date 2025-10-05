@@ -224,7 +224,7 @@ export function SignupForm() {
                 />
               </Grid.Col>
 
-              <Grid.Col span={{ base: 12, sm: 6 }}>
+              <Grid.Col span={{ base: 12, sm: 12 }}>
                 <TextInput
                   label="Nomor Telepon"
                   placeholder="+62..."

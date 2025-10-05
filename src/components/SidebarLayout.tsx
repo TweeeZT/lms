@@ -270,6 +270,7 @@ export function DashboardLayout({
               className="hidden md:block"
               style={{ maxWidth: 220 }}
               lineClamp={1}
+              visibleFrom="md"
             >
               {user.fullName}
             </Text>

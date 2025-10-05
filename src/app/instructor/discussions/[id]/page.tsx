@@ -27,6 +27,7 @@ import {
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "../../../../hooks/useAuth";
+import { MediaGrid } from "../../../../components/MediaGrid";
 
 type ApiComment = {
   id: string;
@@ -70,14 +71,22 @@ function relativeTime(date: string | Date) {
   const d = typeof date === "string" ? new Date(date) : date;
   const diff = Date.now() - d.getTime();
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}s`;
   const m = Math.floor(sec / 60);
-  if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
   const dd = Math.floor(h / 24);
-  if (dd < 7) return `${dd}h`;
-  return d.toLocaleDateString("id-ID", { dateStyle: "medium" });
+
+  if (sec < 60) return "baru saja";
+  if (m < 60) return `${m} menit lalu`;
+  if (h < 24) return `${h} jam lalu`;
+
+  return d.toLocaleString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function PostDetailPage() {
@@ -107,7 +116,6 @@ export default function PostDetailPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, postId]);
 
   const toggleLike = async () => {
@@ -294,54 +302,32 @@ export default function PostDetailPage() {
               </Stack>
             </Group>
 
-            {post.media?.length > 0 && (
-              <SimpleGrid
-                cols={
-                  post.media.length === 1 ? 1 : post.media.length === 2 ? 2 : 3
-                }
-                spacing={8}
-              >
-                {post.media.map((m) => (
-                  <Card
-                    key={m.id}
-                    p={0}
-                    radius="md"
-                    style={{ position: "relative" }}
-                  >
-                    <Image
-                      src={
-                        m.m_type === "video" ? m.thumbnail || undefined : m.url
-                      }
-                      alt="media"
-                      radius="md"
-                      style={{ objectFit: "cover" }}
-                    />
-                    {m.m_type === "video" && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background: "rgba(0,0,0,0.2)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <IconVideo size={32} color="#fff" />
-                      </div>
-                    )}
-                  </Card>
-                ))}
-              </SimpleGrid>
+            {/* Media Grid */}
+            {post.media && post.media.length > 0 && (
+              <MediaGrid media={post.media} />
             )}
 
             <Group gap="xl" mt="md">
               <Tooltip label="Suka" withArrow>
                 <ActionIcon
-                  variant="light"
+                  variant={
+                    localStorage.getItem(likeKey(post.id)) === "1"
+                      ? "filled"
+                      : "subtle"
+                  }
                   color="red"
                   size="lg"
                   onClick={toggleLike}
+                  style={{
+                    background:
+                      localStorage.getItem(likeKey(post.id)) === "1"
+                        ? "#ff6b6b"
+                        : undefined,
+                    color:
+                      localStorage.getItem(likeKey(post.id)) === "1"
+                        ? "#fff"
+                        : undefined,
+                  }}
                 >
                   <IconHeart size="1.2rem" />
                 </ActionIcon>

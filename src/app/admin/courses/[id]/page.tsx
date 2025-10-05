@@ -63,9 +63,15 @@ interface ModuleItem {
 
 const kindLabels: Record<string, string> = {
   materi: "Materi",
-  quiz: "Quiz",
+  quiz: "Kuis",
   tugas: "Tugas",
-  live: "Live Session",
+  live: "Kelas Live",
+};
+
+const levelLabels: Record<string, string> = {
+  beginner: "Pemula",
+  intermediate: "Menengah",
+  advanced: "Lanjutan",
 };
 
 export default function AdminCourseDetailPage() {
@@ -121,6 +127,21 @@ export default function AdminCourseDetailPage() {
     [modules]
   );
 
+  // Check for order issues
+  const orderWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    for (let i = 0; i < sortedModules.length; i++) {
+      const current = sortedModules[i].order_index || 0;
+      const expected = i + 1;
+      if (current !== expected) {
+        warnings.push(
+          `Modul "${sortedModules[i].title}" memiliki urutan ${current}, seharusnya ${expected}`
+        );
+      }
+    }
+    return warnings;
+  }, [sortedModules]);
+
   const handleDelete = async () => {
     if (!showDelete || !adminId) return;
     try {
@@ -174,9 +195,21 @@ export default function AdminCourseDetailPage() {
               variant="light"
               color={course.is_published ? "green" : "gray"}
             >
-              {course.is_published ? "Published" : "Draft"}
+              {course.is_published ? "Dipublikasikan" : "Draft"}
             </Badge>
           </Group>
+
+          {orderWarnings.length > 0 && (
+            <Alert color="yellow" title="Peringatan Urutan Modul">
+              <Stack gap={4}>
+                {orderWarnings.map((w, i) => (
+                  <Text key={i} size="sm">
+                    • {w}
+                  </Text>
+                ))}
+              </Stack>
+            </Alert>
+          )}
 
           <Grid gutter="lg">
             <Grid.Col span={{ base: 12, md: 8 }}>
@@ -197,9 +230,14 @@ export default function AdminCourseDetailPage() {
                       <Text size="sm">{course.enrolled_count || 0} siswa</Text>
                     </Group>
                   </Group>
+                </Stack>
+              </Card>
 
+              <Card padding="lg" radius="md" mt="lg">
+                <Group justify="space-between" mb="md">
+                  <Title order={4}>Daftar Modul ({sortedModules.length})</Title>
                   <Button
-                    mt="md"
+                    size="xs"
                     leftSection={<IconPlus size="1rem" />}
                     onClick={() =>
                       router.push(`/admin/courses/${course.id}/modules/new`)
@@ -207,83 +245,106 @@ export default function AdminCourseDetailPage() {
                   >
                     Tambah Modul
                   </Button>
-                </Stack>
-              </Card>
-
-              <Card padding="lg" radius="md" mt="lg">
-                <Group justify="space-between" mb="sm">
-                  <Title order={4}>Daftar Modul</Title>
                 </Group>
                 {sortedModules.length === 0 ? (
-                  <Text c="dimmed" size="sm">
-                    Belum ada modul.
-                  </Text>
+                  <Paper p="xl" withBorder style={{ textAlign: "center" }}>
+                    <Text c="dimmed" size="sm">
+                      Belum ada modul. Klik tombol di atas untuk menambah modul
+                      pertama.
+                    </Text>
+                  </Paper>
                 ) : (
-                  <Table>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>#</Table.Th>
-                        <Table.Th>Judul</Table.Th>
-                        <Table.Th>Jenis</Table.Th>
-                        <Table.Th>Status</Table.Th>
-                        <Table.Th>Aksi</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {sortedModules.map((m) => (
-                        <Table.Tr key={m.id}>
-                          <Table.Td>{m.order_index ?? 0}</Table.Td>
-                          <Table.Td>
-                            <Text fw={600}>{m.title}</Text>
-                            {m.description && (
-                              <Text size="xs" c="dimmed">
-                                {m.description}
-                              </Text>
-                            )}
-                          </Table.Td>
-                          <Table.Td>
-                            <Badge variant="light">
-                              {kindLabels[m.module_kind] || m.module_kind}
-                            </Badge>
-                          </Table.Td>
-                          <Table.Td>
-                            <Badge
-                              color={m.is_published ? "green" : "gray"}
-                              variant="light"
-                            >
-                              {m.is_published ? "Published" : "Draft"}
-                            </Badge>
-                          </Table.Td>
-                          <Table.Td>
-                            <Group gap={4}>
+                  <Stack gap="sm">
+                    {sortedModules.map((m, idx) => {
+                      const hasOrderIssue = (m.order_index || 0) !== idx + 1;
+                      return (
+                        <Card
+                          key={m.id}
+                          padding="md"
+                          withBorder
+                          style={{
+                            borderLeft: hasOrderIssue
+                              ? "4px solid var(--mantine-color-yellow-6)"
+                              : undefined,
+                          }}
+                        >
+                          <Group justify="space-between" wrap="nowrap">
+                            <Group gap="md" style={{ flex: 1 }}>
+                              <Badge
+                                size="lg"
+                                variant="filled"
+                                color={hasOrderIssue ? "yellow" : "blue"}
+                              >
+                                #{m.order_index ?? 0}
+                              </Badge>
+                              <Stack gap={4} style={{ flex: 1 }}>
+                                <Group gap="xs">
+                                  <Text fw={600} size="sm">
+                                    {m.title}
+                                  </Text>
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={
+                                      m.module_kind === "materi"
+                                        ? "blue"
+                                        : m.module_kind === "quiz"
+                                        ? "grape"
+                                        : m.module_kind === "tugas"
+                                        ? "orange"
+                                        : "pink"
+                                    }
+                                  >
+                                    {kindLabels[m.module_kind] || m.module_kind}
+                                  </Badge>
+                                  <Badge
+                                    size="sm"
+                                    color={m.is_published ? "green" : "gray"}
+                                    variant="dot"
+                                  >
+                                    {m.is_published
+                                      ? "Dipublikasikan"
+                                      : "Draft"}
+                                  </Badge>
+                                </Group>
+                                {m.description && (
+                                  <Text size="xs" c="dimmed" lineClamp={1}>
+                                    {m.description}
+                                  </Text>
+                                )}
+                              </Stack>
+                            </Group>
+                            <Group gap={6}>
                               <Tooltip label="Edit Modul">
                                 <ActionIcon
                                   variant="light"
                                   color="blue"
+                                  size="lg"
                                   onClick={() =>
                                     router.push(
                                       `/admin/courses/${course.id}/modules/${m.id}/edit`
                                     )
                                   }
                                 >
-                                  <IconPencil size="1rem" />
+                                  <IconPencil size="1.1rem" />
                                 </ActionIcon>
                               </Tooltip>
                               <Tooltip label="Hapus Modul">
                                 <ActionIcon
                                   variant="light"
                                   color="red"
+                                  size="lg"
                                   onClick={() => setShowDelete(m)}
                                 >
-                                  <IconTrash size="1rem" />
+                                  <IconTrash size="1.1rem" />
                                 </ActionIcon>
                               </Tooltip>
                             </Group>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
+                          </Group>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
                 )}
               </Card>
             </Grid.Col>
@@ -313,7 +374,9 @@ export default function AdminCourseDetailPage() {
                     <Text size="sm" c="dimmed">
                       Level
                     </Text>
-                    <Badge variant="light">{course.level}</Badge>
+                    <Badge variant="light">
+                      {levelLabels[course.level || "beginner"] || course.level}
+                    </Badge>
                   </Group>
                   <Group justify="space-between">
                     <Text size="sm" c="dimmed">

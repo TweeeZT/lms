@@ -17,6 +17,18 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   }
+
+  // Tier mapping based on points
+  function getTier(points: number): string {
+    if (points >= 120000) return "Master";
+    if (points >= 100000) return "Hero";
+    if (points >= 80000) return "Futuristic";
+    if (points >= 60000) return "Creative";
+    if (points >= 40000) return "Scientist";
+    if (points >= 20000) return "Explorer";
+    return "Newbie";
+  }
+
   try {
     const start = Date.now();
     const attempt: Record<string, unknown> = {};
@@ -46,14 +58,17 @@ export async function GET(req: Request) {
           found: false,
           points: 0,
           coins: 0,
+          tier: "Newbie",
           _debug: attempt,
         });
       }
+      const pts = Number(row.points ?? 0);
       return NextResponse.json({
         success: true,
         found: true,
-        points: Number(row.points ?? 0),
+        points: pts,
         coins: Number(row.coins ?? 0),
+        tier: getTier(pts),
         _debug: attempt,
       });
     }
@@ -67,11 +82,13 @@ export async function GET(req: Request) {
         { status: 500 }
       );
     }
+    const pts = Number(student?.points ?? 0);
     return NextResponse.json({
       success: true,
       found: true,
-      points: Number(student?.points ?? 0),
+      points: pts,
       coins: Number(student?.coins ?? 0),
+      tier: getTier(pts),
       _debug: attempt,
     });
   } catch (err: unknown) {

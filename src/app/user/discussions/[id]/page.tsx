@@ -17,16 +17,25 @@ import {
   SimpleGrid,
   Divider,
   Skeleton,
+  Textarea,
+  FileInput,
+  Modal,
 } from "@mantine/core";
 import {
   IconHeart,
   IconArrowLeft,
   IconSend,
   IconVideo,
+  IconEdit,
+  IconTrash,
+  IconPhoto,
+  IconX,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "../../../../hooks/useAuth";
+import { MediaGrid } from "../../../../components/MediaGrid";
+import { notifications } from "@mantine/notifications";
 
 type ApiComment = {
   id: string;
@@ -70,14 +79,22 @@ function relativeTime(date: string | Date) {
   const d = typeof date === "string" ? new Date(date) : date;
   const diff = Date.now() - d.getTime();
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}s`;
   const m = Math.floor(sec / 60);
-  if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
   const dd = Math.floor(h / 24);
-  if (dd < 7) return `${dd}d`;
-  return d.toLocaleDateString("id-ID", { dateStyle: "medium" });
+
+  if (sec < 60) return "baru saja";
+  if (m < 60) return `${m} menit lalu`;
+  if (h < 24) return `${h} jam lalu`;
+
+  return d.toLocaleString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function UserPostDetailPage() {
@@ -87,14 +104,20 @@ export default function UserPostDetailPage() {
   const postId = params.id as string;
 
   const [post, setPost] = useState<ApiPost | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [editFiles, setEditFiles] = useState<File[]>([]);
+  const [existingMedia, setExistingMedia] = useState<ApiPost["media"]>([]);
+  const [mediaToDelete, setMediaToDelete] = useState<string[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [myOtherPosts, setMyOtherPosts] = useState<ApiPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
+  const [likeLoading, setLikeLoading] = useState(false);
   const likeKey = (id: string) => `disc-liked-${id}`;
 
   async function load() {
@@ -134,37 +157,72 @@ export default function UserPostDetailPage() {
   useEffect(() => {
     load();
     if (user) loadMyOthers(user.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, postId]);
 
   const toggleLike = async () => {
-    if (!user || !post) return;
+    if (!user || !post || likeLoading) return;
+
+    setLikeLoading(true);
     const liked = localStorage.getItem(likeKey(post.id)) === "1";
+
+    // Optimistic update
     setPost({
       ...post,
       likes: Math.max(0, (post.likes || 0) + (liked ? -1 : 1)),
     });
-    await fetch(`/api/user/discussions/${postId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: user.id,
-        action: liked ? "unlike" : "like",
-      }),
-    });
-    localStorage.setItem(likeKey(post.id), liked ? "0" : "1");
-    load();
+
+    try {
+      const res = await fetch(`/api/user/discussions/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          action: liked ? "unlike" : "like",
+        }),
+      });
+
+      const json = await res.json();
+
+      if (res.status === 429) {
+        // Rate limited - revert optimistic update
+        setPost({
+          ...post,
+          likes: post.likes,
+        });
+        notifications.show({
+          title: "Terlalu Cepat",
+          message: json.error || "Mohon tunggu sebentar",
+          color: "yellow",
+        });
+      } else if (res.ok) {
+        localStorage.setItem(likeKey(post.id), liked ? "0" : "1");
+        load(); // Refresh to get accurate count
+      }
+    } finally {
+      setLikeLoading(false);
+    }
   };
 
   const startEdit = () => {
     if (!post) return;
     setEditTitle(post.title);
     setEditContent(post.content.replaceAll("\\r\\n", "\n"));
+    setEditTags(post.tags || []);
+    setExistingMedia(post.media || []);
+    setEditFiles([]);
+    setMediaToDelete([]);
     setEditing(true);
+  };
+
+  const removeExistingMedia = (mediaId: string) => {
+    setMediaToDelete((prev) => [...prev, mediaId]);
+    setExistingMedia((prev) => prev.filter((m) => m.id !== mediaId));
   };
 
   const cancelEdit = () => {
     setEditing(false);
+    setEditFiles([]);
+    setMediaToDelete([]);
   };
 
   const saveEdit = async () => {
@@ -172,6 +230,7 @@ export default function UserPostDetailPage() {
     if (!editTitle.trim() || !editContent.trim()) return;
     setSavingEdit(true);
     try {
+      // 1. Update post text
       const res = await fetch(`/api/user/discussions/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -180,25 +239,59 @@ export default function UserPostDetailPage() {
           action: "update",
           title: editTitle.trim(),
           content: editContent.trim(),
-          tags: post.tags || [],
+          tags: editTags || [],
         }),
       });
-      if (res.ok) {
-        setPost({
-          ...post,
-          title: editTitle.trim(),
-          content: editContent.trim(),
+
+      if (!res.ok) {
+        notifications.show({
+          title: "Gagal",
+          message: "Gagal update postingan",
+          color: "red",
         });
-        setEditing(false);
+        return;
       }
+
+      // 2. Update media (delete old + upload new)
+      if (mediaToDelete.length > 0 || editFiles.length > 0) {
+        const fd = new FormData();
+        fd.set("userId", user.id);
+        if (mediaToDelete.length > 0) {
+          fd.set("deleteMediaIds", JSON.stringify(mediaToDelete));
+        }
+        editFiles.forEach((f) => fd.append("files", f));
+
+        const mediaRes = await fetch(`/api/user/discussions/${postId}/media`, {
+          method: "PATCH",
+          body: fd,
+        });
+
+        if (!mediaRes.ok) {
+          notifications.show({
+            title: "Gagal",
+            message: "Gagal update media",
+            color: "red",
+          });
+        }
+      }
+
+      // Refresh post data
+      await load();
+      setEditing(false);
+      setEditFiles([]);
+      setMediaToDelete([]);
+      notifications.show({
+        title: "Berhasil",
+        message: "Postingan berhasil diupdate",
+        color: "green",
+      });
     } finally {
       setSavingEdit(false);
     }
   };
 
-  const deletePost = async () => {
+  const handleDeleteConfirm = async () => {
     if (!user || !post) return;
-    if (!confirm("Hapus postingan ini beserta semua komentar & media?")) return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/user/discussions/${postId}`, {
@@ -207,10 +300,22 @@ export default function UserPostDetailPage() {
         body: JSON.stringify({ userId: user.id }),
       });
       if (res.ok) {
+        notifications.show({
+          title: "Berhasil",
+          message: "Postingan telah dihapus",
+          color: "green",
+        });
         router.push("/user/discussions");
+      } else {
+        notifications.show({
+          title: "Gagal",
+          message: "Gagal menghapus postingan",
+          color: "red",
+        });
       }
     } finally {
       setDeleting(false);
+      setConfirmDelete(false); // tutup modal
     }
   };
 
@@ -292,20 +397,168 @@ export default function UserPostDetailPage() {
           </Button>
           {user && post && user.id === post.user_id && !editing && (
             <Group gap="sm">
-              <Button size="sm" variant="outline" onClick={startEdit}>
+              <Button
+                size="sm"
+                leftSection={<IconEdit size="1rem" />}
+                onClick={startEdit}
+              >
                 Edit
               </Button>
               <Button
                 size="sm"
                 color="red"
-                loading={deleting}
-                onClick={deletePost}
+                leftSection={<IconTrash size="1rem" />}
+                onClick={() => setConfirmDelete(true)}
               >
                 Hapus
               </Button>
             </Group>
           )}
         </Group>
+
+        {/* Modal Konfirmasi Hapus */}
+        <Modal
+          opened={confirmDelete}
+          onClose={() => setConfirmDelete(false)}
+          title="Konfirmasi Hapus Postingan"
+          centered
+        >
+          <Stack>
+            <Text>
+              Apakah kamu yakin ingin menghapus postingan ini beserta semua
+              komentar dan media terkait?
+            </Text>
+            <Group justify="flex-end" mt="md">
+              <Button variant="default" onClick={() => setConfirmDelete(false)}>
+                Batal
+              </Button>
+              <Button
+                color="red"
+                loading={deleting}
+                onClick={handleDeleteConfirm}
+              >
+                Hapus
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+
+        {/* Modal Edit */}
+        <Modal
+          opened={editing}
+          onClose={cancelEdit}
+          title="Edit Postingan"
+          size="lg"
+        >
+          <Stack gap="md">
+            <TextInput
+              label="Judul"
+              placeholder="Judul postingan"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.currentTarget.value)}
+              required
+              disabled={savingEdit}
+            />
+            <Textarea
+              label="Konten"
+              placeholder="Isi postingan"
+              value={editContent}
+              onChange={(e) => setEditContent(e.currentTarget.value)}
+              minRows={5}
+              required
+              disabled={savingEdit}
+            />
+
+            {/* Existing Media */}
+            {existingMedia.length > 0 && (
+              <Stack gap="xs">
+                <Text size="sm" fw={500}>
+                  Gambar/Video Saat Ini:
+                </Text>
+                <SimpleGrid cols={3} spacing="xs">
+                  {existingMedia.map((m) => (
+                    <Card
+                      key={m.id}
+                      p={0}
+                      radius="md"
+                      style={{ position: "relative" }}
+                    >
+                      <Image
+                        src={
+                          m.m_type === "video"
+                            ? m.thumbnail || undefined
+                            : m.url
+                        }
+                        alt="media"
+                        radius="md"
+                        style={{ objectFit: "cover", height: 100 }}
+                      />
+                      <ActionIcon
+                        color="red"
+                        size="sm"
+                        radius="xl"
+                        variant="filled"
+                        style={{ position: "absolute", top: 4, right: 4 }}
+                        onClick={() => removeExistingMedia(m.id)}
+                        disabled={savingEdit}
+                      >
+                        <IconX size="1rem" />
+                      </ActionIcon>
+                    </Card>
+                  ))}
+                </SimpleGrid>
+              </Stack>
+            )}
+
+            {/* Upload New Media */}
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>
+                Tambah Gambar/Video Baru (maks 10MB per file)
+              </Text>
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                disabled={savingEdit}
+                onChange={(e) => {
+                  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+                  const files = Array.from(e.currentTarget.files || []);
+                  const validated = files.filter((f) => {
+                    if (f.size > MAX_SIZE) {
+                      alert(`File ${f.name} terlalu besar. Maksimal 10MB.`);
+                      return false;
+                    }
+                    return true;
+                  });
+                  setEditFiles(validated);
+                }}
+                style={{
+                  padding: "8px",
+                  border: "1px solid #ced4da",
+                  borderRadius: "4px",
+                  width: "100%",
+                }}
+              />
+            </Stack>
+
+            <Group justify="flex-end" gap="sm" mt="md">
+              <Button
+                variant="subtle"
+                onClick={cancelEdit}
+                disabled={savingEdit}
+              >
+                Batal
+              </Button>
+              <Button
+                loading={savingEdit}
+                onClick={saveEdit}
+                disabled={!editTitle.trim() || !editContent.trim()}
+              >
+                Simpan Perubahan
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <Card
           padding="xl"
@@ -365,49 +618,15 @@ export default function UserPostDetailPage() {
                     {relativeTime(post.created_at)}
                   </Text>
                 </Group>
-                {editing ? (
-                  <Stack gap={8} mt="sm">
-                    <TextInput
-                      placeholder="Judul"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.currentTarget.value)}
-                    />
-                    <TextInput
-                      placeholder="Konten"
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.currentTarget.value)}
-                      styles={{ input: { minHeight: 80 } }}
-                      multiple
-                    />
-                    <Group gap="sm" justify="flex-end">
-                      <Button
-                        size="sm"
-                        variant="subtle"
-                        onClick={cancelEdit}
-                        disabled={savingEdit}
-                      >
-                        Batal
-                      </Button>
-                      <Button
-                        size="sm"
-                        loading={savingEdit}
-                        onClick={saveEdit}
-                        disabled={!editTitle.trim() || !editContent.trim()}
-                      >
-                        Simpan
-                      </Button>
-                    </Group>
-                  </Stack>
-                ) : (
-                  <Text
-                    size="sm"
-                    style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
-                  >
-                    {post.content
-                      .replaceAll("\\r\\n", "\n")
-                      .replaceAll("\\n\\n", "\n")}
-                  </Text>
-                )}
+                <Title order={3}>{post.title}</Title>
+                <Text
+                  size="sm"
+                  style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
+                >
+                  {post.content
+                    .replaceAll("\\r\\n", "\n")
+                    .replaceAll("\\n\\n", "\n")}
+                </Text>
                 {post.tags?.length > 0 && (
                   <Group gap={8} wrap="wrap" mt="xs">
                     {post.tags.map((t) => (
@@ -425,54 +644,34 @@ export default function UserPostDetailPage() {
               </Stack>
             </Group>
 
-            {post.media?.length > 0 && (
-              <SimpleGrid
-                cols={
-                  post.media.length === 1 ? 1 : post.media.length === 2 ? 2 : 3
-                }
-                spacing={8}
-              >
-                {post.media.map((m) => (
-                  <Card
-                    key={m.id}
-                    p={0}
-                    radius="md"
-                    style={{ position: "relative" }}
-                  >
-                    <Image
-                      src={
-                        m.m_type === "video" ? m.thumbnail || undefined : m.url
-                      }
-                      alt="media"
-                      radius="md"
-                      style={{ objectFit: "cover" }}
-                    />
-                    {m.m_type === "video" && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background: "rgba(0,0,0,0.2)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <IconVideo size={32} color="#fff" />
-                      </div>
-                    )}
-                  </Card>
-                ))}
-              </SimpleGrid>
+            {/* Media Grid */}
+            {post.media && post.media.length > 0 && (
+              <MediaGrid media={post.media} />
             )}
 
             <Group gap="xl" mt="md">
-              <Tooltip label="Suka" withArrow>
+              <Tooltip label={likeLoading ? "Loading..." : "Suka"} withArrow>
                 <ActionIcon
-                  variant="light"
+                  variant={
+                    localStorage.getItem(likeKey(post.id)) === "1"
+                      ? "filled"
+                      : "subtle"
+                  }
                   color="red"
                   size="lg"
                   onClick={toggleLike}
+                  loading={likeLoading}
+                  disabled={likeLoading}
+                  style={{
+                    background:
+                      localStorage.getItem(likeKey(post.id)) === "1"
+                        ? "#ff6b6b"
+                        : undefined,
+                    color:
+                      localStorage.getItem(likeKey(post.id)) === "1"
+                        ? "#fff"
+                        : undefined,
+                  }}
                 >
                   <IconHeart size="1.2rem" />
                 </ActionIcon>
@@ -486,45 +685,6 @@ export default function UserPostDetailPage() {
             </Group>
           </Stack>
         </Card>
-
-        <Divider />
-
-        {myOtherPosts.length > 0 && (
-          <Stack gap="md">
-            <Title order={5}>Postingan Saya Lainnya</Title>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              {myOtherPosts.map((p) => (
-                <Card
-                  key={p.id}
-                  withBorder
-                  radius="md"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => router.push(`/user/discussions/${p.id}`)}
-                >
-                  <Stack gap={6}>
-                    <Text fw={600} size="sm" lineClamp={1}>
-                      {p.title}
-                    </Text>
-                    <Text size="xs" c="dimmed" lineClamp={3}>
-                      {p.content.replaceAll("\\r\\n", " ").slice(0, 160)}
-                    </Text>
-                    <Group gap={6}>
-                      <Badge size="xs" variant="light">
-                        {p.likes} suka
-                      </Badge>
-                      <Badge size="xs" variant="outline">
-                        {p.comments && Array.isArray(p.comments)
-                          ? p.comments.length
-                          : 0}{" "}
-                        komentar
-                      </Badge>
-                    </Group>
-                  </Stack>
-                </Card>
-              ))}
-            </SimpleGrid>
-          </Stack>
-        )}
 
         <Stack gap="lg">
           <Title order={4}>Komentar ({post.comments.length})</Title>

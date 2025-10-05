@@ -15,6 +15,8 @@ import {
   Loader,
   Modal,
   Stepper,
+  Menu,
+  Badge,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -24,7 +26,12 @@ import {
   IconFileText,
   IconListCheck,
   IconClipboard,
+  IconCalendarPlus,
+  IconPhoto,
+  IconPuzzle,
+  IconRefresh,
 } from "@tabler/icons-react";
+import Image from "next/image";
 import { useAuth } from "../../../../hooks/useAuth";
 
 // Shared types (extracted for cross-component usage)
@@ -364,6 +371,28 @@ export default function CourseDetailPage() {
     return Boolean(m?.isCompleted);
   }, [modules, currentId]);
 
+  // Compute upcoming live sessions for sidebar
+  const upcomingLives = useMemo(() => {
+    if (!detail) return [];
+    const lives = modules
+      .filter((m) => m.kind === "live")
+      .map((m) => {
+        // Try to get live session data from detail if current module
+        if (m.id === currentId && detail.module.liveSession) {
+          const live = detail.module.liveSession;
+          const rawStart = live.start_at || live.startTime;
+          const start = rawStart ? new Date(rawStart) : null;
+          const now = new Date();
+          if (start && start > now) {
+            return { id: m.id, title: m.title, start };
+          }
+        }
+        return null;
+      })
+      .filter(Boolean) as { id: string; title: string; start: Date }[];
+    return lives.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }, [modules, detail, currentId]);
+
   // Certificate functions
   const checkCertificate = useCallback(async () => {
     if (!user || !courseId) return;
@@ -384,9 +413,9 @@ export default function CourseDetailPage() {
     if (!user || !courseId) return;
     setDownloadingCertificate(true);
     try {
-      // First try to get existing certificate
+      // First try to get existing certificate (with sendEmail=true untuk kirim email saat download)
       let certificateResponse = await fetch(
-        `/api/user/certificates?userId=${user.id}&courseId=${courseId}`
+        `/api/user/certificates?userId=${user.id}&courseId=${courseId}&sendEmail=true`
       );
       let json = await certificateResponse.json();
 
@@ -423,7 +452,8 @@ export default function CourseDetailPage() {
 
         notifications.show({
           title: "Sertifikat Berhasil Diunduh",
-          message: "Sertifikat Anda telah berhasil dibuat dan diunduh!",
+          message:
+            "Sertifikat telah berhasil diunduh dan dikirim ke email Anda!",
           color: "green",
         });
       }
@@ -432,6 +462,62 @@ export default function CourseDetailPage() {
       notifications.show({
         title: "Error",
         message: "Terjadi kesalahan saat mengunduh sertifikat",
+        color: "red",
+      });
+    } finally {
+      setDownloadingCertificate(false);
+    }
+  };
+
+  const regenerateCertificate = async () => {
+    if (!user || !courseId) return;
+
+    // Konfirmasi dulu
+    const confirmed = window.confirm(
+      "Apakah Anda yakin ingin membuat ulang sertifikat? Sertifikat lama akan diganti dan email baru akan dikirim."
+    );
+    if (!confirmed) return;
+
+    setDownloadingCertificate(true);
+    try {
+      const certificateResponse = await fetch("/api/user/certificates", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          courseId: courseId,
+        }),
+      });
+      const json = await certificateResponse.json();
+
+      if (!certificateResponse.ok || !json.success) {
+        notifications.show({
+          title: "Error",
+          message: json.error || "Gagal membuat ulang sertifikat",
+          color: "red",
+        });
+        return;
+      }
+
+      // Update certificate URL
+      const url = json.certificateUrl;
+      if (url) {
+        setCertificateUrl(url);
+        window.open(url, "_blank");
+
+        notifications.show({
+          title: "Sertifikat Berhasil Diperbaharui",
+          message: "Sertifikat baru telah dibuat dan dikirim ke email Anda!",
+          color: "green",
+        });
+      }
+    } catch (error) {
+      console.error("Error regenerating certificate:", error);
+      notifications.show({
+        title: "Error",
+        message: "Terjadi kesalahan saat membuat ulang sertifikat",
         color: "red",
       });
     } finally {
@@ -678,6 +764,41 @@ export default function CourseDetailPage() {
                     />
                   ))}
                 </Stepper>
+              )}
+
+              {/* Upcoming Live Sessions */}
+              {upcomingLives.length > 0 && (
+                <>
+                  <Title order={5} mt="md">
+                    Live Mendatang
+                  </Title>
+                  <Stack gap="xs">
+                    {upcomingLives.map((live) => (
+                      <Badge
+                        key={live.id}
+                        variant="light"
+                        color="orange"
+                        size="lg"
+                        style={{ cursor: "pointer", textAlign: "left" }}
+                        onClick={() => setCurrentId(live.id)}
+                      >
+                        <div>
+                          <Text size="xs" fw={600}>
+                            {live.title}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {live.start.toLocaleDateString("id-ID", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </Text>
+                        </div>
+                      </Badge>
+                    ))}
+                  </Stack>
+                </>
               )}
             </Stack>
           </Card>
@@ -1393,6 +1514,60 @@ export default function CourseDetailPage() {
                         {detail.module.content.url}
                       </a>
                     </Card>
+                  ) : detail.module.kind === "materi" &&
+                    detail.module.content?.type === "image" &&
+                    detail.module.content?.url ? (
+                    <Card withBorder p="md">
+                      <Group gap="xs" mb="sm">
+                        <IconPhoto size={18} />
+                        <Text fw={600}>Materi Gambar</Text>
+                      </Group>
+                      <div
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          minHeight: 400,
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          background: "#f5f5f5",
+                        }}
+                      >
+                        <Image
+                          src={detail.module.content.url}
+                          alt={detail.module.title || "Materi gambar"}
+                          fill
+                          style={{ objectFit: "contain" }}
+                          onLoad={() => {
+                            // Auto-complete when image loaded
+                            if (!autoCompletedRef.current) {
+                              autoCompletedRef.current = true;
+                              markCompleteAuto();
+                            }
+                          }}
+                        />
+                      </div>
+                    </Card>
+                  ) : detail.module.kind === "blockly" ? (
+                    <Card withBorder p="md">
+                      <Group gap="xs" mb="sm">
+                        <IconPuzzle size={18} />
+                        <Text fw={600}>Proyek Blockly</Text>
+                      </Group>
+                      <Text size="sm" c="dimmed" mb="md">
+                        {detail.module.description ||
+                          "Selesaikan proyek visual programming menggunakan Blockly (drag-and-drop)."}
+                      </Text>
+                      <Button
+                        className="btn-primary"
+                        leftSection={<IconPuzzle size={16} />}
+                        onClick={() => {
+                          // Navigate to blockly project editor (placeholder for now)
+                          router.push(`/user/projects/${detail.module.id}`);
+                        }}
+                      >
+                        Buka Editor Blockly
+                      </Button>
+                    </Card>
                   ) : (
                     <Card withBorder p="md">
                       <Text size="sm">Konten tidak tersedia.</Text>
@@ -1486,6 +1661,19 @@ export default function CourseDetailPage() {
                                   : "Buat & Unduh Sertifikat"
                                 : "Beri Rating Untuk Membuka"}
                             </Button>
+                            {/* Tombol Generate Ulang hanya muncul jika sertifikat sudah pernah dibuat */}
+                            {certificateUrl && userRating && (
+                              <Button
+                                onClick={regenerateCertificate}
+                                loading={downloadingCertificate}
+                                variant="outline"
+                                color="orange"
+                                leftSection={<IconRefresh size={16} />}
+                                size="sm"
+                              >
+                                Generate Ulang
+                              </Button>
+                            )}
                             {certificateUrl && (
                               <Button
                                 component="a"
@@ -1736,40 +1924,59 @@ function LiveSessionPanel({
                 {copied ? "Link Disalin" : "Salin Link"}
               </Button>
             )}
-            <Button size="xs" variant="outline" onClick={downloadICS}>
-              .ics
-            </Button>
             {start && (
-              <Button
-                size="xs"
-                variant="gradient"
-                gradient={{ from: "indigo", to: "blue", deg: 45 }}
-                component="a"
-                href={(() => {
-                  const endDate = end || new Date(start.getTime() + 60 * 60000);
-                  const fmt = (d: Date) =>
-                    d
-                      .toISOString()
-                      .replace(/[-:]/g, "")
-                      .replace(/\.\d{3}Z$/, "Z");
-                  const text = encodeURIComponent(live.title || "Live Session");
-                  const details = encodeURIComponent(
-                    (live.agenda || "") +
-                      (joinBase ? `\nJoin: ${joinBase}` : "")
-                  );
-                  const location = encodeURIComponent(joinBase || "Online");
-                  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${fmt(
-                    start
-                  )}/${fmt(
-                    endDate
-                  )}&details=${details}&location=${location}&ctz=${encodeURIComponent(
-                    live.time_zone || "Asia/Jakarta"
-                  )}`;
-                })()}
-                target="_blank"
-              >
-                Tambah ke Calendar
-              </Button>
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <Button
+                    size="xs"
+                    variant="gradient"
+                    gradient={{ from: "indigo", to: "blue", deg: 45 }}
+                    leftSection={<IconCalendarPlus size={14} />}
+                  >
+                    Tambah ke Kalender
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Pilih Kalender</Menu.Label>
+                  <Menu.Item
+                    leftSection={<IconCalendarPlus size={14} />}
+                    onClick={downloadICS}
+                  >
+                    Unduh .ics
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconCalendarPlus size={14} />}
+                    component="a"
+                    href={(() => {
+                      const endDate =
+                        end || new Date(start.getTime() + 60 * 60000);
+                      const fmt = (d: Date) =>
+                        d
+                          .toISOString()
+                          .replace(/[-:]/g, "")
+                          .replace(/\.\d{3}Z$/, "Z");
+                      const text = encodeURIComponent(
+                        live.title || "Live Session"
+                      );
+                      const details = encodeURIComponent(
+                        (live.agenda || "") +
+                          (joinBase ? `\nJoin: ${joinBase}` : "")
+                      );
+                      const location = encodeURIComponent(joinBase || "Online");
+                      return `https://www.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${fmt(
+                        start
+                      )}/${fmt(
+                        endDate
+                      )}&details=${details}&location=${location}&ctz=${encodeURIComponent(
+                        live.time_zone || "Asia/Jakarta"
+                      )}`;
+                    })()}
+                    target="_blank"
+                  >
+                    Google Calendar
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
             )}
           </Group>
         )}

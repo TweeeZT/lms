@@ -13,16 +13,19 @@ import {
   Progress,
   SimpleGrid,
   Skeleton,
+  Pagination,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import {
   IconBook,
   IconPlayerPlayFilled,
-  IconCheck,
   IconStar,
   IconTrophy,
   IconCertificate,
   IconDownload,
   IconAward,
+  IconCoins,
+  IconShield,
 } from "@tabler/icons-react";
 import {
   useState,
@@ -32,6 +35,7 @@ import {
   type ComponentType,
 } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "../../../hooks/useAuth";
 
 type ApiCourse = {
@@ -65,6 +69,13 @@ export default function UserCoursesPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<ApiEnrollmentItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [studentStats, setStudentStats] = useState<{
+    points: number;
+    coins: number;
+    tier: string;
+  }>({ points: 0, coins: 0, tier: "Newbie" });
+  const limit = 6;
 
   // Reusable StatCard (vertical) similar style to admin
   function StatCard({
@@ -135,6 +146,7 @@ export default function UserCoursesPage() {
       if (!user) return;
       setLoading(true);
       try {
+        // Fetch enrollments
         const res = await fetch(`/api/user/courses?userId=${user.id}`);
         const json = await res.json();
         if (res.ok && json.success) {
@@ -142,6 +154,17 @@ export default function UserCoursesPage() {
             (r) => !!r.course
           );
           setItems(rows);
+        }
+
+        // Fetch student stats (points, coins, tier)
+        const statsRes = await fetch(`/api/user/stats?userId=${user.id}`);
+        const statsJson = await statsRes.json();
+        if (statsRes.ok && statsJson.success) {
+          setStudentStats({
+            points: statsJson.points || 0,
+            coins: statsJson.coins || 0,
+            tier: statsJson.tier || "Newbie",
+          });
         }
       } finally {
         setLoading(false);
@@ -151,17 +174,16 @@ export default function UserCoursesPage() {
   }, [user]);
 
   const stats = useMemo(() => {
-    const total = items.length;
-    const completed = items.filter((i) => i.progress.percentage >= 100).length;
-    const active = total - completed;
-    const totalPoints = items.reduce((sum, i) => {
-      if (i.course?.points != null) return sum + Number(i.course.points) || 0;
-      // fallback: derive from duration formula
-      return sum + Math.round(((i.course?.durationMin || 0) / 60) * 80);
-    }, 0);
-    const achievements = completed; // simple proxy
-    return { total, completed, active, totalPoints, achievements };
-  }, [items]);
+    const total = items.length; // Total kursus aktif (semua)
+    const totalPoints = studentStats.points; // Dari students.points
+    const totalCoins = studentStats.coins; // Dari students.coins
+    const tier = studentStats.tier; // Dari students atau level mapping
+    return { total, totalPoints, totalCoins, tier };
+  }, [items, studentStats]);
+
+  // Pagination
+  const totalPages = Math.ceil(items.length / limit);
+  const paginatedItems = items.slice((page - 1) * limit, page * limit);
 
   return (
     <Container size="xl">
@@ -180,16 +202,12 @@ export default function UserCoursesPage() {
           <Grid.Col span={{ base: 12, md: 3 }}>
             <StatCard
               label="Kursus Aktif"
-              value={stats.active}
+              value={stats.total}
               Icon={IconBook}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
-            <StatCard
-              label="Selesai"
-              value={stats.completed}
-              Icon={IconCheck}
-            />
+            <StatCard label="Tier" value={stats.tier} Icon={IconShield} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <StatCard
@@ -200,9 +218,9 @@ export default function UserCoursesPage() {
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <StatCard
-              label="Pencapaian"
-              value={stats.achievements}
-              Icon={IconTrophy}
+              label="Total Coins"
+              value={stats.totalCoins}
+              Icon={IconCoins}
             />
           </Grid.Col>
         </Grid>
@@ -210,165 +228,238 @@ export default function UserCoursesPage() {
         {/* Course List */}
         {loading && items.length === 0 ? (
           <Stack gap="md">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} height={170} radius="md" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} height={200} radius="md" />
             ))}
           </Stack>
         ) : (
-          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
-            {items.map((row) => {
-              const course = row.course!;
-              const progress = Math.max(
-                0,
-                Math.min(100, row.progress.percentage || 0)
-              );
-              const isCompleted = progress >= 100;
-              const currentModule = isCompleted
-                ? course.totalModules
-                : Math.max(
-                    0,
-                    Math.min(
-                      course.totalModules,
-                      Math.round((progress / 100) * course.totalModules)
-                    )
-                  );
+          <>
+            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
+              {paginatedItems.map((row) => {
+                const course = row.course!;
+                const progress = Math.max(
+                  0,
+                  Math.min(100, row.progress.percentage || 0)
+                );
+                const isCompleted = progress >= 100;
+                const currentModule = isCompleted
+                  ? course.totalModules
+                  : Math.max(
+                      0,
+                      Math.min(
+                        course.totalModules,
+                        Math.round((progress / 100) * course.totalModules)
+                      )
+                    );
 
-              return (
-                <Card
-                  key={row.enrollmentId}
-                  radius="lg"
-                  padding="lg"
-                  className="card-hover"
-                >
-                  <Stack gap="md">
-                    <Group justify="space-between">
-                      <Group>
+                return (
+                  <Card
+                    key={row.enrollmentId}
+                    radius="lg"
+                    padding={0}
+                    className="card-hover"
+                    style={{ overflow: "hidden" }}
+                  >
+                    {/* Thumbnail */}
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        height: 180,
+                        background: "#f0f0f0",
+                      }}
+                    >
+                      {course.thumbnail ? (
+                        <Image
+                          src={course.thumbnail}
+                          alt={course.title}
+                          fill
+                          style={{ objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "var(--gradient-primary)",
+                          }}
+                        >
+                          <IconBook size={48} color="#fff" />
+                        </div>
+                      )}
+                      {/* Badge overlay */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 12,
+                          left: 12,
+                          zIndex: 1,
+                        }}
+                      >
                         <Badge
-                          variant="light"
+                          variant="filled"
                           color={isCompleted ? "green" : "blue"}
                         >
                           {isCompleted ? "Selesai" : "Berlangsung"}
                         </Badge>
-                      </Group>
-
+                      </div>
                       {isCompleted && (
-                        <Badge
-                          variant="light"
-                          color="yellow"
-                          leftSection={<IconTrophy size="0.8rem" />}
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 12,
+                            right: 12,
+                            zIndex: 1,
+                          }}
                         >
-                          Sertifikat
-                        </Badge>
-                      )}
-                    </Group>
-
-                    <div>
-                      <Title order={4} mb="xs" lineClamp={2}>
-                        {course.title}
-                      </Title>
-                      <Text size="sm" c="dimmed" lineClamp={2}>
-                        {course.description}
-                      </Text>
-                    </div>
-
-                    <Group gap="xs">
-                      <IconStar size="1rem" color="gold" />
-                      <Text size="sm">{course.rating ?? 0}</Text>
-                      <Text size="sm" c="dimmed">
-                        •
-                      </Text>
-                      <Text size="sm" c="dimmed">
-                        {course.instructor?.fullName || "-"}
-                      </Text>
-                    </Group>
-
-                    <div>
-                      <Group justify="space-between" mb="xs">
-                        <Text size="sm">
-                          Progress ({currentModule}/{course.totalModules} modul)
-                        </Text>
-                        <Text size="sm" fw={600}>
-                          {progress}%
-                        </Text>
-                      </Group>
-                      <Progress
-                        value={progress}
-                        color={isCompleted ? "green" : "blue"}
-                      />
-                    </div>
-
-                    <Group justify="space-between">
-                      <Group gap="xs">
-                        <IconAward size="1rem" />
-                        <Text size="sm">
-                          {course.points != null
-                            ? course.points
-                            : Math.round(
-                                ((course.durationMin || 0) / 60) * 80
-                              )}{" "}
-                          Points
-                        </Text>
-                      </Group>
-
-                      <Group gap="xs">
-                        {isCompleted && (
-                          <Button
-                            variant="light"
-                            size="sm"
-                            leftSection={<IconDownload size="0.8rem" />}
+                          <Badge
+                            variant="filled"
                             color="yellow"
-                            onClick={async () => {
-                              try {
-                                const res = await fetch(
-                                  `/api/user/certificates?userId=${user?.id}&courseId=${course.id}`
-                                );
-                                const json = await res.json();
-                                if (!res.ok || !json.success) return;
-                                // API (single) returns certificate or list depending on implementation; normalize
-                                const url =
-                                  json.certificate?.url ||
-                                  json.certificateUrl ||
-                                  (Array.isArray(json.items) &&
-                                  json.items.length > 0
-                                    ? json.items[0].certificate_url ||
-                                      json.items[0].url
-                                    : null);
-                                if (url) {
-                                  const link = document.createElement("a");
-                                  link.href = url;
-                                  link.download = `sertifikat-${course.title.replace(
-                                    /\s+/g,
-                                    "-"
-                                  )}.pdf`;
-                                  link.click();
-                                }
-                              } catch (error) {
-                                console.error(
-                                  "Error downloading certificate:",
-                                  error
-                                );
-                              }
-                            }}
+                            leftSection={<IconTrophy size="0.8rem" />}
                           >
                             Sertifikat
-                          </Button>
-                        )}
-                        <Button
-                          className="btn-primary"
-                          size="sm"
-                          component={Link}
-                          href={`/user/courses/${course.id}`}
-                          leftSection={<IconPlayerPlayFilled size="0.8rem" />}
-                        >
-                          {isCompleted ? "Resume Materi" : "Lanjutkan"}
-                        </Button>
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+
+                    <Stack gap="md" p="lg">
+                      <div>
+                        <Title order={4} mb="xs" lineClamp={2}>
+                          {course.title}
+                        </Title>
+                        <Text size="sm" c="dimmed" lineClamp={2}>
+                          {course.description}
+                        </Text>
+                      </div>
+
+                      <Group gap="xs">
+                        <IconStar size="1rem" color="gold" />
+                        <Text size="sm">{course.rating ?? 0}</Text>
+                        <Text size="sm" c="dimmed">
+                          •
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                          {course.instructor?.fullName || "-"}
+                        </Text>
                       </Group>
-                    </Group>
-                  </Stack>
-                </Card>
-              );
-            })}
-          </SimpleGrid>
+
+                      <div>
+                        <Group justify="space-between" mb="xs">
+                          <Text size="sm">
+                            Progress ({currentModule}/{course.totalModules}{" "}
+                            modul)
+                          </Text>
+                          <Text size="sm" fw={600}>
+                            {progress}%
+                          </Text>
+                        </Group>
+                        <Progress
+                          value={progress}
+                          color={isCompleted ? "green" : "blue"}
+                        />
+                      </div>
+
+                      <Group justify="space-between">
+                        <Group gap="xs">
+                          <IconAward size="1rem" />
+                          <Text size="sm">
+                            {course.points != null
+                              ? course.points
+                              : Math.round(
+                                  ((course.durationMin || 0) / 60) * 80
+                                )}{" "}
+                            Points
+                          </Text>
+                        </Group>
+
+                        <Group gap="xs">
+                          {isCompleted && (
+                            <Button
+                              variant="light"
+                              size="sm"
+                              leftSection={<IconDownload size="0.8rem" />}
+                              color="yellow"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(
+                                    `/api/user/certificates?userId=${user?.id}&courseId=${course.id}&sendEmail=true`
+                                  );
+                                  const json = await res.json();
+                                  if (!res.ok || !json.success) {
+                                    notifications.show({
+                                      title: "Error",
+                                      message: "Gagal mengunduh sertifikat",
+                                      color: "red",
+                                    });
+                                    return;
+                                  }
+                                  const url =
+                                    json.certificate?.url ||
+                                    json.certificateUrl ||
+                                    (Array.isArray(json.items) &&
+                                    json.items.length > 0
+                                      ? json.items[0].certificate_url ||
+                                        json.items[0].url
+                                      : null);
+                                  if (url) {
+                                    window.open(url, "_blank");
+                                    notifications.show({
+                                      title: "Sertifikat Diunduh",
+                                      message:
+                                        "Sertifikat telah diunduh dan dikirim ke email Anda!",
+                                      color: "green",
+                                    });
+                                  }
+                                } catch (error) {
+                                  console.error(
+                                    "Error downloading certificate:",
+                                    error
+                                  );
+                                  notifications.show({
+                                    title: "Error",
+                                    message:
+                                      "Terjadi kesalahan saat mengunduh sertifikat",
+                                    color: "red",
+                                  });
+                                }
+                              }}
+                            >
+                              Sertifikat
+                            </Button>
+                          )}
+                          <Button
+                            className="btn-primary"
+                            size="sm"
+                            component={Link}
+                            href={`/user/courses/${course.id}`}
+                            leftSection={<IconPlayerPlayFilled size="0.8rem" />}
+                          >
+                            {isCompleted ? "Resume Materi" : "Lanjutkan"}
+                          </Button>
+                        </Group>
+                      </Group>
+                    </Stack>
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <Group justify="center" mt="xl">
+                <Pagination
+                  total={totalPages}
+                  value={page}
+                  onChange={setPage}
+                  color="blue"
+                />
+              </Group>
+            )}
+          </>
         )}
 
         {/* Completed Courses with Certificates */}

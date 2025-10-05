@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../lib/supabaseServer";
+import { sendPurchaseResultEmail } from "../../../../../lib/mailer";
 import crypto from "crypto";
+
+export const runtime = "nodejs";
 
 interface XenditInvoice {
   id?: string;
@@ -19,7 +22,9 @@ interface XenditInvoice {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const invoiceId = (searchParams.get("invoiceId") || "").trim();
-  const courseId = (searchParams.get("courseId") || "").trim();
+  // Some callers added a stray trailing '$' (seen in logs). Sanitize it.
+  let courseId = (searchParams.get("courseId") || "").trim();
+  if (courseId.endsWith("$")) courseId = courseId.slice(0, -1);
   const userIdFromQuery = (searchParams.get("userId") || "").trim();
   if (!invoiceId) {
     return NextResponse.json(
@@ -120,6 +125,9 @@ export async function GET(req: NextRequest) {
     }
 
     // If completed ensure enrollment & user_progress
+    const shouldSendEmail =
+      currentStatus === "completed" || currentStatus === "cancelled"; // cancelled = gagal/kadaluarsa
+    let emailPayload: { userId?: string; courseId?: string } = {};
     if (currentStatus === "completed") {
       const { data: refreshed } = await supabaseAdmin
         .from("transactions")
@@ -129,6 +137,21 @@ export async function GET(req: NextRequest) {
       const userId = refreshed?.user_id || tx?.user_id;
       const resolvedCourse = refreshed?.course_id || tx?.course_id || courseId;
       if (userId && resolvedCourse) {
+        // Ensure student row exists (foreign key requirement for transactions/enrollments logic elsewhere)
+        try {
+          const studRes = await supabaseAdmin
+            .from("students")
+            .upsert(
+              { user_id: userId, points: 0, coins: 0 },
+              { onConflict: "user_id" }
+            );
+          if (studRes.error) {
+            console.error("confirm students upsert failed", studRes.error);
+          }
+        } catch (e) {
+          console.error("confirm students upsert exception", e);
+        }
+        emailPayload = { userId, courseId: resolvedCourse };
         const { data: existing } = await supabaseAdmin
           .from("enrollments")
           .select("id")
@@ -175,9 +198,195 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Kirim email hasil (best-effort) - ambil meta hanya jika kita punya context user+course
+    if (shouldSendEmail) {
+      const uId =
+        emailPayload.userId || tx?.user_id || userIdFromQuery || undefined;
+      const cId =
+        emailPayload.courseId || tx?.course_id || courseId || undefined;
+      if (uId && cId) {
+        try {
+          const [{ data: u }, { data: c }] = await Promise.all([
+            supabaseAdmin
+              .from("users")
+              .select("email,full_name")
+              .eq("id", uId)
+              .maybeSingle(),
+            supabaseAdmin
+              .from("courses")
+              .select("title, price")
+              .eq("id", cId)
+              .maybeSingle(),
+          ]);
+          if (u?.email && c?.title) {
+            sendPurchaseResultEmail({
+              to: u.email,
+              fullName: u.full_name || "User",
+              courseTitle: c.title,
+              amount: c.price || 0,
+              status: currentStatus === "completed" ? "completed" : "cancelled",
+            }).catch((e) =>
+              console.log("send purchase email (confirm) failed", e)
+            );
+          }
+        } catch (e) {
+          console.log("confirm email meta fetch failed", e);
+        }
+      }
+    }
+
     return NextResponse.json({ success: true, status: currentStatus });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Confirm error";
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
+
+// POST /api/user/checkout/confirm
+// Handle free course enrollment (price = 0)
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { userId, courseId, isFree } = body;
+
+    if (!userId || !courseId) {
+      return NextResponse.json(
+        { success: false, error: "userId and courseId required" },
+        { status: 400 }
+      );
+    }
+
+    // Get course details
+    const { data: course, error: courseErr } = await supabaseAdmin
+      .from("courses")
+      .select("id, title, price, instructor_id")
+      .eq("id", courseId)
+      .maybeSingle();
+
+    if (courseErr || !course) {
+      return NextResponse.json(
+        { success: false, error: "Kursus tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    // Verify it's actually free
+    if (!isFree && (course.price || 0) !== 0) {
+      return NextResponse.json(
+        { success: false, error: "Kursus ini tidak gratis" },
+        { status: 400 }
+      );
+    }
+
+    // Get user details
+    const { data: userInfo, error: userErr } = await supabaseAdmin
+      .from("users")
+      .select("email, full_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (userErr || !userInfo) {
+      return NextResponse.json(
+        { success: false, error: "User tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    // Check if already enrolled
+    const { data: existing } = await supabaseAdmin
+      .from("user_progress")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("course_id", courseId)
+      .maybeSingle();
+
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: "Anda sudah terdaftar di kursus ini" },
+        { status: 400 }
+      );
+    }
+
+    // Create transaction with status completed
+    const transactionId = crypto.randomUUID();
+    const { error: txErr } = await supabaseAdmin.from("transactions").insert({
+      id: transactionId,
+      date: new Date().toISOString(),
+      user_id: userId,
+      user_name: userInfo.full_name || userInfo.email || "User",
+      course_id: courseId,
+      course_title: course.title,
+      amount: 0,
+      method: "free",
+      status: "completed",
+      instructors_id: course.instructor_id,
+    });
+
+    if (txErr) {
+      console.error("Failed to create transaction:", txErr);
+      return NextResponse.json(
+        { success: false, error: "Gagal membuat transaksi" },
+        { status: 500 }
+      );
+    }
+
+    // Create user_progress (enrollment)
+    const { error: progressErr } = await supabaseAdmin
+      .from("user_progress")
+      .insert({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        course_id: courseId,
+        completed_modules: [],
+        progress_percentage: 0,
+        enrolled_at: new Date().toISOString(),
+        last_accessed_at: new Date().toISOString(),
+      });
+
+    if (progressErr) {
+      console.error("Failed to create user_progress:", progressErr);
+      return NextResponse.json(
+        { success: false, error: "Gagal mendaftarkan ke kursus" },
+        { status: 500 }
+      );
+    }
+
+    // Increment enrolled_count
+    const { data: currentCourse } = await supabaseAdmin
+      .from("courses")
+      .select("enrolled_count")
+      .eq("id", courseId)
+      .maybeSingle();
+
+    if (currentCourse) {
+      await supabaseAdmin
+        .from("courses")
+        .update({ enrolled_count: (currentCourse.enrolled_count || 0) + 1 })
+        .eq("id", courseId);
+    }
+
+    // Send email notification
+    try {
+      await sendPurchaseResultEmail({
+        to: userInfo.email,
+        fullName: userInfo.full_name || "User",
+        courseTitle: course.title,
+        amount: 0,
+        status: "completed",
+      });
+    } catch (e) {
+      console.log("Failed to send email:", e);
+      // Don't fail the request if email fails
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Berhasil terdaftar di kursus gratis",
+      transactionId,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Internal error";
+    console.error("POST /api/user/checkout/confirm error:", e);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

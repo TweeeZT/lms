@@ -58,9 +58,9 @@ export default function NewModulePage() {
   const [moduleKind, setModuleKind] = useState<ModuleKind>("materi");
 
   // Materi content
-  const [contentType, setContentType] = useState<
-    "video" | "pdf" | "ppt" | "image" | "link" | "file" | "text"
-  >("link");
+  const [contentType, setContentType] = useState<"link" | "file" | "text">(
+    "link"
+  );
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [textContent, setTextContent] = useState("");

@@ -3,11 +3,11 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as Blockly from "blockly";
 import "blockly/blocks";
-import { javascriptGenerator } from "blockly/javascript";
 import {
   injectIndonesianScratchBlockly,
   defineIndonesianScratchBlocks,
   INDONESIAN_SCRATCH_TOOLBOX_XML,
+  workspaceToCode,
 } from "@/lib/blocklyIndonesianScratch";
 import { useAuth } from "@/hooks/useAuth";
 import type { BlocklyProject } from "@/types";
@@ -42,6 +42,7 @@ export default function BlocklyProjectEditorPage() {
 
   const blocklyDivRef = useRef<HTMLDivElement | null>(null);
   const workspaceRef = useRef<Blockly.WorkspaceSvg | null>(null);
+  const actionClearTimerRef = useRef<number | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -98,6 +99,20 @@ export default function BlocklyProjectEditorPage() {
     return () => workspaceRef.current?.dispose();
   }, [loadProject]);
 
+  // Cleanup any pending action-clear timer on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        if (actionClearTimerRef.current) {
+          clearTimeout(actionClearTimerRef.current);
+          actionClearTimerRef.current = null;
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
   // Inject Blockly AFTER the workspace div is rendered (i.e., loading false)
   useEffect(() => {
     if (loading) return; // wait for data load to finish so div is in DOM
@@ -123,11 +138,88 @@ export default function BlocklyProjectEditorPage() {
     }
   }, [loading, workspaceXml]);
 
+  // Global keyboard listener to forward keydown events to registered Scratch handlers.
+  // We attach this once so key events reach handlers even if other elements stop propagation.
+  useEffect(() => {
+    const pressed = new Set<string>();
+    const handler = (e: KeyboardEvent) => {
+      const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+      const key = isSpace ? 'spasi' : e.key;
+      // ignore repeated keydown events while key is held
+      if (pressed.has(key)) return;
+      pressed.add(key);
+      // @ts-ignore
+      const handlers = window.__scratchEvents?.keys?.[key];
+      if (handlers && handlers.length > 0) {
+        try {
+          // Try to describe the first handler so the Output shows what action is running
+          try {
+            const describeHandler = (fn: Function) => {
+              try {
+                const s = String(fn || '');
+                const mPlay = s.match(/playSound\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+                if (mPlay) return `Mainkan suara: ${mPlay[1]}`;
+                if (/stopAllSounds\s*\(/.test(s)) return 'Hentikan semua suara';
+                const mLog = s.match(/console\.log\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+                if (mLog) return mLog[1];
+                return 'Menjalankan aksi...';
+              } catch {
+                return 'Menjalankan aksi...';
+              }
+            };
+            const desc = describeHandler(handlers[0]);
+            // clear any previous auto-clear timer
+            try {
+              if (actionClearTimerRef.current) {
+                clearTimeout(actionClearTimerRef.current);
+                actionClearTimerRef.current = null;
+              }
+            } catch {/* ignore */}
+            setOutput(desc);
+            // schedule auto-clear to waiting message after 3 seconds
+            try {
+              actionClearTimerRef.current = window.setTimeout(() => {
+                setOutput('menunggu aksi yang baru');
+                actionClearTimerRef.current = null;
+              }, 3000);
+            } catch {
+              /* ignore */
+            }
+          } catch (err) {
+            // ignore errors while describing
+          }
+
+          handlers.forEach((h: Function) => {
+            try {
+              h();
+            } catch (err) {
+              console.error('Error in scratch handler', err);
+            }
+          });
+        } finally {
+          // Prevent default page behavior (e.g. scrolling) when a Scratch handler handled the key
+          try { e.preventDefault(); } catch (ignored) {}
+        }
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+      const key = isSpace ? 'spasi' : e.key;
+      pressed.delete(key);
+    };
+    document.addEventListener('keydown', handler, true);
+    document.addEventListener('keyup', up, true);
+    return () => {
+      document.removeEventListener('keydown', handler, true);
+      document.removeEventListener('keyup', up, true);
+    };
+  }, []);
+
   const serialize = () => {
     if (!workspaceRef.current) return { xml: "", code: "" };
     const xmlDom = Blockly.Xml.workspaceToDom(workspaceRef.current);
     const xmlText = Blockly.Xml.domToText(xmlDom);
-    const code = javascriptGenerator.workspaceToCode(workspaceRef.current);
+    const code = workspaceToCode(workspaceRef.current);
     return { xml: xmlText, code };
   };
 
@@ -165,18 +257,104 @@ export default function BlocklyProjectEditorPage() {
       const { code } = serialize();
       const logs: string[] = [];
       const originalLog = console.log;
+      
+      // Setup logging (capture all console.log output during the runtime session)
       console.log = (...args: unknown[]) => {
-        logs.push(
-          args
-            .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
-            .join(" ")
-        );
+        const line = args
+          .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+          .join(" ");
+        logs.push(line);
+        // only show the most recent lines (last 10) so Output stays focused on current events
+        try {
+          setOutput(logs.slice(-10).join("\n"));
+        } catch (e) {
+          /* ignore setState errors */
+        }
+        originalLog(...args); // Also log to browser console
       };
-      // Wrap in async IIFE to support await in control blocks
-      const full = `(async () => { ${code} })();`;
+      
+      // Initialize scratch events (runtime will also reinitialize inside the generated bootstrap)
+      window.__scratchEvents = {
+        flag: [],
+        keys: {}
+      };
+
+      // Try to focus the Blockly container so keyboard events are delivered predictably.
+      try {
+        blocklyDivRef.current?.focus();
+      } catch (e) {
+        /* ignore */
+      }
+      
+      const bootstrap = `
+        // Initialize runtime environment
+        window.__scratchEvents = { flag: [], keys: {} };
+        
+        // Define runtime helpers
+        function sleep(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        try {
+          // Setup event handlers
+          ${code}
+          
+          console.log('Program dimulai...');
+          // Execute all flag click handlers
+          if (window.__scratchEvents.flag && window.__scratchEvents.flag.length > 0) {
+            for (const handler of window.__scratchEvents.flag) {
+              if (typeof handler === 'function') {
+                await handler();
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Runtime error:", err);
+          throw err;
+        }
+      `;
+      const full = `(async () => { ${bootstrap} })();`;
+      // Install a minimal runtime sound API so generated code can call playSound / stopAllSounds
+      // This will be available under window.__scratchRuntime inside generated code.
+      try {
+        if (typeof window !== 'undefined') {
+          const w = window as any;
+          w.__scratchRuntime = w.__scratchRuntime || {};
+          if (!w.__scratchRuntime.playSound) {
+            // simple beep using WebAudio
+            w.__scratchRuntime.audioCtx = w.__scratchRuntime.audioCtx || new ((w.AudioContext) || (w as any).webkitAudioContext)();
+            w.__scratchRuntime.playSound = (name: string) => {
+              try {
+                const ctx = w.__scratchRuntime.audioCtx;
+                // resume context in case the browser suspended it due to autoplay policy
+                if (typeof ctx.resume === 'function') ctx.resume().catch(()=>{});
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = 'sine';
+                o.frequency.value = 600; // A simple tone
+                o.connect(g);
+                g.connect(ctx.destination);
+                g.gain.value = 0.0001;
+                // ramp to audible to avoid click
+                g.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+                o.start();
+                // stop after 250ms
+                setTimeout(() => {
+                  try { g.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.02); o.stop(); } catch(_){}}
+                , 250);
+              } catch (err) { console.error('playSound error', err); }
+            };
+            w.__scratchRuntime.stopAllSounds = () => { /* no-op for now */ };
+          }
+        }
+      } catch (e) {
+        /* ignore */
+      }
+
       new Function(full)();
-      console.log = originalLog;
-      setOutput(logs.join("\n"));
+
+      // We intentionally do not add extra bootstrap logs here. The console.log override
+      // will capture only event/runtime logs (and we display only the most recent ones).
     } catch (e) {
       setOutput(e instanceof Error ? e.message : "Error menjalankan kode");
     } finally {
@@ -261,11 +439,12 @@ export default function BlocklyProjectEditorPage() {
               position: "relative",
             }}
           >
-            <div
-              ref={blocklyDivRef}
-              id={WORKSPACE_ID}
-              style={{ width: "100%", height: "100%" }}
-            />
+                    <div
+                      ref={blocklyDivRef}
+                      id={WORKSPACE_ID}
+                      tabIndex={0}
+                      style={{ width: "100%", height: "100%" }}
+                    />
           </Paper>
           {showOutput && (
             <Paper

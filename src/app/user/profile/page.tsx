@@ -1062,37 +1062,65 @@ export default function UserProfilePage() {
           </Button>
           <Button
             onClick={async () => {
-              if (!avatarSrc || !croppedAreaPixels || !user?.id) return;
-              const blob = await getCroppedBlob(avatarSrc, croppedAreaPixels);
-              const fd = new FormData();
-              fd.append("file", blob, "avatar.jpg");
-              fd.append("userId", user.id);
-              fd.append("bucket", "avatar");
-              fd.append("filename", "avatar.jpg");
-              const up = await fetch("/api/storage/upload", {
-                method: "POST",
-                body: fd,
-              });
-              const uj = await up.json();
-              if (!up.ok || !uj.success) return;
-              const avatarUrl = uj.url as string;
-              const avatarPath = uj.path as string;
-              // save to user
-              const save = await fetch("/api/user/profile/edit", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  userId: user.id,
-                  avatarUrl,
-                  avatarPath,
-                }),
-              });
-              const sj = await save.json();
-              if (save.ok && sj.success) {
+              try {
+                if (!avatarSrc || !croppedAreaPixels || !user?.id) return;
+                const blob = await getCroppedBlob(avatarSrc, croppedAreaPixels);
+                const fd = new FormData();
+                fd.append("file", blob, "avatar.jpg");
+                fd.append("userId", user.id);
+                fd.append("bucket", "avatar");
+                fd.append("filename", "avatar.jpg");
+                const up = await fetch("/api/storage/upload", {
+                  method: "POST",
+                  body: fd,
+                });
+                const uj = await up.json();
+                if (!up.ok || !uj.success) {
+                  notifications.show({
+                    title: "Gagal Upload",
+                    message: (uj && uj.error) || "Gagal mengunggah avatar",
+                    color: "red",
+                  });
+                  return;
+                }
+                // cache-bust so UI shows the latest image immediately
+                const rawUrl = uj.url as string;
+                const avatarUrl = `${rawUrl}${rawUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
+                const avatarPath = uj.path as string;
+                // save to user
+                const save = await fetch("/api/user/profile/edit", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: user.id,
+                    avatarUrl,
+                    avatarPath,
+                  }),
+                });
+                const sj = await save.json();
+                if (!save.ok || !sj.success) {
+                  notifications.show({
+                    title: "Gagal Menyimpan",
+                    message: (sj && sj.error) || "Avatar tidak dapat disimpan",
+                    color: "red",
+                  });
+                  return;
+                }
                 updateUser({ avatar: avatarUrl });
+                notifications.show({
+                  title: "Berhasil",
+                  message: "Avatar berhasil diperbarui",
+                  color: "green",
+                });
                 setAvatarEditorOpen(false);
                 if (avatarSrc) URL.revokeObjectURL(avatarSrc);
                 setAvatarSrc(null);
+              } catch (e: unknown) {
+                notifications.show({
+                  title: "Terjadi Kesalahan",
+                  message: e instanceof Error ? e.message : "Gagal menyimpan avatar",
+                  color: "red",
+                });
               }
             }}
           >

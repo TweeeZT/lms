@@ -517,9 +517,9 @@ export default function UserProfilePage() {
       if (!res.ok || !json.success)
         throw new Error(json.error || "Gagal menyimpan");
       // reflect in auth context
-      updateUser({ fullName, username, phone, bio });
+      updateUser({ fullName, username, phone, bio } as any);
       // update initial snapshot
-      initialRef.current = { fullName, username, email, phone, bio };
+      initialRef.current = { fullName, username, email, phone, bio } as any;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan");
     } finally {
@@ -643,6 +643,7 @@ export default function UserProfilePage() {
                   size="md"
                 />
               </Grid.Col>
+              {/* Username Scratch removed: use main username as Scratch username */}
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <TextInput
                   label="Email"

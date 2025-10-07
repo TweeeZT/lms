@@ -94,6 +94,7 @@ export async function GET(
     total_questions: number;
     passed: boolean;
     created_at: string;
+    answers?: Array<{ questionId: string; answer: string }>;
   };
   let lastAttempt: AttemptRow | null = null;
   if (quiz?.id) {
@@ -129,15 +130,7 @@ export async function GET(
     explanation?: string | null;
   };
   let attemptAnswers: AttemptAnswerDetail[] | null = null;
-  if (
-    quiz?.id &&
-    lastAttempt &&
-    (
-      lastAttempt as unknown as {
-        answers?: Array<{ questionId: string; answer: string }>;
-      }
-    ).answers
-  ) {
+  if (quiz?.id && lastAttempt && lastAttempt.answers) {
     try {
       const { data: qsFull } = await supabaseAdmin
         .from("module_quiz_questions")
@@ -165,12 +158,7 @@ export async function GET(
         }
         answerMap[q.id] = corr;
       });
-      const userAns =
-        (
-          lastAttempt as unknown as {
-            answers?: Array<{ questionId: string; answer: string }>;
-          }
-        ).answers || [];
+      const userAns = lastAttempt.answers || [];
       attemptAnswers = userAns.map((a) => {
         const qFull = fullList.find((q) => q.id === a.questionId);
         const correctAnswer = answerMap[a.questionId] || "";
@@ -223,6 +211,15 @@ export async function GET(
     if (subData) submission = subData as SubmissionRow;
   }
 
+  // Live Session (optional)
+  const { data: liveSession } = await supabaseAdmin
+    .from("module_live_sessions")
+    .select(
+      "id, agenda, start_at, duration_min, join_url, passcode, status, recording_url, time_zone"
+    )
+    .eq("module_id", moduleId)
+    .maybeSingle();
+
   // Progress for gating
   const { data: prog } = await supabaseAdmin
     .from("user_progress")
@@ -274,6 +271,19 @@ export async function GET(
             instructions: assignment.instructions,
             dueDate: assignment.due_date,
             maxScore: assignment.max_score,
+          }
+        : null,
+      liveSession: liveSession
+        ? {
+            id: liveSession.id,
+            agenda: liveSession.agenda,
+            start_at: liveSession.start_at,
+            duration_min: liveSession.duration_min,
+            join_url: liveSession.join_url,
+            passcode: liveSession.passcode,
+            status: liveSession.status,
+            recording_url: liveSession.recording_url,
+            time_zone: liveSession.time_zone,
           }
         : null,
     },
@@ -561,6 +571,60 @@ export async function POST(
     });
   }
 
+  // Action: reset-quiz - delete previous attempts to allow retry
+  if (action === "reset-quiz") {
+    try {
+      // Get quiz id first
+      const { data: quiz } = await supabaseAdmin
+        .from("module_quizzes")
+        .select("id")
+        .eq("module_id", moduleId)
+        .maybeSingle();
+
+      if (!quiz) {
+        return NextResponse.json(
+          { success: false, error: "Quiz not found" },
+          { status: 404 }
+        );
+      }
+
+      // Delete all previous attempts for this quiz
+      const { error: delErr } = await supabaseAdmin
+        .from("quiz_attempts")
+        .delete()
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .eq("module_id", moduleId)
+        .eq("quiz_id", quiz.id);
+
+      if (delErr) {
+        console.error("Error deleting quiz attempts for retry:", delErr);
+        return NextResponse.json(
+          { success: false, error: "Failed to reset quiz: " + delErr.message },
+          { status: 500 }
+        );
+      }
+
+      console.log("Quiz attempts deleted for retry:", {
+        userId,
+        courseId,
+        moduleId,
+        quizId: quiz.id,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Quiz reset successfully",
+      });
+    } catch (e) {
+      console.error("Exception resetting quiz:", e);
+      return NextResponse.json(
+        { success: false, error: "Failed to reset quiz" },
+        { status: 500 }
+      );
+    }
+  }
+
   // Action: submit-quiz { answers: [{questionId, answer}] }
   if (action === "submit-quiz") {
     const { answers } = body as {
@@ -627,38 +691,53 @@ export async function POST(
     const required = Math.max(80, quiz.passing_score || 0); // enforce minimum 80
     const passed = scorePct >= required;
 
-    // Remove previous attempts so only the latest is kept (simplifies UI)
-    try {
-      await supabaseAdmin
-        .from("quiz_attempts")
-        .delete()
-        .eq("user_id", userId)
-        .eq("course_id", courseId)
-        .eq("module_id", moduleId)
-        .eq("quiz_id", quiz.id);
-    } catch {}
+    // Don't delete previous attempts - keep all as history
+    // Each new attempt will be inserted as a new record
 
     // Attempt storage (latest) in quiz_attempts table
     let attemptId: string | null = null;
     try {
-      const { data: attempt } = await supabaseAdmin
+      const newAttemptId = `qa-${randomUUID()}`;
+      const insertData = {
+        id: newAttemptId,
+        user_id: userId,
+        course_id: courseId,
+        module_id: moduleId,
+        quiz_id: quiz.id,
+        score: scorePct,
+        correct_count: correctCount,
+        total_questions: total,
+        passed,
+        answers,
+      };
+
+      console.log("Inserting quiz attempt:", insertData);
+
+      const { data: attempt, error: attemptErr } = await supabaseAdmin
         .from("quiz_attempts")
-        .insert({
-          user_id: userId,
-          course_id: courseId,
-          module_id: moduleId,
-          quiz_id: quiz.id,
-          score: scorePct,
-          correct_count: correctCount,
-          total_questions: total,
-          passed,
-          answers,
-        })
+        .insert(insertData)
         .select("id")
         .single();
+
+      if (attemptErr) {
+        console.error("Error inserting quiz attempt:", attemptErr);
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to save quiz attempt: " + attemptErr.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log("Quiz attempt inserted successfully:", attempt);
       attemptId = attempt?.id || null;
-    } catch {
-      // Silently ignore if table not present
+    } catch (e) {
+      console.error("Exception inserting quiz attempt:", e);
+      return NextResponse.json(
+        { success: false, error: "Failed to save quiz attempt" },
+        { status: 500 }
+      );
     }
 
     // Build answer details with explanations

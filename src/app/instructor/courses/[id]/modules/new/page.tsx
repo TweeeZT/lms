@@ -19,9 +19,11 @@ import {
   SimpleGrid,
   Alert,
   Card,
+  Text,
 } from "@mantine/core";
 import { useParams, useRouter } from "next/navigation";
 import { DateTimePicker } from "@mantine/dates";
+import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import {
   IconPlus,
@@ -30,6 +32,7 @@ import {
   IconDeviceFloppy,
 } from "@tabler/icons-react";
 import { useAuth } from "../../../../../../hooks/useAuth";
+import RichTextEditor from "../../../../../../components/RichTextEditor";
 
 type Question = {
   question: string;
@@ -177,6 +180,13 @@ export default function NewModulePage() {
       const json = await res.json();
       if (!res.ok || !json.success)
         throw new Error(json.error || "Gagal menyimpan modul");
+
+      notifications.show({
+        color: "green",
+        title: "Berhasil!",
+        message: "Modul berhasil dibuat",
+      });
+
       router.push(`/instructor/courses/${id}`);
     } catch (err) {
       let msg = err instanceof Error ? err.message : "Gagal menyimpan modul";
@@ -189,6 +199,11 @@ export default function NewModulePage() {
         }
       }
       setError(msg);
+      notifications.show({
+        color: "red",
+        title: "Gagal!",
+        message: msg,
+      });
     } finally {
       setSaving(false);
     }
@@ -294,13 +309,17 @@ export default function NewModulePage() {
                     />
                   )}
                   {contentType === "text" && (
-                    <Textarea
-                      label="Konten Teks"
-                      minRows={4}
-                      value={textContent}
-                      onChange={(e) => setTextContent(e.currentTarget.value)}
-                      required
-                    />
+                    <div>
+                      <Text size="sm" fw={500} mb={8}>
+                        Konten Teks <span style={{ color: "red" }}>*</span>
+                      </Text>
+                      <RichTextEditor
+                        value={textContent}
+                        onChange={setTextContent}
+                        placeholder="Tulis materi pembelajaran..."
+                        minHeight="400px"
+                      />
+                    </div>
                   )}
                   {contentType === "file" && (
                     <FileInput

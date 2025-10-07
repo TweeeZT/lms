@@ -209,9 +209,19 @@ export default function UserExplorePage() {
                   <Title order={4} lineClamp={2}>
                     {course.title}
                   </Title>
-                  <Text size="sm" c="dimmed" lineClamp={3}>
-                    {course.description}
-                  </Text>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      color: "var(--mantine-color-dimmed)",
+                      overflow: "hidden",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: course.description || "",
+                    }}
+                  />
 
                   <Group gap="xs" mb="sm">
                     <IconUsers size="1rem" />

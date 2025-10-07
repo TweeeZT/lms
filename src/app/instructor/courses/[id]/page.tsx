@@ -28,6 +28,7 @@ import {
   IconUser,
   IconPencil,
   IconAlertTriangle,
+  IconUsers,
 } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -206,12 +207,24 @@ export default function InstructorCourseDetailPage() {
                 <Text c="dimmed">Detail kursus dan modul</Text>
               </div>
             </Group>
-            <Badge
-              variant="light"
-              color={course.is_published ? "green" : "gray"}
-            >
-              {course.is_published ? "Dipublikasikan" : "Draft"}
-            </Badge>
+            <Group>
+              <Button
+                variant="light"
+                color="blue"
+                leftSection={<IconUsers size={18} />}
+                onClick={() =>
+                  router.push(`/instructor/courses/${courseId}/students`)
+                }
+              >
+                Lihat Siswa
+              </Button>
+              <Badge
+                variant="light"
+                color={course.is_published ? "green" : "gray"}
+              >
+                {course.is_published ? "Dipublikasikan" : "Draft"}
+              </Badge>
+            </Group>
           </Group>
 
           <Divider />

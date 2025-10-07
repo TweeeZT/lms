@@ -13,7 +13,6 @@ import {
   ActionIcon,
   Modal,
   TextInput,
-  Textarea,
   NumberInput,
   Select,
   FileInput,
@@ -35,6 +34,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useAuth } from "../../../hooks/useAuth";
 import Link from "next/link";
+import RichTextEditor from "../../../components/RichTextEditor";
 
 export default function InstructorCoursesPage() {
   const { user } = useAuth();
@@ -757,19 +757,18 @@ export default function InstructorCoursesPage() {
               {imageMeta.height}
             </Text>
           )}
-          <Textarea
-            label="Deskripsi"
-            placeholder="Ringkasan singkat kursus"
-            minRows={3}
-            autosize
-            value={form.description}
-            onChange={(e) =>
-              setForm({ ...form, description: e.currentTarget.value })
-            }
-            withAsterisk
-            error={errors.description}
-            disabled={saving}
-          />
+          <div>
+            <Text size="sm" fw={500} mb={8}>
+              Deskripsi <span style={{ color: "red" }}>*</span>
+            </Text>
+            <RichTextEditor
+              value={form.description}
+              onChange={(value) => setForm({ ...form, description: value })}
+              placeholder="Tulis deskripsi lengkap kursus Anda..."
+              minHeight="250px"
+              error={errors.description}
+            />
+          </div>
           <Select
             label="Level"
             data={[

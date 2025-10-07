@@ -24,6 +24,7 @@ import {
   Select,
   Divider,
   SimpleGrid,
+  Text,
 } from "@mantine/core";
 import {
   IconArrowLeft,
@@ -33,6 +34,8 @@ import {
 } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
 import { DateTimePicker } from "@mantine/dates";
+import { notifications } from "@mantine/notifications";
+import RichTextEditor from "@/components/RichTextEditor";
 
 type QuizQuestion = {
   question: string;
@@ -294,10 +297,22 @@ export default function AdminEditModulePage({
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || "Gagal menyimpan");
       }
+
+      notifications.show({
+        color: "green",
+        title: "Berhasil!",
+        message: "Modul berhasil diupdate",
+      });
+
       router.push(`/admin/courses/${courseId}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gagal menyimpan";
       setError(msg);
+      notifications.show({
+        color: "red",
+        title: "Gagal!",
+        message: msg,
+      });
     } finally {
       setSaving(false);
     }
@@ -332,26 +347,26 @@ export default function AdminEditModulePage({
                 />
               )}
               {contentType === "text" && (
-                <Textarea
-                  label="Konten Teks"
-                  description={`${contentText.length}/65535 karakter`}
-                  minRows={8}
-                  maxRows={20}
-                  value={contentText}
-                  onChange={(e) => {
-                    const val = e.currentTarget.value;
-                    if (val.length <= 65535) {
-                      setContentText(val);
-                    }
-                  }}
-                  required
-                  styles={{
-                    input: {
-                      fontFamily: "monospace",
-                      fontSize: "14px",
-                    },
-                  }}
-                />
+                <div>
+                  <Text size="sm" fw={500} mb={8}>
+                    Konten Teks <span style={{ color: "red" }}>*</span>
+                  </Text>
+                  <Text size="xs" c="dimmed" mb={8}>
+                    {contentText.replace(/<[^>]*>/g, "").length}/65535 karakter
+                  </Text>
+                  <RichTextEditor
+                    value={contentText}
+                    onChange={(val) => {
+                      // Strip HTML to count actual text length
+                      const plainText = val.replace(/<[^>]*>/g, "");
+                      if (plainText.length <= 65535) {
+                        setContentText(val);
+                      }
+                    }}
+                    placeholder="Tulis materi pembelajaran..."
+                    minHeight="400px"
+                  />
+                </div>
               )}
               {contentType === "file" && (
                 <Alert color="yellow" title="Catatan">

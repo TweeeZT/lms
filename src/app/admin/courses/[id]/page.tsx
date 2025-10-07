@@ -182,7 +182,7 @@ export default function AdminCourseDetailPage() {
               <Button
                 variant="subtle"
                 leftSection={<IconChevronLeft size="1rem" />}
-                onClick={() => router.back()}
+                onClick={() => router.push("/admin/courses")}
               >
                 Kembali
               </Button>

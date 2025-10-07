@@ -331,9 +331,19 @@ export default function UserCoursesPage() {
                         <Title order={4} mb="xs" lineClamp={2}>
                           {course.title}
                         </Title>
-                        <Text size="sm" c="dimmed" lineClamp={2}>
-                          {course.description}
-                        </Text>
+                        <div
+                          style={{
+                            fontSize: "14px",
+                            color: "var(--mantine-color-dimmed)",
+                            overflow: "hidden",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html: course.description || "",
+                          }}
+                        />
                       </div>
 
                       <Group gap="xs">

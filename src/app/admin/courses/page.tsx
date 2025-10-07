@@ -12,13 +12,13 @@ import {
   ActionIcon,
   Modal,
   TextInput,
-  Textarea,
   NumberInput,
   Select,
   FileInput,
   Switch,
   Pagination,
   Skeleton,
+  Textarea,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -35,6 +35,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useAuth } from "../../../hooks/useAuth";
 import Link from "next/link";
+import RichTextEditor from "../../../components/RichTextEditor";
 
 // Admin Courses Management (similar to instructor version but can pick instructor)
 export default function AdminCoursesPage() {
@@ -767,7 +768,7 @@ export default function AdminCoursesPage() {
             disabled={saving}
           />
           <FileInput
-            label="Thumbnail (wajib)"
+            label="Thumbnail"
             placeholder="Pilih gambar..."
             accept="image/*"
             onChange={(file) => handlePickThumbnail(file as File)}
@@ -817,19 +818,20 @@ export default function AdminCoursesPage() {
               {imageMeta.height}
             </Text>
           )}
-          <Textarea
-            label="Deskripsi"
-            placeholder="Ringkasan singkat kursus"
-            minRows={3}
-            autosize
-            value={form.description}
-            onChange={(e) =>
-              setForm({ ...form, description: e.currentTarget.value })
-            }
-            withAsterisk
-            error={errors.description}
-            disabled={saving}
-          />
+          <div>
+            <Textarea
+              withAsterisk
+              label="Deskripsi"
+              placeholder="Tulis deskripsi lengkap kursus..."
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.currentTarget.value })
+              }
+              minRows={5}
+              autosize
+              error={errors.description}
+            />
+          </div>
           <Select
             label="Level"
             data={[

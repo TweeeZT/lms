@@ -18,8 +18,10 @@ import {
   Select,
   Divider,
   SimpleGrid,
+  Text,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
+import { notifications } from "@mantine/notifications";
 import {
   IconArrowLeft,
   IconDeviceFloppy,
@@ -27,6 +29,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
+import RichTextEditor from "@/components/RichTextEditor";
 
 const kinds = [
   { value: "materi", label: "Materi" },
@@ -196,10 +199,22 @@ export default function AdminNewModulePage() {
       if (json.debug) {
         console.info("[AdminNewModule Debug Success]", json.debug);
       }
+
+      notifications.show({
+        color: "green",
+        title: "Berhasil!",
+        message: "Modul berhasil dibuat",
+      });
+
       router.push(`/admin/courses/${courseId}`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gagal membuat modul";
       setError(msg);
+      notifications.show({
+        color: "red",
+        title: "Gagal!",
+        message: msg,
+      });
     } finally {
       setLoading(false);
     }
@@ -232,26 +247,24 @@ export default function AdminNewModulePage() {
                 />
               )}
               {contentType === "text" && (
-                <Textarea
-                  label="Konten Teks"
-                  description={`${contentText.length}/65535 karakter`}
-                  minRows={8}
-                  maxRows={20}
-                  value={contentText}
-                  onChange={(e) => {
-                    const val = e.currentTarget.value;
-                    if (val.length <= 65535) {
-                      setContentText(val);
-                    }
-                  }}
-                  required
-                  styles={{
-                    input: {
-                      fontFamily: "monospace",
-                      fontSize: "14px",
-                    },
-                  }}
-                />
+                <div>
+                  <Text size="sm" fw={500} mb={8}>
+                    Konten Teks <span style={{ color: "red" }}>*</span>
+                  </Text>
+                  <Text size="xs" c="dimmed" mb={8}>
+                    {contentText.length}/65535 karakter
+                  </Text>
+                  <RichTextEditor
+                    value={contentText}
+                    onChange={(val) => {
+                      if (val.length <= 65535) {
+                        setContentText(val);
+                      }
+                    }}
+                    placeholder="Tulis materi pembelajaran..."
+                    minHeight="400px"
+                  />
+                </div>
               )}
               {contentType === "file" && (
                 <FileInput

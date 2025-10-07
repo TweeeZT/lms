@@ -14,14 +14,17 @@ import {
   FileInput,
   NumberInput,
   Alert,
+  Text,
 } from "@mantine/core";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DateTimePicker } from "@mantine/dates";
+import { notifications } from "@mantine/notifications";
 import { IconChevronLeft, IconUpload } from "@tabler/icons-react";
 // Use absolute import via root alias; adjust if your tsconfig paths differ
 import PrimeLoader from "@/components/PrimeLoader";
 import { useAuth } from "../../../../../../../hooks/useAuth";
+import RichTextEditor from "@/components/RichTextEditor";
 
 type Question = {
   question: string;
@@ -289,9 +292,22 @@ export default function EditModulePage() {
         if (!res.ok || !json.success)
           throw new Error(json.error || "Gagal update modul");
       }
+
+      notifications.show({
+        color: "green",
+        title: "Berhasil!",
+        message: "Modul berhasil diupdate",
+      });
+
       router.push(`/instructor/courses/${id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal update modul");
+      const msg = err instanceof Error ? err.message : "Gagal update modul";
+      setError(msg);
+      notifications.show({
+        color: "red",
+        title: "Gagal!",
+        message: msg,
+      });
     } finally {
       setSaving(false);
     }
@@ -383,25 +399,27 @@ export default function EditModulePage() {
                         accept=".pdf,.ppt,.pptx,.mp4,.png,.jpg,.jpeg"
                       />
                     ) : contentType === "text" ? (
-                      <Textarea
-                        label="Konten Teks"
-                        description={`${textContent.length}/65535 karakter`}
-                        value={textContent}
-                        onChange={(e) => {
-                          const val = e.currentTarget.value;
-                          if (val.length <= 65535) {
-                            setTextContent(val);
-                          }
-                        }}
-                        minRows={8}
-                        maxRows={20}
-                        styles={{
-                          input: {
-                            fontFamily: "monospace",
-                            fontSize: "14px",
-                          },
-                        }}
-                      />
+                      <div>
+                        <Text size="sm" fw={500} mb={8}>
+                          Konten Teks
+                        </Text>
+                        <Text size="xs" c="dimmed" mb={8}>
+                          {textContent.replace(/<[^>]*>/g, "").length}/65535
+                          karakter
+                        </Text>
+                        <RichTextEditor
+                          value={textContent}
+                          onChange={(val) => {
+                            // Strip HTML to count actual text length
+                            const plainText = val.replace(/<[^>]*>/g, "");
+                            if (plainText.length <= 65535) {
+                              setTextContent(val);
+                            }
+                          }}
+                          placeholder="Tulis materi pembelajaran..."
+                          minHeight="400px"
+                        />
+                      </div>
                     ) : (
                       <TextInput
                         label="URL"

@@ -60,6 +60,7 @@ export async function GET(
   const items = (modules || []).map((m: ModRow) => ({
     id: m.id,
     title: m.title,
+    description: m.description,
     kind: (m.module_kind as string) || "content",
     order: m.order_index ?? 0,
     isCompleted: completed.includes(m.id),

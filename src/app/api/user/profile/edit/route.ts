@@ -18,6 +18,19 @@ export async function PATCH(req: Request) {
         { status: 400 }
       );
     }
+    // Ensure server Supabase client is configured
+    if (!url || !serviceRole) {
+      console.error(
+        "Supabase server client not configured in /api/user/profile/edit. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Server misconfigured: missing Supabase credentials",
+        },
+        { status: 500 }
+      );
+    }
     // verify actor exists and is allowed (user or instructor)
     const { data: actor, error: aErr } = await supabase
       .from("users")
@@ -60,11 +73,35 @@ export async function PATCH(req: Request) {
         .maybeSingle();
       if (curErr) throw curErr;
 
-      const { error } = await supabase
-        .from("users")
-        .update(patch)
-        .eq("id", userId);
-      if (error) throw error;
+      let upd = await supabase.from("users").update(patch).eq("id", userId);
+      if (upd.error) {
+        const m = (upd.error && (upd.error as any).message) || "";
+        // If column missing (from older schema), retry without scratch_username (backwards compatible)
+        if (
+          m.toLowerCase().includes("scratch_username") &&
+          m.toLowerCase().includes("does not exist")
+        ) {
+          console.warn(
+            "scratch_username column missing; retrying update without it"
+          );
+          const { scratch_username, ...rest } = patch as any;
+          upd = await supabase.from("users").update(rest).eq("id", userId);
+        }
+      }
+      if (upd.error) {
+        const msg = (upd.error && (upd.error as any).message) || "";
+        if (
+          msg.toLowerCase().includes("duplicate") ||
+          msg.toLowerCase().includes("unique")
+        ) {
+          // likely username unique violation
+          return NextResponse.json(
+            { success: false, error: "Username sudah digunakan" },
+            { status: 409 }
+          );
+        }
+        throw upd.error;
+      }
 
       // Try to remove previous avatar
       const oldUrl = (current?.avatar as string | null) || null;
@@ -106,7 +143,19 @@ export async function PATCH(req: Request) {
         .from("users")
         .update(patch)
         .eq("id", userId);
-      if (error) throw error;
+      if (error) {
+        const msg = (error && (error as any).message) || "";
+        if (
+          msg.toLowerCase().includes("duplicate") ||
+          msg.toLowerCase().includes("unique")
+        ) {
+          return NextResponse.json(
+            { success: false, error: "Username sudah digunakan" },
+            { status: 409 }
+          );
+        }
+        throw error;
+      }
     }
     return NextResponse.json({ success: true, updated: 1 });
   } catch (err: unknown) {

@@ -258,3 +258,73 @@ body {
 [data-mantine-color-scheme="dark"] .course-card:hover {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
 }
+
+/* Rich Text Editor (Quill) Styles */
+.ql-toolbar.ql-snow {
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px 8px 0 0 !important;
+  background: var(--hover-bg) !important;
+}
+
+.ql-container.ql-snow {
+  border: 1px solid var(--border-color) !important;
+  border-top: none !important;
+  border-radius: 0 0 8px 8px !important;
+  font-family: var(--mantine-font-family) !important;
+}
+
+.ql-editor {
+  font-size: 16px !important;
+  line-height: 1.8 !important;
+  color: var(--foreground) !important;
+}
+
+.ql-editor.ql-blank::before {
+  color: #909296 !important;
+  font-style: normal !important;
+}
+
+.ql-toolbar .ql-stroke {
+  stroke: var(--foreground) !important;
+}
+
+.ql-toolbar .ql-fill {
+  fill: var(--foreground) !important;
+}
+
+.ql-toolbar .ql-picker-label {
+  color: var(--foreground) !important;
+}
+
+.ql-toolbar button:hover,
+.ql-toolbar button:focus,
+.ql-toolbar .ql-picker-label:hover,
+.ql-toolbar .ql-picker-label.ql-active {
+  color: var(--primary-color) !important;
+}
+
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button:focus .ql-stroke,
+.ql-toolbar .ql-active .ql-stroke {
+  stroke: var(--primary-color) !important;
+}
+
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button:focus .ql-fill,
+.ql-toolbar .ql-active .ql-fill {
+  fill: var(--primary-color) !important;
+}
+
+[data-mantine-color-scheme="dark"] .ql-toolbar.ql-snow {
+  background: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-mantine-color-scheme="dark"] .ql-container.ql-snow {
+  border-color: var(--border-color) !important;
+}
+
+[data-mantine-color-scheme="dark"] .ql-editor {
+  background: var(--card-bg) !important;
+  color: var(--foreground) !important;
+}

@@ -4,6 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+if (!url || !serviceRole) {
+  // Provide a clearer server-side error during development
+  console.error("Supabase server client not configured. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+}
 const supabase = createClient(url, serviceRole);
 
 // GET /api/user/profile?userId=...
@@ -17,15 +21,39 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   }
+  // Ensure server Supabase client is configured
+  if (!url || !serviceRole) {
+    console.error('Supabase server client not configured in /api/user/profile. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+    return NextResponse.json(
+      { success: false, error: 'Server misconfigured: missing Supabase credentials' },
+      { status: 500 }
+    );
+  }
   try {
-    const { data: u, error: uErr } = await supabase
-      .from("users")
-      .select(
-        "id, email, username, full_name, avatar, phone, bio, role, created_at, updated_at"
-      )
-      .eq("id", userId)
-      .maybeSingle();
-    if (uErr) throw uErr;
+    // Try to select including scratch_username. If the column doesn't exist
+    // (migration not applied), retry the select without it so profile still loads.
+    let u: any = null;
+    const selectWithScratch = "id, email, username, full_name, avatar, phone, bio, role, created_at, updated_at, scratch_username";
+    const selectWithoutScratch = "id, email, username, full_name, avatar, phone, bio, role, created_at, updated_at";
+    const first = await supabase.from("users").select(selectWithScratch).eq("id", userId).maybeSingle();
+    if (first.error) {
+      const msg = (first.error && (first.error as any).message) || "";
+      // detect missing column error (Postgres reports column "..." does not exist)
+      if (msg.toLowerCase().includes("scratch_username") && msg.toLowerCase().includes("does not exist")) {
+        console.warn("scratch_username column missing; retrying user select without it");
+        const second = await supabase.from("users").select(selectWithoutScratch).eq("id", userId).maybeSingle();
+        if (second.error) {
+          console.error("Supabase error fetching user (without scratch_username):", second.error);
+          throw second.error;
+        }
+        u = second.data;
+      } else {
+        console.error("Supabase error fetching user:", first.error);
+        throw first.error;
+      }
+    } else {
+      u = first.data;
+    }
     // Allow any existing user to view their profile summary (role-agnostic)
     if (!u) {
       return NextResponse.json(
@@ -125,6 +153,7 @@ export async function GET(req: Request) {
         phone: u.phone,
         bio: u.bio,
         role: u.role,
+        scratchUsername: (u as any).scratch_username ?? null,
         level,
         points,
         balance: stu.balance ?? 0,
@@ -141,7 +170,10 @@ export async function GET(req: Request) {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Gagal memuat profil";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    // In development return details to help debugging; in production keep message minimal
+    const details = (err && typeof err === "object" && "message" in (err as any)) ? (err as any).message : undefined;
+    console.error("Error in /api/user/profile:", err);
+    return NextResponse.json({ success: false, error: msg, details: process.env.NODE_ENV === 'production' ? undefined : details }, { status: 500 });
   }
 }
 
@@ -155,6 +187,14 @@ export async function PATCH(req: Request) {
       return NextResponse.json(
         { success: false, error: "userId wajib" },
         { status: 400 }
+      );
+    }
+    // Ensure server Supabase client is configured
+    if (!url || !serviceRole) {
+      console.error('Supabase server client not configured in /api/user/profile PATCH. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+      return NextResponse.json(
+        { success: false, error: 'Server misconfigured: missing Supabase credentials' },
+        { status: 500 }
       );
     }
     const patch: Record<string, unknown> = {};

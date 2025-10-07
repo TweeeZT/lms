@@ -11,7 +11,7 @@ Dibangun dengan **Next.js**, **TypeScript**, **Supabase**, dan **Mantine UI**.
 - Manajemen Kursus dan Transaksi
 - Integrasi Pembayaran Xendit dan Cetak Struk
 - Sistem Gamifikasi (XP, Level, Badge)
-- Modul Coding Interaktif (Blockly)
+- Modul Coding Interaktif (Scratch)
 - Dashboard Statistik Real-time
 - Forum Diskusi dan Komentar
 - Sertifikat Otomatis (PDF Generator)

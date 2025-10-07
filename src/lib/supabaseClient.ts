@@ -17,11 +17,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // automatic refresh attempts to avoid noisy "Invalid Refresh Token" errors
 // when a refresh token is not available (we handle session checks explicitly).
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+<<<<<<< HEAD
   auth: {
     persistSession: true,
     autoRefreshToken: false,
     detectSessionInUrl: false,
   },
+=======
+  auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+>>>>>>> 93a6dc22b727b1e06c21fd1b269a4f7ec91fd838
 });
 
 export type SupabaseClientType = typeof supabase;

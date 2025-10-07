@@ -1,15 +1,17 @@
 // Indonesian Scratch-style Blockly extensions
-// Auto-generated: Custom block definitions, generators, toolbox XML, and theme
 // This file can be imported in the Blockly editor page before injecting the workspace.
 
 // Use full Blockly bundle for proper typings of generators (JavaScript) instead of core-only.
 import * as Blockly from "blockly";
 import "blockly/blocks";
 import { javascriptGenerator as jsGen } from "blockly/javascript";
-// Cast to any to attach custom block generators without fighting TS private typings.
+
+// Cast generator to any to avoid TypeScript errors with custom blocks
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const javascriptGenerator: any = jsGen;
-// Local order fallbacks (Blockly's generated code uses these numeric precedences). Values mirror upstream defaults.
+const javascriptGenerator = jsGen as any;
+
+// Block generation order constants (precedence)
+const ORDER_ATOMIC = 0;
 const ORDER_NONE = 99;
 const ORDER_LOGICAL_OR = 4;
 const ORDER_ADDITION = 12;
@@ -227,22 +229,34 @@ const blocksJson: any[] = [
   /* ================= Peristiwa / Events ================= */
   {
     type: "when_flag_clicked",
-    message0: "ketika bendera diklik",
-    message1: "%1",
-    args1: [{ type: "input_statement", name: "DO" }],
+    message0: "ketika bendera diklik %1",
+    args0: [{ type: "input_statement", name: "DO" }],
     colour: "#FFBF00",
     tooltip: "Mulai saat bendera diklik",
     helpUrl: "",
   },
   {
     type: "when_key_pressed",
-    message0: "ketika tombol %1 ditekan",
-    args0: [{ type: "field_input", name: "KEY", text: "spasi" }],
-    message1: "%1",
-    args1: [{ type: "input_statement", name: "DO" }],
+    message0: "ketika tombol %1 ditekan %2",
+    args0: [
+      {
+        type: "field_dropdown",
+        name: "KEY",
+        options: [
+          ["spasi", "spasi"],
+          ["panah atas", "ArrowUp"],
+          ["panah bawah", "ArrowDown"],
+          ["panah kiri", "ArrowLeft"],
+          ["panah kanan", "ArrowRight"],
+          ["enter", "Enter"]
+        ]
+      },
+      { type: "input_statement", name: "DO" }
+    ],
     colour: "#FFBF00",
     tooltip: "Mulai saat tombol ditekan",
     helpUrl: "",
+    nextStatement: null
   },
 
   /* ================= Kontrol / Control ================= */
@@ -372,7 +386,40 @@ export function defineIndonesianScratchBlocks() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const g: any = defineIndonesianScratchBlocks as any;
   if (g.__defined) return;
+  
+  // Define all blocks first
   Blockly.defineBlocksWithJsonArray(blocksJson);
+  
+  // Ensure all generators are registered
+  for (const block of blocksJson) {
+    if (typeof block !== 'object' || !block || !('type' in block) || typeof block.type !== 'string') continue;
+    const type = block.type;
+    if (!type || (type in javascriptGenerator)) continue;
+    
+    console.log('Registering generator for:', type);
+    if (type === 'when_key_pressed') {
+      javascriptGenerator[type] = function(block: Blockly.Block) {
+        const key = block.getFieldValue("KEY") || "spasi";
+        const branch = javascriptGenerator.statementToCode(block, "DO") || "";
+        return `
+if (!window.__scratchEvents.keys["${key}"]) {
+  window.__scratchEvents.keys["${key}"] = [];
+}
+window.__scratchEvents.keys["${key}"].push(async function() {
+  try {
+    ${branch}
+  } catch (e) {
+    console.error("Error in key handler:", e);
+  }
+});\n`;
+      };
+    } else {
+      javascriptGenerator[type] = function() {
+        return `console.warn('Generator for ${type} not implemented');\n`;
+      };
+    }
+  }
+  
   g.__defined = true;
 }
 
@@ -435,37 +482,138 @@ javascriptGenerator["upload_sprite"] = function () {
 
 javascriptGenerator["play_sound"] = function (block: Blockly.Block) {
   const sound = block.getFieldValue("SOUND") || "suara";
-  return `console.log('Mainkan suara: ${sound}');\n`;
+  // Call runtime playSound if available. Do nothing otherwise (no console output).
+  return `try { if (window.__scratchRuntime && typeof window.__scratchRuntime.playSound === 'function') { window.__scratchRuntime.playSound(${JSON.stringify(sound)}); } } catch (e) { console.error('play_sound runtime error', e); }\n`;
 };
+
+// Event generators are defined later with other event blocks
 javascriptGenerator["stop_all_sounds"] = function () {
-  return `console.log('Hentikan semua suara');\n`;
+  return `try { if (window.__scratchRuntime && typeof window.__scratchRuntime.stopAllSounds === 'function') { window.__scratchRuntime.stopAllSounds(); } } catch (e) { console.error('stop_all_sounds runtime error', e); }\n`;
 };
+
+// Define default generators for any undefined blocks
+function ensureBlockGenerators() {
+  for (const block of blocksJson) {
+    const type = block.type;
+    if (type && !javascriptGenerator[type]) {
+      javascriptGenerator[type] = function(_: Blockly.Block) {
+        return `console.warn('Generator for ${type} not implemented');\n`;
+      };
+    }
+  }
+}
 
 // Event hats: instead of executing immediately when generating code, we register
 // handlers into an array window.__scratchEvents then a runtime bootstrap will run them.
 // This avoids immediate execution order issues and lets us run all hats after load.
 javascriptGenerator["when_flag_clicked"] = function (block: Blockly.Block) {
-  const branch = javascriptGenerator.statementToCode(block, "DO");
-  const code =
-    `window.__scratchEvents = window.__scratchEvents || { flag: [], keys: {} };\n` +
-    `window.__scratchEvents.flag.push(async function(){\n${branch}});\n`;
-  return code;
+  const branch = javascriptGenerator.statementToCode(block, "DO") || "";
+  return `{
+    const handler = async function() {
+      try {
+        ${branch}
+      } catch (e) {
+        console.error("Error in flag handler:", e);
+      }
+    };
+    window.__scratchEvents.flag.push(handler);
+  }`;
 };
 
 javascriptGenerator["when_key_pressed"] = function (block: Blockly.Block) {
-  const key = (block.getFieldValue("KEY") || "spasi").toLowerCase();
-  const branch = javascriptGenerator.statementToCode(block, "DO");
-  const code =
-    `window.__scratchEvents = window.__scratchEvents || { flag: [], keys: {} };\n` +
-    `window.__scratchEvents.keys['${key}'] = window.__scratchEvents.keys['${key}'] || [];\n` +
-    `window.__scratchEvents.keys['${key}'].push(async function(){\n${branch}});\n`;
-  return code;
+  const key = block.getFieldValue("KEY") || "spasi";
+  const branch = javascriptGenerator.statementToCode(block, "DO") || "";
+  return [
+    'if (!window.__scratchEvents.keys["' + key + '"]) window.__scratchEvents.keys["' + key + '"] = [];',
+    'window.__scratchEvents.keys["' + key + '"].push(async function() {',
+    '  try {',
+    '    ' + branch,
+    '  } catch (e) {',
+    '    console.error("Error in key handler:", e);',
+    '  }',
+    '});'
+  ].join('\n');
 };
 
 javascriptGenerator["wait_seconds"] = function (block: Blockly.Block) {
   const secs = valueToCodeNumber(block, "SECONDS", 1);
   return `await new Promise(r=>setTimeout(r, 1000*${secs}));\n`;
 };
+
+// Compatibility shim: some imports expect Blockly.JavaScript or window.javascriptGenerator
+// to refer to the active JavaScript generator. Ensure both point to our generator.
+try {
+  // @ts-ignore - assign to Blockly.JavaScript if missing
+  if (!(Blockly as any).JavaScript) (Blockly as any).JavaScript = jsGen;
+} catch (e) {
+  /* ignore in non-browser environments */
+}
+
+// Expose on window for runtime lookup when executing generated code in the page
+try {
+  // @ts-ignore
+  if (typeof window !== "undefined") {
+    // Ensure runtime arrays exist
+    // @ts-ignore
+    window.javascriptGenerator = jsGen;
+    // @ts-ignore
+    if (!window.__scratchEvents) window.__scratchEvents = { flag: [], keys: {} };
+  }
+} catch (e) {
+  /* ignore when window is not available */
+}
+
+// Ensure every block generator we defined is also present on Blockly.JavaScript
+// (some code paths fetch the generator from Blockly.JavaScript instead of the
+// named import). This copies functions so both references are identical.
+try {
+  const target = (Blockly as any).JavaScript || jsGen;
+  for (const def of blocksJson) {
+    if (!def || typeof def !== 'object' || !('type' in def)) continue;
+    const t = def.type as string;
+    if (t && (jsGen as any)[t] && !(target as any)[t]) {
+      (target as any)[t] = (jsGen as any)[t];
+    }
+  }
+} catch (e) {
+  /* noop */
+}
+
+// Some Blockly internals look for generator functions in generator.forBlock[blockType].
+// Ensure our functions are copied there so workspaceToCode can find them.
+function copyGeneratorsToForBlock(genObj: any) {
+  try {
+    if (!genObj) return;
+    if (!genObj.forBlock || typeof genObj.forBlock !== 'object') genObj.forBlock = {};
+    for (const k of Object.keys(genObj)) {
+      if (k === 'forBlock') continue;
+      const v = genObj[k];
+      if (typeof v === 'function') genObj.forBlock[k] = v;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+try {
+  copyGeneratorsToForBlock(jsGen);
+  copyGeneratorsToForBlock((Blockly as any).JavaScript || jsGen);
+  // @ts-ignore
+  if (typeof window !== 'undefined' && (window as any).javascriptGenerator) {
+    // @ts-ignore
+    copyGeneratorsToForBlock((window as any).javascriptGenerator);
+  }
+} catch (e) {
+  /* noop */
+}
+
+// Export the configured javascript generator and a helper to generate code from a workspace
+export const indonesianJavascriptGenerator = jsGen as any;
+export function workspaceToCode(workspace: Blockly.Workspace | null) {
+  if (!workspace) return "";
+  return indonesianJavascriptGenerator.workspaceToCode(workspace);
+}
+
 javascriptGenerator["repeat_times"] = function (block: Blockly.Block) {
   const t = valueToCodeNumber(block, "TIMES", 10);
   const branch = javascriptGenerator.statementToCode(block, "DO");
@@ -521,12 +669,14 @@ javascriptGenerator["set_variable_number"] = function (block: Blockly.Block) {
 
 // Safety: ensure every defined block has at least a stub generator so Blockly doesn't throw.
 for (const def of blocksJson) {
-  const t = (def as { type?: string }).type;
-  if (!t) continue;
-  if (!javascriptGenerator[t]) {
-    javascriptGenerator[t] = function () {
-      return `/* generator missing for ${t} */`;
-    };
+  if (typeof def === 'object' && def && 'type' in def && typeof def.type === 'string') {
+    const type = def.type;
+    if (!(type in javascriptGenerator)) {
+      console.warn(`Adding default generator for block type: ${type}`);
+      javascriptGenerator[type] = function () {
+        return `console.warn('Generator for ${type} not implemented');\n`;
+      };
+    }
   }
 }
 

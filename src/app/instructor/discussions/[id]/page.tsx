@@ -23,6 +23,8 @@ import {
   IconArrowLeft,
   IconSend,
   IconVideo,
+  IconEdit,
+  IconTrash,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -33,7 +35,6 @@ type ApiComment = {
   id: string;
   user_id: string;
   content: string;
-  likes: number;
   created_at: string;
   user: {
     id: string;
@@ -98,6 +99,8 @@ export default function PostDetailPage() {
   const [post, setPost] = useState<ApiPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState("");
+  const [editingComment, setEditingComment] = useState<ApiComment | null>(null);
+  const [editText, setEditText] = useState("");
   const likeKey = (id: string) => `disc-liked-${id}`;
 
   async function load() {
@@ -151,7 +154,6 @@ export default function PostDetailPage() {
             id: `tmp-${Date.now()}`,
             user_id: user.id,
             content,
-            likes: 0,
             created_at: new Date().toISOString(),
             user: {
               id: user.id,
@@ -168,6 +170,39 @@ export default function PostDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ instructorId: user.id, content }),
     });
+    load();
+  };
+
+  const startEditComment = (comment: ApiComment) => {
+    setEditingComment(comment);
+    setEditText(comment.content);
+  };
+
+  const saveEditComment = async () => {
+    if (!user || !editingComment) return;
+    await fetch(
+      `/api/instructor/discussions/${postId}/comments/${editingComment.id}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructorId: user.id, content: editText }),
+      }
+    );
+    setEditingComment(null);
+    setEditText("");
+    load();
+  };
+
+  const deleteComment = async (comment: ApiComment) => {
+    if (!user) return;
+    await fetch(
+      `/api/instructor/discussions/${postId}/comments/${comment.id}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructorId: user.id }),
+      }
+    );
     load();
   };
 
@@ -398,10 +433,50 @@ export default function PostDetailPage() {
                         {relativeTime(c.created_at)}
                       </Text>
                     </Group>
-                    <Text size="sm" style={{ whiteSpace: "pre-line" }}>
-                      {c.content}
-                    </Text>
+                    {editingComment?.id === c.id ? (
+                      <Stack gap="xs">
+                        <TextInput
+                          value={editText}
+                          onChange={(e) => setEditText(e.currentTarget.value)}
+                        />
+                        <Group gap="xs">
+                          <Button size="xs" onClick={saveEditComment}>
+                            Simpan
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="light"
+                            onClick={() => setEditingComment(null)}
+                          >
+                            Batal
+                          </Button>
+                        </Group>
+                      </Stack>
+                    ) : (
+                      <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                        {c.content}
+                      </Text>
+                    )}
                   </Stack>
+                  {/* Aksi Edit & Hapus Komentar */}
+                  {user?.id === c.user_id && (
+                    <Group gap="xs">
+                      <ActionIcon
+                        color="blue"
+                        variant="subtle"
+                        onClick={() => startEditComment(c)}
+                      >
+                        <IconEdit size="1rem" />
+                      </ActionIcon>
+                      <ActionIcon
+                        color="red"
+                        variant="subtle"
+                        onClick={() => deleteComment(c)}
+                      >
+                        <IconTrash size="1rem" />
+                      </ActionIcon>
+                    </Group>
+                  )}
                 </Group>
               </Card>
             ))}

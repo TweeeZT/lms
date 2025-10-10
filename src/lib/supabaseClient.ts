@@ -16,16 +16,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Create browser Supabase client. We persist session in storage but disable
 // automatic refresh attempts to avoid noisy "Invalid Refresh Token" errors
 // when a refresh token is not available (we handle session checks explicitly).
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-<<<<<<< HEAD
-  auth: {
-    persistSession: true,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
-=======
-  auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
->>>>>>> 93a6dc22b727b1e06c21fd1b269a4f7ec91fd838
-});
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+  }
+);
 
 export type SupabaseClientType = typeof supabase;

@@ -46,7 +46,7 @@ export async function GET(
       .eq("post_id", post.id);
     const { data: comments } = await supabase
       .from("discussion_comments")
-      .select("id, post_id, user_id, content, likes, created_at")
+      .select("id, post_id, user_id, content, created_at")
       .eq("post_id", post.id)
       .order("created_at", { ascending: true });
     const commentAuthorIds = Array.from(

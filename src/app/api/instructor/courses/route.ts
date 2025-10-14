@@ -102,6 +102,8 @@ export async function POST(req: Request) {
     const duration_min = Number(form.get("duration_min") || 0);
     const points = Number(form.get("points") || 0);
     const is_published = String(form.get("is_published") || "false") === "true";
+    const overviewTitle = String(form.get("overviewTitle") || "").trim();
+    const overviewContent = String(form.get("overviewContent") || "").trim();
 
     if (!instructorId || !title) {
       return NextResponse.json(
@@ -208,6 +210,76 @@ export async function POST(req: Request) {
         { success: false, error: msg, details: error },
         { status }
       );
+    }
+
+    // Create overview module if overviewTitle or overviewContent provided
+    if (overviewTitle || overviewContent) {
+      const moduleId =
+        globalThis?.crypto?.randomUUID?.() ||
+        `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const moduleTitle = overviewTitle || "Pengenalan";
+
+      console.log("[CREATE] Inserting overview module:", {
+        moduleId,
+        courseId: newId,
+        title: moduleTitle,
+      });
+
+      const { error: moduleError } = await supabase.from("modules").insert({
+        id: moduleId,
+        course_id: newId,
+        title: moduleTitle,
+        module_kind: "overview",
+        description: "Modul pengantar gratis untuk memperkenalkan kursus",
+        is_published: true,
+      });
+
+      if (moduleError) {
+        console.error(
+          "[CREATE] Failed to insert overview module:",
+          moduleError
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Gagal membuat modul pengantar: " + moduleError.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (overviewContent) {
+        console.log("[CREATE] Inserting module_summary:", {
+          moduleId,
+          contentLength: overviewContent.length,
+        });
+
+        const { error: summaryError } = await supabase
+          .from("module_summary")
+          .insert({
+            id: globalThis?.crypto?.randomUUID?.() || `summary-${Date.now()}`,
+            module_id: moduleId,
+            text_content: overviewContent,
+          });
+
+        if (summaryError) {
+          console.error(
+            "[CREATE] Failed to insert module_summary:",
+            summaryError
+          );
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Gagal menyimpan konten modul pengantar: " +
+                summaryError.message,
+            },
+            { status: 500 }
+          );
+        }
+
+        console.log("[CREATE] Module summary inserted successfully");
+      }
     }
 
     return NextResponse.json({ success: true, item: data });

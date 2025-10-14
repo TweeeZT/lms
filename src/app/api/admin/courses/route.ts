@@ -137,6 +137,8 @@ export async function POST(req: NextRequest) {
     const duration_min = Number(form.get("duration_min") || 0);
     const points = Number(form.get("points") || 0);
     const is_published = String(form.get("is_published") || "false") === "true";
+    const overviewTitle = String(form.get("overviewTitle") || "").trim();
+    const overviewContent = String(form.get("overviewContent") || "").trim();
     const file = form.get("file");
 
     const missing: string[] = [];
@@ -249,6 +251,78 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Create overview module if provided
+    if (overviewTitle || overviewContent) {
+      const moduleId =
+        globalThis?.crypto?.randomUUID?.() ||
+        `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const moduleTitle = overviewTitle || "Pengenalan";
+
+      console.log("[ADMIN CREATE] Inserting overview module:", {
+        moduleId,
+        courseId: newId,
+        title: moduleTitle,
+      });
+
+      const { error: moduleError } = await supabaseAdmin
+        .from("modules")
+        .insert({
+          id: moduleId,
+          course_id: newId,
+          title: moduleTitle,
+          module_kind: "overview",
+          description: "Modul pengantar gratis untuk memperkenalkan kursus",
+          is_published: true,
+        });
+
+      if (moduleError) {
+        console.error(
+          "[ADMIN CREATE] Failed to insert overview module:",
+          moduleError
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Gagal membuat modul pengantar: " + moduleError.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (overviewContent) {
+        console.log("[ADMIN CREATE] Inserting module_summary:", {
+          moduleId,
+          contentLength: overviewContent.length,
+        });
+
+        const { error: summaryError } = await supabaseAdmin
+          .from("module_summary")
+          .insert({
+            id: globalThis?.crypto?.randomUUID?.() || `summary-${Date.now()}`,
+            module_id: moduleId,
+            text_content: overviewContent,
+          });
+
+        if (summaryError) {
+          console.error(
+            "[ADMIN CREATE] Failed to insert module_summary:",
+            summaryError
+          );
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Gagal menyimpan konten modul pengantar: " +
+                summaryError.message,
+            },
+            { status: 500 }
+          );
+        }
+
+        console.log("[ADMIN CREATE] Module summary inserted successfully");
+      }
+    }
+
     return NextResponse.json({ success: true, item: data });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Internal error";
@@ -286,6 +360,8 @@ export async function PATCH(req: NextRequest) {
       const points = form.get("points");
       const is_published = form.get("is_published");
       const instructor_id = String(form.get("instructor_id") || "").trim();
+      const overviewTitle = String(form.get("overviewTitle") || "").trim();
+      const overviewContent = String(form.get("overviewContent") || "").trim();
       const file = form.get("file");
 
       if (title) allowed.title = title;
@@ -298,6 +374,11 @@ export async function PATCH(req: NextRequest) {
       if (points !== null) allowed.points = Number(points);
       if (is_published !== null)
         allowed.is_published = String(is_published) === "true";
+
+      // Store overview data for later module creation/update
+      allowed["__overviewTitle"] = overviewTitle;
+      allowed["__overviewContent"] = overviewContent;
+
       if (instructor_id) {
         // validate instructor role
         const { data: inst, error: instErr } = await supabaseAdmin
@@ -386,6 +467,13 @@ export async function PATCH(req: NextRequest) {
           }
         }
       }
+      // Store overview data for later module creation/update
+      if (Object.prototype.hasOwnProperty.call(body, "overviewTitle")) {
+        allowed["__overviewTitle"] = body.overviewTitle;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "overviewContent")) {
+        allowed["__overviewContent"] = body.overviewContent;
+      }
     }
 
     if (!id) {
@@ -408,33 +496,218 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (Object.keys(allowed).length === 0) {
+    // Extract overview data before updating (these shouldn't go to courses table)
+    const overviewTitle = allowed["__overviewTitle"] as string | undefined;
+    const overviewContent = allowed["__overviewContent"] as string | undefined;
+    delete allowed["__overviewTitle"];
+    delete allowed["__overviewContent"];
+
+    if (
+      Object.keys(allowed).length === 0 &&
+      !overviewTitle &&
+      !overviewContent
+    ) {
       return NextResponse.json(
         { success: false, error: "No changes" },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("courses")
-      .update(allowed)
-      .eq("id", id)
-      .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, points, enrolled_count, rating, is_published, created_at, updated_at"
-      )
-      .maybeSingle();
-    if (error) {
-      if (newObjectPath) {
-        try {
-          await supabaseAdmin.storage
-            .from("lessons-thumbnail")
-            .remove([newObjectPath]);
-        } catch {}
+    // Only update course if there are course fields to update
+    let data = existing;
+    if (Object.keys(allowed).length > 0) {
+      const { data: updated, error } = await supabaseAdmin
+        .from("courses")
+        .update(allowed)
+        .eq("id", id)
+        .select(
+          "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, points, enrolled_count, rating, is_published, created_at, updated_at"
+        )
+        .maybeSingle();
+      if (error) {
+        if (newObjectPath) {
+          try {
+            await supabaseAdmin.storage
+              .from("lessons-thumbnail")
+              .remove([newObjectPath]);
+          } catch {}
+        }
+        return NextResponse.json(
+          { success: false, error: error.message || "Update gagal" },
+          { status: 400 }
+        );
       }
-      return NextResponse.json(
-        { success: false, error: error.message || "Update gagal" },
-        { status: 400 }
-      );
+      data = updated || data;
+    }
+
+    // Handle overview module creation/update
+    if (overviewTitle || overviewContent) {
+      // Check if overview module already exists for this course
+      const { data: existingModule } = await supabaseAdmin
+        .from("modules")
+        .select("id")
+        .eq("course_id", id)
+        .eq("module_kind", "overview")
+        .maybeSingle();
+
+      if (existingModule) {
+        // Update existing overview module
+        const moduleTitle = overviewTitle || "Pengenalan";
+        console.log("[ADMIN UPDATE] Updating existing overview module:", {
+          moduleId: existingModule.id,
+          title: moduleTitle,
+        });
+
+        const { error: updateModuleError } = await supabaseAdmin
+          .from("modules")
+          .update({ title: moduleTitle })
+          .eq("id", existingModule.id);
+
+        if (updateModuleError) {
+          console.error(
+            "[ADMIN UPDATE] Failed to update module:",
+            updateModuleError
+          );
+        }
+
+        if (overviewContent) {
+          // Update or create module_summary
+          const { data: existingSummary } = await supabaseAdmin
+            .from("module_summary")
+            .select("id")
+            .eq("module_id", existingModule.id)
+            .maybeSingle();
+
+          if (existingSummary) {
+            console.log("[ADMIN UPDATE] Updating module_summary:", {
+              summaryId: existingSummary.id,
+              contentLength: overviewContent.length,
+            });
+
+            const { error: updateSummaryError } = await supabaseAdmin
+              .from("module_summary")
+              .update({ text_content: overviewContent })
+              .eq("id", existingSummary.id);
+
+            if (updateSummaryError) {
+              console.error(
+                "[ADMIN UPDATE] Failed to update module_summary:",
+                updateSummaryError
+              );
+              return NextResponse.json(
+                {
+                  success: false,
+                  error:
+                    "Gagal mengupdate konten modul pengantar: " +
+                    updateSummaryError.message,
+                },
+                { status: 500 }
+              );
+            }
+
+            console.log("[ADMIN UPDATE] Module summary updated successfully");
+          } else {
+            console.log("[ADMIN UPDATE] Creating new module_summary:", {
+              moduleId: existingModule.id,
+              contentLength: overviewContent.length,
+            });
+
+            const { error: insertSummaryError } = await supabaseAdmin
+              .from("module_summary")
+              .insert({
+                id:
+                  globalThis?.crypto?.randomUUID?.() || `summary-${Date.now()}`,
+                module_id: existingModule.id,
+                text_content: overviewContent,
+              });
+
+            if (insertSummaryError) {
+              console.error(
+                "[ADMIN UPDATE] Failed to insert module_summary:",
+                insertSummaryError
+              );
+              return NextResponse.json(
+                {
+                  success: false,
+                  error:
+                    "Gagal menyimpan konten modul pengantar: " +
+                    insertSummaryError.message,
+                },
+                { status: 500 }
+              );
+            }
+
+            console.log("[ADMIN UPDATE] Module summary created successfully");
+          }
+        }
+      } else {
+        // Create new overview module
+        const moduleId =
+          globalThis?.crypto?.randomUUID?.() ||
+          `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const moduleTitle = overviewTitle || "Pengenalan";
+
+        console.log("[ADMIN UPDATE] Creating new overview module:", {
+          moduleId,
+          courseId: id,
+          title: moduleTitle,
+        });
+
+        const { error: moduleError } = await supabaseAdmin
+          .from("modules")
+          .insert({
+            id: moduleId,
+            course_id: id,
+            title: moduleTitle,
+            module_kind: "overview",
+            description: "Modul pengantar gratis untuk memperkenalkan kursus",
+            is_published: true,
+          });
+
+        if (moduleError) {
+          console.error("[ADMIN UPDATE] Failed to insert module:", moduleError);
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Gagal membuat modul pengantar: " + moduleError.message,
+            },
+            { status: 500 }
+          );
+        }
+
+        if (overviewContent) {
+          console.log("[ADMIN UPDATE] Creating module_summary:", {
+            moduleId,
+            contentLength: overviewContent.length,
+          });
+
+          const { error: summaryError } = await supabaseAdmin
+            .from("module_summary")
+            .insert({
+              id: globalThis?.crypto?.randomUUID?.() || `summary-${Date.now()}`,
+              module_id: moduleId,
+              text_content: overviewContent,
+            });
+
+          if (summaryError) {
+            console.error(
+              "[ADMIN UPDATE] Failed to insert module_summary:",
+              summaryError
+            );
+            return NextResponse.json(
+              {
+                success: false,
+                error:
+                  "Gagal menyimpan konten modul pengantar: " +
+                  summaryError.message,
+              },
+              { status: 500 }
+            );
+          }
+
+          console.log("[ADMIN UPDATE] Module summary created successfully");
+        }
+      }
     }
 
     // If new thumbnail uploaded, optional cleanup old folder images (best-effort)

@@ -120,6 +120,9 @@ export default function UserPostDetailPage() {
   const [editText, setEditText] = useState("");
   const [likeLoading, setLikeLoading] = useState(false);
   const likeKey = (id: string) => `disc-liked-${id}`;
+  const [confirmEditComment, setConfirmEditComment] = useState(false);
+  const [confirmDeleteComment, setConfirmDeleteComment] =
+    useState<ApiComment | null>(null);
 
   async function load() {
     if (!user) return;
@@ -355,6 +358,12 @@ export default function UserPostDetailPage() {
   const startEditComment = (comment: ApiComment) => {
     setEditingComment(comment);
     setEditText(comment.content);
+    setConfirmEditComment(true);
+  };
+
+  const confirmEditCommentAction = () => {
+    setConfirmEditComment(false);
+    // Continue with editing
   };
 
   const saveEditComment = async () => {
@@ -370,19 +379,30 @@ export default function UserPostDetailPage() {
     setEditingComment(null);
     setEditText("");
     load();
+    notifications.show({
+      title: "Berhasil",
+      message: "Komentar berhasil diupdate",
+      color: "green",
+    });
   };
 
-  const deleteComment = async (comment: ApiComment) => {
-    if (!user) return;
+  const handleDeleteComment = async () => {
+    if (!user || !confirmDeleteComment) return;
     await fetch(
-      `/api/user/discussions/${postId}/comments/${comment.id}`,
+      `/api/user/discussions/${postId}/comments/${confirmDeleteComment.id}`,
       {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id }),
       }
     );
+    setConfirmDeleteComment(null);
     load();
+    notifications.show({
+      title: "Berhasil",
+      message: "Komentar berhasil dihapus",
+      color: "green",
+    });
   };
 
   if (loading) {
@@ -811,7 +831,7 @@ export default function UserPostDetailPage() {
                       <ActionIcon
                         color="red"
                         variant="subtle"
-                        onClick={() => deleteComment(c)}
+                        onClick={() => setConfirmDeleteComment(c)}
                       >
                         <IconTrash size="1rem" />
                       </ActionIcon>
@@ -822,6 +842,61 @@ export default function UserPostDetailPage() {
             ))}
           </Stack>
         </Stack>
+
+        {/* Modal Konfirmasi Edit Komentar */}
+        <Modal
+          opened={confirmEditComment}
+          onClose={() => {
+            setConfirmEditComment(false);
+            setEditingComment(null);
+          }}
+          title="Konfirmasi Edit Komentar"
+          centered
+        >
+          <Stack>
+            <Text>Apakah kamu yakin ingin mengedit komentar ini?</Text>
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setConfirmEditComment(false);
+                  setEditingComment(null);
+                }}
+              >
+                Batal
+              </Button>
+              <Button color="blue" onClick={confirmEditCommentAction}>
+                Ya, Edit
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+
+        {/* Modal Konfirmasi Hapus Komentar */}
+        <Modal
+          opened={!!confirmDeleteComment}
+          onClose={() => setConfirmDeleteComment(null)}
+          title="Konfirmasi Hapus Komentar"
+          centered
+        >
+          <Stack>
+            <Text>
+              Apakah kamu yakin ingin menghapus komentar ini? Tindakan ini tidak
+              bisa dibatalkan.
+            </Text>
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="default"
+                onClick={() => setConfirmDeleteComment(null)}
+              >
+                Batal
+              </Button>
+              <Button color="red" onClick={handleDeleteComment}>
+                Hapus
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
       </Stack>
     </Container>
   );

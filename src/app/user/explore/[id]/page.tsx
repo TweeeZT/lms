@@ -72,8 +72,13 @@ export default function ExploreCourseDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [course, setCourse] = useState<PublicCourse | null>(null);
   const [modules, setModules] = useState<PublicModule[]>([]);
+  const [overviewContent, setOverviewContent] = useState<string | null>(null);
 
   // derived - separate by type
+  const overviewModule = useMemo(
+    () => modules.find((m) => m.kind === "overview"),
+    [modules]
+  );
   const materiModules = useMemo(
     () => modules.filter((m) => m.kind === "materi"),
     [modules]
@@ -104,6 +109,24 @@ export default function ExploreCourseDetailPage() {
         if (!active) return;
         setCourse(json.course);
         setModules(json.modules);
+
+        // Load overview module content if exists
+        const overviewMod = json.modules.find(
+          (m: PublicModule) => m.kind === "overview"
+        );
+        if (overviewMod) {
+          try {
+            const summaryRes = await fetch(
+              `/api/user/modules/${overviewMod.id}/summary`
+            );
+            const summaryJson = await summaryRes.json();
+            if (summaryRes.ok && summaryJson.success) {
+              setOverviewContent(summaryJson.text_content);
+            }
+          } catch {
+            // Overview content optional, don't fail if not found
+          }
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Gagal memuat kursus");
       } finally {
@@ -291,6 +314,63 @@ export default function ExploreCourseDetailPage() {
 
           {/* Content Sections - Separated by Type */}
           <Stack gap="lg">
+            {/* Overview Module - Always Visible (Free Preview) */}
+            {overviewModule && (
+              <Card
+                withBorder
+                radius="md"
+                p="lg"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #f8f9fa 0%, #e7f5ff 100%)",
+                }}
+              >
+                <Group mb="md" gap="xs">
+                  <ThemeIcon variant="filled" color="blue" size="lg">
+                    <IconBook size={20} />
+                  </ThemeIcon>
+                  <div>
+                    <Group gap="xs">
+                      <Text fw={700} size="lg">
+                        {overviewModule.title}
+                      </Text>
+                      <Badge color="green" variant="filled" size="sm">
+                        GRATIS
+                      </Badge>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      Preview modul pengantar - Lihat sebelum membeli
+                    </Text>
+                  </div>
+                </Group>
+                {overviewModule.description && (
+                  <Text size="sm" c="dimmed" mb="md">
+                    {overviewModule.description}
+                  </Text>
+                )}
+                {overviewContent && (
+                  <Box
+                    p="md"
+                    style={{
+                      background: "white",
+                      borderRadius: 8,
+                      border: "1px solid var(--border-color)",
+                    }}
+                  >
+                    <div
+                      dangerouslySetInnerHTML={{ __html: overviewContent }}
+                      className="overview-content"
+                      style={{
+                        fontSize: "0.95rem",
+                        lineHeight: 1.8,
+                        color: "var(--foreground)",
+                      }}
+                    />
+                  </Box>
+                )}
+              </Card>
+            )}
+
             <Title order={3}>Konten Kursus</Title>
 
             {/* Materi Section */}

@@ -71,9 +71,11 @@ export default function InstructorCoursesPage() {
     level: "beginner" as "beginner" | "intermediate" | "advanced",
     thumbnail: "",
     description: "",
-    category: "scratch" as "scratch" | "roblox",
+    category: "scratch" as "scratch" | "roblox" | "robotics",
     durationMin: 0,
     points: 0,
+    overviewTitle: "",
+    overviewContent: "",
   });
   const [errors, setErrors] = useState<{
     title?: string;
@@ -119,6 +121,8 @@ export default function InstructorCoursesPage() {
       category: "scratch",
       durationMin: 0,
       points: 0,
+      overviewTitle: "",
+      overviewContent: "",
     });
     setEditingId(null);
     setErrors({});
@@ -133,7 +137,7 @@ export default function InstructorCoursesPage() {
     setOpened(true);
   };
 
-  const openEdit = (id: string) => {
+  const openEdit = async (id: string) => {
     const c = myCourses.find((c) => c.id === id)!;
     setForm({
       title: c.title,
@@ -144,9 +148,11 @@ export default function InstructorCoursesPage() {
         (c.level as "beginner" | "intermediate" | "advanced") || "beginner",
       thumbnail: (c.thumbnail?.trim() || "") as string,
       description: c.description || "",
-      category: (c.category as "scratch" | "roblox") || "scratch",
+      category: (c.category as "scratch" | "roblox" | "robotics") || "scratch",
       durationMin: Number(c.duration_min || 0),
       points: Number(c.points || 0),
+      overviewTitle: "",
+      overviewContent: "",
     });
     setSelectedFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -154,7 +160,27 @@ export default function InstructorCoursesPage() {
     setImageMeta(null);
     setEditingId(id);
     setErrors({});
+
+    setSaving(true);
     setOpened(true);
+
+    try {
+      const res = await fetch(
+        `/api/instructor/courses/${id}/overview?instructorId=${user?.id}`
+      );
+      const json = await res.json();
+      if (res.ok && json.success && json.overview) {
+        setForm((prev) => ({
+          ...prev,
+          overviewTitle: json.overview.title || "",
+          overviewContent: json.overview.content || "",
+        }));
+      }
+    } catch (err) {
+      console.error("[openEdit] Failed to fetch overview:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Local-only preview; no upload until Simpan
@@ -268,6 +294,8 @@ export default function InstructorCoursesPage() {
           fd.append("category", form.category);
           fd.append("duration_min", String(form.durationMin));
           fd.append("points", String(form.points ?? 0));
+          fd.append("overviewTitle", form.overviewTitle || "");
+          fd.append("overviewContent", form.overviewContent || "");
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
           res = await fetch(
@@ -295,6 +323,8 @@ export default function InstructorCoursesPage() {
                 category: form.category,
                 duration_min: form.durationMin,
                 points: form.points,
+                overviewTitle: form.overviewTitle || "",
+                overviewContent: form.overviewContent || "",
               }),
             }
           );
@@ -319,6 +349,8 @@ export default function InstructorCoursesPage() {
         fd.append("category", form.category);
         fd.append("duration_min", String(form.durationMin));
         fd.append("points", String(form.points ?? 0));
+        fd.append("overviewTitle", form.overviewTitle || "");
+        fd.append("overviewContent", form.overviewContent || "");
         if (selectedFile) {
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
@@ -772,6 +804,49 @@ export default function InstructorCoursesPage() {
               error={errors.description}
             />
           </div>
+
+          {/* Modul Pengantar (Overview) Section */}
+          <div
+            style={{
+              marginTop: 24,
+              paddingTop: 24,
+              borderTop: "1px solid #e9ecef",
+            }}
+          >
+            <Title order={5} mb="sm" style={{ color: "var(--primary-color)" }}>
+              📘 Modul Pengantar (Overview)
+            </Title>
+            <Text size="sm" c="dimmed" mb="md">
+              Modul ini akan otomatis ditampilkan gratis untuk semua user
+              sebagai pengenalan course
+            </Text>
+            <Stack gap="md">
+              <TextInput
+                label="Judul Modul Pengantar"
+                placeholder="Contoh: Pengenalan Kursus Scratch Beginner"
+                value={form.overviewTitle}
+                onChange={(e) =>
+                  setForm({ ...form, overviewTitle: e.currentTarget.value })
+                }
+                description="Judul untuk modul pengantar (opsional, default: 'Pengenalan')"
+              />
+              <div>
+                <Text size="sm" fw={500} mb={4}>
+                  Konten Modul Pengantar
+                </Text>
+                <Text size="xs" c="dimmed" mb={8}>
+                  Jelaskan overview course, tujuan pembelajaran, alat peraga
+                  yang dibutuhkan, dll.
+                </Text>
+                <RichTextEditor
+                  value={form.overviewContent}
+                  onChange={(val) => setForm({ ...form, overviewContent: val })}
+                  placeholder="Tulis penjelasan lengkap tentang course ini, termasuk alat peraga jika diperlukan..."
+                />
+              </div>
+            </Stack>
+          </div>
+
           <Select
             label="Level"
             data={[
@@ -795,12 +870,13 @@ export default function InstructorCoursesPage() {
             data={[
               { value: "scratch", label: "Scratch" },
               { value: "roblox", label: "Roblox" },
+              { value: "robotics", label: "Robotik" },
             ]}
             value={form.category}
             onChange={(v) =>
               setForm({
                 ...form,
-                category: (v as "scratch" | "roblox") || "scratch",
+                category: (v as "scratch" | "roblox" | "robotics") || "scratch",
               })
             }
             withAsterisk

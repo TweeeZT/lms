@@ -78,9 +78,11 @@ export default function AdminCoursesPage() {
     level: "beginner" as "beginner" | "intermediate" | "advanced",
     thumbnail: "",
     description: "",
-    category: "scratch" as "scratch" | "roblox",
+    category: "scratch" as "scratch" | "roblox" | "robotics",
     durationMin: 0,
     points: 0,
+    overviewTitle: "",
+    overviewContent: "",
   });
   const [errors, setErrors] = useState<{ [k: string]: string | undefined }>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -118,6 +120,8 @@ export default function AdminCoursesPage() {
       category: "scratch",
       durationMin: 0,
       points: 0,
+      overviewTitle: "",
+      overviewContent: "",
     });
     setEditingId(null);
     setErrors({});
@@ -132,7 +136,7 @@ export default function AdminCoursesPage() {
     setOpened(true);
   };
 
-  const openEdit = (id: string) => {
+  const openEdit = async (id: string) => {
     const c = myCourses.find((c) => c.id === id);
     if (!c) return;
     setForm({
@@ -145,9 +149,11 @@ export default function AdminCoursesPage() {
         (c.level as "beginner" | "intermediate" | "advanced") || "beginner",
       thumbnail: (c.thumbnail?.trim() || "") as string,
       description: c.description || "",
-      category: (c.category as "scratch" | "roblox") || "scratch",
+      category: (c.category as "scratch" | "roblox" | "robotics") || "scratch",
       durationMin: Number(c.duration_min || 0),
       points: Number(c.points || 0),
+      overviewTitle: "",
+      overviewContent: "",
     });
     setSelectedFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -155,7 +161,29 @@ export default function AdminCoursesPage() {
     setImageMeta(null);
     setEditingId(id);
     setErrors({});
+
+    // Show loading state while fetching overview data
+    setSaving(true);
     setOpened(true);
+
+    // Fetch overview data from database
+    try {
+      const res = await fetch(
+        `/api/admin/courses/${id}/overview?userId=${user?.id}`
+      );
+      const json = await res.json();
+      if (res.ok && json.success && json.overview) {
+        setForm((prev) => ({
+          ...prev,
+          overviewTitle: json.overview.title || "",
+          overviewContent: json.overview.content || "",
+        }));
+      }
+    } catch (err) {
+      console.error("[openEdit] Failed to fetch overview:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePickThumbnail = (file: File | null) => {
@@ -308,6 +336,8 @@ export default function AdminCoursesPage() {
           fd.append("category", form.category);
           fd.append("duration_min", String(form.durationMin));
           fd.append("points", String(form.points ?? 0));
+          fd.append("overviewTitle", form.overviewTitle || "");
+          fd.append("overviewContent", form.overviewContent || "");
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
           res = await fetch(
@@ -328,6 +358,8 @@ export default function AdminCoursesPage() {
             category: form.category,
             duration_min: form.durationMin,
             points: form.points,
+            overviewTitle: form.overviewTitle || "",
+            overviewContent: form.overviewContent || "",
           };
           res = await fetch(
             `/api/admin/courses?userId=${encodeURIComponent(user.id)}`,
@@ -359,6 +391,8 @@ export default function AdminCoursesPage() {
         fd.append("category", form.category);
         fd.append("duration_min", String(form.durationMin));
         fd.append("points", String(form.points ?? 0));
+        fd.append("overviewTitle", form.overviewTitle || "");
+        fd.append("overviewContent", form.overviewContent || "");
         if (selectedFile) {
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
@@ -832,6 +866,49 @@ export default function AdminCoursesPage() {
               error={errors.description}
             />
           </div>
+
+          {/* Modul Pengantar (Overview) Section */}
+          <div
+            style={{
+              marginTop: 24,
+              paddingTop: 24,
+              borderTop: "1px solid #e9ecef",
+            }}
+          >
+            <Title order={5} mb="sm" style={{ color: "var(--primary-color)" }}>
+              📘 Modul Pengantar (Overview)
+            </Title>
+            <Text size="sm" c="dimmed" mb="md">
+              Modul ini akan otomatis ditampilkan gratis untuk semua user
+              sebagai pengenalan course
+            </Text>
+            <Stack gap="md">
+              <TextInput
+                label="Judul Modul Pengantar"
+                placeholder="Contoh: Pengenalan Kursus Scratch Beginner"
+                value={form.overviewTitle}
+                onChange={(e) =>
+                  setForm({ ...form, overviewTitle: e.currentTarget.value })
+                }
+                description="Judul untuk modul pengantar (opsional, default: 'Pengenalan')"
+              />
+              <div>
+                <Text size="sm" fw={500} mb={4}>
+                  Konten Modul Pengantar
+                </Text>
+                <Text size="xs" c="dimmed" mb={8}>
+                  Jelaskan overview course, tujuan pembelajaran, alat peraga
+                  yang dibutuhkan, dll.
+                </Text>
+                <RichTextEditor
+                  value={form.overviewContent}
+                  onChange={(val) => setForm({ ...form, overviewContent: val })}
+                  placeholder="Tulis penjelasan lengkap tentang course ini, termasuk alat peraga jika diperlukan..."
+                />
+              </div>
+            </Stack>
+          </div>
+
           <Select
             label="Level"
             data={[

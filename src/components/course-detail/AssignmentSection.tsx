@@ -115,11 +115,6 @@ export default function AssignmentSection({
           <Text size="xl" fw={700} c="var(--primary-color)">
             Tugas
           </Text>
-          <Text size="md" c="dimmed">
-            {assignment.maxScore
-              ? `Nilai Maksimal: ${assignment.maxScore}`
-              : "Kumpulkan hasil pekerjaan Anda"}
-          </Text>
         </div>
       </Group>
 

@@ -328,3 +328,88 @@ body {
   background: var(--card-bg) !important;
   color: var(--foreground) !important;
 }
+
+.overview-content p {
+  margin-bottom: 1em;
+}
+
+.overview-content p:last-child {
+  margin-bottom: 0;
+}
+
+.overview-content ol,
+.overview-content ul {
+  margin: 1em 0;
+  padding-left: 1.5em;
+}
+
+.overview-content ol {
+  list-style-type: decimal;
+}
+
+.overview-content ul {
+  list-style-type: disc;
+}
+
+.overview-content li {
+  margin-bottom: 0.5em;
+  line-height: 1.8;
+}
+
+.overview-content li[data-list="bullet"] {
+  list-style-type: disc;
+}
+
+.overview-content li[data-list="ordered"] {
+  list-style-type: decimal;
+}
+
+.overview-content strong {
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.overview-content em {
+  font-style: italic;
+}
+
+.overview-content h1,
+.overview-content h2,
+.overview-content h3,
+.overview-content h4 {
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.overview-content h1 {
+  font-size: 1.75rem;
+}
+
+.overview-content h2 {
+  font-size: 1.5rem;
+}
+
+.overview-content h3 {
+  font-size: 1.25rem;
+}
+
+.overview-content h4 {
+  font-size: 1.1rem;
+}
+
+.overview-content .ql-ui {
+  display: none;
+}
+
+[data-mantine-color-scheme="dark"] .overview-content strong {
+  color: var(--secondary-color);
+}
+
+[data-mantine-color-scheme="dark"] .overview-content h1,
+[data-mantine-color-scheme="dark"] .overview-content h2,
+[data-mantine-color-scheme="dark"] .overview-content h3,
+[data-mantine-color-scheme="dark"] .overview-content h4 {
+  color: var(--secondary-color);
+}

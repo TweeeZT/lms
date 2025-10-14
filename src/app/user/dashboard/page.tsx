@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import dayjs from "dayjs";
+import "dayjs/locale/id";
+dayjs.locale("id");
 import Link from "next/link";
 import {
   Container,
@@ -38,7 +40,6 @@ import {
   IconSum,
 } from "@tabler/icons-react";
 import { useAuth } from "../../../hooks/useAuth";
-import PrimeLoader from "../../../components/PrimeLoader";
 
 // StatCard component (kept minimal)
 function StatCard({
@@ -270,8 +271,13 @@ export default function UserDashboard() {
       d.isBefore(end) || d.isSame(end, "day");
       d = d.add(1, "day")
     ) {
-      const k = d.format("YYYY-MM-DD");
-      (eventsByDay[k] = eventsByDay[k] || []).push(ev);
+      // Hanya masukkan event jika tanggalnya ada di bulan yang sedang dilihat
+      if (
+        d.isSame(calendarMonth, "month")
+      ) {
+        const k = d.format("YYYY-MM-DD");
+        (eventsByDay[k] = eventsByDay[k] || []).push(ev);
+      }
     }
   });
 
@@ -284,17 +290,24 @@ export default function UserDashboard() {
 
   // CRUD schedule events
   const fetchEvents = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id) return null;
     try {
       setEventsError(null);
       const res = await fetch(`/api/user/schedule-events?userId=${user.id}`);
       const json = await res.json();
       if (!res.ok || !json.success)
         throw new Error(json.error || "Gagal memuat jadwal");
-      setScheduleEvents(json.events || []);
+      // Mapping agar field start diisi dari startDate (API)
+      const mapped = (json.events || []).map((ev: any) => ({
+        ...ev,
+        start: ev.startDate || ev.start,
+        end: ev.endDate || ev.end,
+      }));
+      setScheduleEvents(mapped);
+      return mapped;
     } catch (e: unknown) {
       setEventsError(e instanceof Error ? e.message : "Gagal memuat jadwal");
-    } finally {
+      return null;
     }
   }, [user?.id]);
   useEffect(() => {
@@ -339,6 +352,57 @@ export default function UserDashboard() {
     }
   };
 
+  const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState<ScheduleEvent["category"]>("belajar");
+  const [editDesc, setEditDesc] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+
+  // Saat tombol Edit ditekan, isi form edit dengan data event terpilih
+  const openEditModal = () => {
+    if (!selectedEvent) return;
+    setEditTitle(selectedEvent.title);
+    setEditCategory(selectedEvent.category);
+    setEditDesc(selectedEvent.description || "");
+    setEditStart(dayjs(selectedEvent.start).format("YYYY-MM-DD"));
+    setEditEnd(selectedEvent.end ? dayjs(selectedEvent.end).format("YYYY-MM-DD") : "");
+    setEditOpen(true);
+  };
+  const closeEditModal = () => {
+    setEditOpen(false);
+  };
+  const handleEditSubmit = async () => {
+    if (!selectedEvent || !user?.id || !editTitle) return;
+    try {
+      const body = {
+        userId: user.id,
+        title: editTitle.trim(),
+        category: editCategory,
+        description: editDesc.trim() || null,
+        startDate: editStart,
+        endDate: editEnd || null,
+      };
+      const res = await fetch(`/api/user/schedule-events/${selectedEvent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Gagal update jadwal");
+      setEditOpen(false);
+      // Fetch ulang data jadwal agar selalu up-to-date
+      fetchEvents().then((mapped) => {
+        if (mapped && selectedEvent) {
+          const updated = mapped.find((ev: ScheduleEvent) => ev.id === selectedEvent.id);
+          if (updated) setSelectedEvent(updated);
+        }
+      });
+    } catch (e) {
+      // error tetap tidak ditampilkan sebagai notif
+    }
+  };
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const confirmDelete = (id: string) => setDeleteId(id);
   const doDelete = async () => {
@@ -353,19 +417,15 @@ export default function UserDashboard() {
         throw new Error(json.error || "Gagal menghapus");
       setScheduleEvents((prev) => prev.filter((e) => e.id !== deleteId));
       setDeleteId(null);
+      setSelectedEvent(null);
     } catch (e: unknown) {
       setEventsError(e instanceof Error ? e.message : "Gagal menghapus jadwal");
     }
   };
 
-  if (loading) {
-    return <PrimeLoader />;
-  }
-
   return (
     <Container size="xl">
       <Stack gap="xl">
-        \n
         <div>
           <Title order={1} mb="md">
             Dashboard Belajar
@@ -557,7 +617,7 @@ export default function UserDashboard() {
                     <IconChevronLeft size={16} />
                   </ActionIcon>
                   <Text size="sm" fw={600}>
-                    {calendarMonth.format("MMMM YYYY")}
+                    {calendarMonth.locale("id").format("MMMM YYYY")}
                   </Text>
                   <ActionIcon
                     size="sm"
@@ -599,7 +659,7 @@ export default function UserDashboard() {
                     <div
                       key={i}
                       style={{
-                        minHeight: 20,
+                        minHeight: 30,
                         border: "1px solid var(--border-color,#e3e6ea)",
                         borderRadius: 6,
                         padding: 4,
@@ -631,7 +691,7 @@ export default function UserDashboard() {
                               variant="filled"
                               style={{ cursor: "pointer" }}
                               title={ev.title}
-                              onClick={() => confirmDelete(ev.id)}
+                              onClick={() => setSelectedEvent(ev)}
                             >
                               {ev.title}
                             </Badge>
@@ -784,10 +844,90 @@ export default function UserDashboard() {
           </Button>
           <Text size="xs" c="dimmed">
             Rentang tanggal akan menghasilkan event berulang harian di kalender
-            (setiap hari dalam rentang). Klik dua kali badge di kalender untuk
-            menghapus.
+            (setiap hari dalam rentang). Klik badge untuk detail, dan hapus dari modal detail.
           </Text>
         </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        title={selectedEvent ? `Detail Jadwal: ${selectedEvent.title}` : ""}
+        centered
+      >
+        {selectedEvent && (
+          <Stack gap="sm">
+            <Badge color={categoryColor[selectedEvent.category]}>{selectedEvent.category}</Badge>
+            <Text fw={600}>{selectedEvent.title}</Text>
+            <Text size="sm" c="dimmed">{selectedEvent.description || "-"}</Text>
+            <Text size="sm">Mulai: {dayjs(selectedEvent.start).locale("id").format("DD MMMM YYYY")}</Text>
+            {selectedEvent.end && (
+              <Text size="sm">Selesai: {dayjs(selectedEvent.end).locale("id").format("DD MMMM YYYY")}</Text>
+            )}
+            <Group justify="flex-end" gap={8}>
+              <Button size="xs" variant="default" onClick={openEditModal}>
+                Edit
+              </Button>
+              <Button color="red" size="xs" onClick={() => confirmDelete(selectedEvent.id)}>
+                Hapus
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      {/* Modal Edit Jadwal */}
+      <Modal
+        opened={!!editOpen}
+        onClose={closeEditModal}
+        title={selectedEvent ? `Edit Jadwal: ${selectedEvent.title}` : "Edit Jadwal"}
+        centered
+      >
+        {selectedEvent && (
+          <Stack gap="sm">
+            <TextInput
+              label="Judul"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.currentTarget.value)}
+              required
+            />
+            <Select
+              label="Kategori"
+              data={[{ value: "belajar", label: "Belajar" }, { value: "tugas", label: "Tugas" }, { value: "live", label: "Live Calls" }]}
+              value={editCategory}
+              onChange={(v) => setEditCategory(v as ScheduleEvent["category"])}
+            />
+            <Textarea
+              label="Deskripsi"
+              minRows={2}
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.currentTarget.value)}
+              placeholder="Catatan tambahan"
+            />
+            <Group grow>
+              <TextInput
+                type="date"
+                label="Mulai"
+                value={editStart}
+                onChange={(e) => setEditStart(e.currentTarget.value)}
+              />
+              <TextInput
+                type="date"
+                label="Selesai (opsional)"
+                value={editEnd}
+                onChange={(e) => setEditEnd(e.currentTarget.value)}
+              />
+            </Group>
+            <Group justify="flex-end">
+              <Button onClick={handleEditSubmit} disabled={!editTitle}>
+                Simpan
+              </Button>
+              <Button variant="default" onClick={closeEditModal}>
+                Batal
+              </Button>
+            </Group>
+          </Stack>
+        )}
       </Modal>
       <Modal
         opened={!!deleteId}

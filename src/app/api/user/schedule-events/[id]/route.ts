@@ -1,3 +1,62 @@
+// PUT /api/user/schedule-events/[id] { userId, title, category?, description?, startDate, endDate? }
+export async function PUT(req: Request, ctx: { params: { id: string } }) {
+  const id = ctx.params.id;
+  try {
+    const body = await req.json();
+    const { userId, title, category, description, startDate, endDate } = body || {};
+    if (!userId || !id || !title || !startDate) {
+      return NextResponse.json(
+        { success: false, error: "userId, id, title, startDate wajib" },
+        { status: 400 }
+      );
+    }
+    // Auth check
+    const { data: actor, error: aErr } = await supabase
+      .from("users")
+      .select("id, role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (aErr) throw aErr;
+    if (!actor || actor.role !== "user") {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 403 }
+      );
+    }
+    // Ownership check
+    const { data: existing, error: exErr } = await supabase
+      .from("schedule_events")
+      .select("id, user_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (exErr) throw exErr;
+    if (!existing || existing.user_id !== userId) {
+      return NextResponse.json(
+        { success: false, error: "Tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+    // Update event
+    const { data, error: updErr } = await supabase
+      .from("schedule_events")
+      .update({
+        title,
+        category: category ?? null,
+        description: description ?? null,
+        start_date: startDate,
+        end_date: endDate ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+    if (updErr) throw updErr;
+    return NextResponse.json({ success: true, event: data });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Gagal update event";
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
+}
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 

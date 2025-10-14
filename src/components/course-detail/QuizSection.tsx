@@ -13,6 +13,7 @@ import {
   Badge,
   Divider,
   Box,
+  Paper,
 } from "@mantine/core";
 import {
   IconListCheck,
@@ -21,7 +22,9 @@ import {
   IconTrophy,
   IconCheck,
   IconX,
+  IconHistory,
 } from "@tabler/icons-react";
+import { QuizHistoryModal } from "./QuizHistoryModal";
 
 type QuizQuestion = {
   id: string;
@@ -56,6 +59,7 @@ interface QuizSectionProps {
   }[];
   onSubmit: (answers: Record<string, string>) => Promise<void>;
   onRetry?: () => void;
+  userId?: string;
 }
 
 export default function QuizSection({
@@ -64,6 +68,7 @@ export default function QuizSection({
   attemptAnswers,
   onSubmit,
   onRetry,
+  userId,
 }: QuizSectionProps) {
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -73,7 +78,36 @@ export default function QuizSection({
   const [submitting, setSubmitting] = useState(false);
   const [warningOpen, setWarningOpen] = useState(false);
   const [resultModalOpen, setResultModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyAttempts, setHistoryAttempts] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedAttempt, setSelectedAttempt] = useState<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch quiz history on mount
+  useEffect(() => {
+    if (quiz.id && userId) {
+      fetchHistory();
+    }
+  }, [quiz.id, userId]);
+
+  const fetchHistory = async () => {
+    if (!userId || !quiz.id) return;
+    setLoadingHistory(true);
+    try {
+      const res = await fetch(
+        `/api/user/quiz-history/${quiz.id}?userId=${userId}`
+      );
+      const json = await res.json();
+      if (json.success && json.attempts) {
+        setHistoryAttempts(json.attempts);
+      }
+    } catch (err) {
+      console.error("Failed to fetch quiz history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   useEffect(() => {
     if (started && quiz.timeLimit && timeLeft === null) {
@@ -189,17 +223,27 @@ export default function QuizSection({
 
             <Group justify="space-between">
               <Button
-                onClick={() => setResultModalOpen(true)}
-                variant="light"
-                color="blue"
+                onClick={() => setHistoryModalOpen(true)}
+                variant="subtle"
+                color="gray"
+                leftSection={<IconHistory size={16} />}
               >
-                Lihat Detail Jawaban
+                Riwayat Quiz
               </Button>
-              {onRetry && (
-                <Button onClick={onRetry} color="blue" variant="filled">
-                  Coba Lagi
+              <Group>
+                <Button
+                  onClick={() => setResultModalOpen(true)}
+                  variant="light"
+                  color="blue"
+                >
+                  Lihat Detail Jawaban
                 </Button>
-              )}
+                {onRetry && (
+                  <Button onClick={onRetry} color="blue" variant="filled">
+                    Coba Lagi
+                  </Button>
+                )}
+              </Group>
             </Group>
           </Stack>
         </Card>
@@ -221,18 +265,6 @@ export default function QuizSection({
                       <Text fw={600} size="sm">
                         Soal {idx + 1}
                       </Text>
-                      <Badge
-                        color={ans.isCorrect ? "green" : "red"}
-                        leftSection={
-                          ans.isCorrect ? (
-                            <IconCheck size={14} />
-                          ) : (
-                            <IconX size={14} />
-                          )
-                        }
-                      >
-                        {ans.isCorrect ? "Benar" : "Salah"}
-                      </Badge>
                     </Group>
                     <Text size="sm">{ans.question}</Text>
                     <Divider />
@@ -273,6 +305,18 @@ export default function QuizSection({
             )}
           </Stack>
         </Modal>
+
+        {/* Quiz History Modal (opened via Riwayat or Lihat Detail) */}
+        <QuizHistoryModal
+          opened={historyModalOpen || !!selectedAttempt}
+          onClose={() => {
+            setSelectedAttempt(null);
+            setHistoryModalOpen(false);
+          }}
+          quizId={quiz.id}
+          userId={userId || ""}
+          initialAttempt={selectedAttempt}
+        />
       </>
     );
   }
@@ -326,9 +370,70 @@ export default function QuizSection({
               </Alert>
             </Stack>
 
-            <Button onClick={handleStart} size="lg" fullWidth>
-              Mulai Quiz
-            </Button>
+            <Group grow>
+              <Button onClick={handleStart} size="lg" flex={1}>
+                Mulai Quiz
+              </Button>
+            </Group>
+
+            {/* Riwayat Quiz History */}
+            {historyAttempts.length > 0 && (
+              <>
+                <Divider
+                  my="md"
+                  label="Riwayat Percobaan"
+                  labelPosition="center"
+                />
+                <Stack gap="sm">
+                  {historyAttempts.map((attempt, idx) => (
+                    <Paper key={attempt.id} withBorder p="md" radius="md">
+                      <Group justify="space-between" wrap="nowrap">
+                        <div style={{ flex: 1 }}>
+                          <Group gap="xs" mb={4}>
+                            <Badge
+                              size="sm"
+                              color={attempt.passed ? "green" : "red"}
+                              leftSection={
+                                attempt.passed ? (
+                                  <IconCheck size={12} />
+                                ) : (
+                                  <IconX size={12} />
+                                )
+                              }
+                            >
+                              {attempt.passed ? "Lulus" : "Tidak Lulus"}
+                            </Badge>
+                            <Badge size="sm" variant="light" color="blue">
+                              Skor: {attempt.score}%
+                            </Badge>
+                            <Badge size="sm" variant="light" color="gray">
+                              {attempt.correct_count}/{attempt.total_questions}{" "}
+                              Benar
+                            </Badge>
+                          </Group>
+                          <Text size="xs" c="dimmed">
+                            {new Date(attempt.created_at).toLocaleString(
+                              "id-ID",
+                              {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              }
+                            )}
+                          </Text>
+                        </div>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => setSelectedAttempt(attempt)}
+                        >
+                          Lihat Detail
+                        </Button>
+                      </Group>
+                    </Paper>
+                  ))}
+                </Stack>
+              </>
+            )}
           </Stack>
         </Card>
 
@@ -360,6 +465,14 @@ export default function QuizSection({
             </Group>
           </Stack>
         </Modal>
+        {/* Quiz History Modal for detail from Riwayat list */}
+        <QuizHistoryModal
+          opened={!!selectedAttempt}
+          onClose={() => setSelectedAttempt(null)}
+          quizId={quiz.id}
+          userId={userId || ""}
+          initialAttempt={selectedAttempt}
+        />
       </>
     );
   }
@@ -588,6 +701,15 @@ export default function QuizSection({
           </Group>
         </Stack>
       </Modal>
+
+      {/* Quiz History Modal - Detail Attempt */}
+      <QuizHistoryModal
+        opened={!!selectedAttempt}
+        onClose={() => setSelectedAttempt(null)}
+        quizId={quiz.id}
+        userId={userId || ""}
+        initialAttempt={selectedAttempt}
+      />
     </>
   );
 }

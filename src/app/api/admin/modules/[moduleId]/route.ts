@@ -19,7 +19,7 @@ async function fetchModule(moduleId: string) {
   const { data: mod, error: modErr } = await supabaseAdmin
     .from("modules")
     .select(
-      "id, course_id, title, description, module_kind, order_index, is_published, created_at, updated_at"
+      "id, course_id, title, description, module_kind, is_published, created_at, updated_at"
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -125,29 +125,46 @@ export async function GET(
   const { moduleId } = await context.params;
   const { searchParams } = new URL(req.url);
   const actorId = (searchParams.get("userId") || "").trim();
+
+  console.log("🔍 [Admin GET Module] moduleId:", moduleId, "actorId:", actorId);
+
   const auth = await requireAdmin(actorId);
   if (!auth.ok) {
+    console.error("❌ [Admin GET Module] Auth failed:", auth.error);
     return NextResponse.json(
       { success: false, error: auth.error },
       { status: auth.error === "Forbidden" ? 403 : 400 }
     );
   }
+
+  console.log("✅ [Admin GET Module] Auth OK");
+
   try {
     const modData = await fetchModule(moduleId);
-    if (!modData)
+    console.log(
+      "📦 [Admin GET Module] Fetched data:",
+      JSON.stringify(modData, null, 2)
+    );
+
+    if (!modData) {
+      console.error("❌ [Admin GET Module] Module not found");
       return NextResponse.json(
         { success: false, error: "Module not found" },
         { status: 404 }
       );
+    }
+
+    console.log("✅ [Admin GET Module] Returning success");
     return NextResponse.json({ success: true, item: modData });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Internal error";
+    console.error("❌ [Admin GET Module] Error:", msg, err);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }
 
 // PATCH update based on kind.
-// Common: title, description, order_index, is_published
+// Common: title, description, is_published
 // Materi: content (content_type/url/text_content not implemented for edit here)
 // Quiz: quiz (title, passing_score, time_limit, questions[])
 // Tugas: assignment (instructions, due_date, max_score)
@@ -178,7 +195,6 @@ export async function PATCH(
     const baseUpdate: Record<string, unknown> = {};
     if ("title" in body) baseUpdate.title = body.title;
     if ("description" in body) baseUpdate.description = body.description;
-    if ("order_index" in body) baseUpdate.order_index = body.order_index;
     if ("is_published" in body) baseUpdate.is_published = body.is_published;
 
     if (Object.keys(baseUpdate).length) {

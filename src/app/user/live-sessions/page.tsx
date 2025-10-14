@@ -7,7 +7,6 @@ import {
   Text,
   Badge,
   Button,
-  Loader,
   Title,
   ActionIcon,
   Tooltip,
@@ -16,6 +15,7 @@ import { IconCalendarPlus, IconExternalLink } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 dayjs.extend(utc);
+import PrimeLoader from "../../../components/PrimeLoader";
 
 interface LiveItem {
   id: string;
@@ -97,12 +97,7 @@ export default function UserLiveSessionsPage() {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
 
-  if (loading)
-    return (
-      <Group justify="center" py="xl">
-        <Loader />
-      </Group>
-    );
+  if (loading) return <PrimeLoader />;
   if (error) return <Text color="red">{error}</Text>;
 
   return (

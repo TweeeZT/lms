@@ -19,6 +19,7 @@ import {
   Switch,
   Pagination,
   Skeleton,
+  Textarea,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -700,7 +701,7 @@ export default function InstructorCoursesPage() {
             disabled={saving}
           />
           <FileInput
-            label="Thumbnail (wajib)"
+            label="Thumbnail"
             placeholder="Pilih gambar..."
             accept="image/*"
             onChange={(file) => handlePickThumbnail(file as File)}
@@ -758,14 +759,16 @@ export default function InstructorCoursesPage() {
             </Text>
           )}
           <div>
-            <Text size="sm" fw={500} mb={8}>
-              Deskripsi <span style={{ color: "red" }}>*</span>
-            </Text>
-            <RichTextEditor
+            <Textarea
+              withAsterisk
+              label="Deskripsi"
               value={form.description}
-              onChange={(value) => setForm({ ...form, description: value })}
+              onChange={(e) =>
+                setForm({ ...form, description: e.currentTarget.value })
+              }
               placeholder="Tulis deskripsi lengkap kursus Anda..."
-              minHeight="250px"
+              minRows={5}
+              autosize
               error={errors.description}
             />
           </div>

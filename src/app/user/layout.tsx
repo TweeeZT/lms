@@ -5,6 +5,7 @@ import { DashboardLayout } from "../../components/SidebarLayout";
 import dynamic from "next/dynamic";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
+import PrimeLoader from "../../components/PrimeLoader";
 
 export default function UserLayout({
   children,
@@ -27,11 +28,11 @@ export default function UserLayout({
 
   // Avoid rendering DashboardLayout until user is resolved to prevent null access
   if (loading) {
-    return null;
+    return <PrimeLoader />;
   }
 
   if (!user) {
-    return null;
+    return <PrimeLoader />;
   }
 
   return (

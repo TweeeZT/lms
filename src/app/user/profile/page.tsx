@@ -39,6 +39,7 @@ import NextImage from "next/image";
 import Cropper from "react-easy-crop";
 import CertificateThumbnail from "../../../components/CertificateThumbnail";
 import { notifications } from "@mantine/notifications";
+import PrimeLoader from "../../../components/PrimeLoader";
 
 export default function UserProfilePage() {
   const { user, updateUser } = useAuth();
@@ -191,6 +192,8 @@ export default function UserProfilePage() {
   }
 
   // Thermal Receipt Print for purchases
+  // Loader rendering is handled within the page sections to avoid conditional hooks
+
   const RECEIPT_INFO = {
     addressLines: [
       "AfterSchola Learning Platform",
@@ -448,6 +451,10 @@ export default function UserProfilePage() {
   }, [user?.id, txPage]);
 
   if (!user) return null;
+
+  if (loading) {
+    return <PrimeLoader />;
+  }
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -1597,7 +1604,7 @@ function TierCarouselCard({
             }}
             className="progress-grid"
           >
-            {/* XP Progress */}
+            {/* XP Progress
             <div
               style={{
                 padding: 16,
@@ -1635,8 +1642,7 @@ function TierCarouselCard({
                   }}
                 />
               </div>
-            </div>
-
+            </div> */}
             {/* Points Progress */}
             <div
               style={{
@@ -1676,7 +1682,6 @@ function TierCarouselCard({
                 />
               </div>
             </div>
-
             {/* Courses Progress */}
             <div
               style={{

@@ -178,10 +178,9 @@ export async function GET(req: NextRequest) {
             try {
               const { data: first } = await supabaseAdmin
                 .from("modules")
-                .select("id, order_index")
+                .select("id")
                 .eq("course_id", resolvedCourse)
                 .eq("is_published", true)
-                .order("order_index", { ascending: true })
                 .limit(1);
               if (first && first.length) firstModule = first[0].id;
             } catch {}

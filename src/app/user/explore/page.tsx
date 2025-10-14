@@ -27,6 +27,7 @@ import {
   IconShoppingCart,
 } from "@tabler/icons-react";
 import { useAuth } from "../../../hooks/useAuth";
+import PrimeLoader from "../../../components/PrimeLoader";
 
 export default function UserExplorePage() {
   const { user } = useAuth();
@@ -90,6 +91,10 @@ export default function UserExplorePage() {
   }, [searchQuery, categoryFilter, levelFilter, sort]);
 
   // enroll handled via checkout flow now
+
+  if (loading && items.length === 0) {
+    return <PrimeLoader />;
+  }
 
   return (
     <Container size="xl">

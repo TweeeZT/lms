@@ -22,6 +22,7 @@ import { notifications } from "@mantine/notifications";
 import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
+import PrimeLoader from "../../../components/PrimeLoader";
 import { useCallback, useEffect, useState } from "react";
 
 type ApiPost = {
@@ -135,6 +136,10 @@ export default function UserDiscussionsPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  if (loading && items.length === 0) {
+    return <PrimeLoader />;
   }
 
   return (

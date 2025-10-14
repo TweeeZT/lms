@@ -27,7 +27,6 @@ import {
   IconClock,
   IconUser,
   IconPencil,
-  IconAlertTriangle,
   IconUsers,
 } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,7 +55,6 @@ interface ModuleItem {
   title: string;
   description: string | null;
   module_kind: "materi" | "quiz" | "tugas" | "live";
-  order_index: number | null;
   is_published: boolean | null;
   created_at?: string;
   updated_at?: string;
@@ -124,24 +122,15 @@ export default function InstructorCourseDetailPage() {
 
   const sortedModules = useMemo(
     () =>
-      [...modules].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)),
+      [...modules].sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateA - dateB;
+      }),
     [modules]
   );
 
-  // Check for order issues
-  const orderWarnings = useMemo(() => {
-    const warnings: string[] = [];
-    for (let i = 0; i < sortedModules.length; i++) {
-      const current = sortedModules[i].order_index || 0;
-      const expected = i + 1;
-      if (current !== expected) {
-        warnings.push(
-          `Modul "${sortedModules[i].title}" memiliki urutan ${current}, seharusnya ${expected}`
-        );
-      }
-    }
-    return warnings;
-  }, [sortedModules]);
+  // No order warnings since order_index doesn't exist
 
   const handleDelete = async () => {
     if (!showDelete || !instructorId) return;
@@ -179,17 +168,69 @@ export default function InstructorCourseDetailPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <Container size="xl" pb="xl">
       {error && (
         <Alert color="red" mb="md" title="Error">
           {error}
         </Alert>
-      )}
-      {loading && (
-        <Group justify="center" py="xl">
-          <Loader />
-        </Group>
       )}
       {!loading && course && (
         <Stack gap="lg">
@@ -301,23 +342,6 @@ export default function InstructorCourseDetailPage() {
             </Button>
           </Group>
 
-          {/* Order Warnings */}
-          {orderWarnings.length > 0 && (
-            <Alert
-              color="yellow"
-              title="Peringatan Urutan Modul"
-              icon={<IconAlertTriangle size="1rem" />}
-            >
-              <Stack gap="xs">
-                {orderWarnings.map((warning, idx) => (
-                  <Text key={idx} size="sm">
-                    • {warning}
-                  </Text>
-                ))}
-              </Stack>
-            </Alert>
-          )}
-
           {/* Module List */}
           <Stack gap="md">
             {sortedModules.length === 0 && (
@@ -328,10 +352,7 @@ export default function InstructorCourseDetailPage() {
                 </Text>
               </Paper>
             )}
-            {sortedModules.map((mod) => {
-              const hasOrderIssue =
-                mod.order_index !==
-                sortedModules.findIndex((m) => m.id === mod.id) + 1;
+            {sortedModules.map((mod, index) => {
               return (
                 <Card
                   key={mod.id}
@@ -339,11 +360,6 @@ export default function InstructorCourseDetailPage() {
                   padding="lg"
                   radius="md"
                   shadow="sm"
-                  style={{
-                    borderLeft: hasOrderIssue
-                      ? "4px solid var(--mantine-color-yellow-5)"
-                      : undefined,
-                  }}
                 >
                   <Group justify="space-between" align="flex-start">
                     <Group align="flex-start" gap="lg">
@@ -351,10 +367,10 @@ export default function InstructorCourseDetailPage() {
                       <Badge
                         size="xl"
                         variant="filled"
-                        color={hasOrderIssue ? "yellow" : "blue"}
+                        color="blue"
                         style={{ minWidth: 40 }}
                       >
-                        {mod.order_index || 0}
+                        {index + 1}
                       </Badge>
 
                       {/* Content */}

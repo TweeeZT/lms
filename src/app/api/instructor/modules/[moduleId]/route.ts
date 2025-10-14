@@ -24,9 +24,7 @@ export async function GET(
     // Load module and ensure ownership via course
     const { data: mod, error: mErr } = await supabase
       .from("modules")
-      .select(
-        "id, course_id, title, description, module_kind, order_index, is_published"
-      )
+      .select("id, course_id, title, description, module_kind, is_published")
       .eq("id", moduleId)
       .maybeSingle();
     if (mErr) throw mErr;
@@ -149,12 +147,10 @@ export async function PATCH(
       const form = await req.formData();
       const title = String(form.get("title") || "").trim();
       const description = (form.get("description")?.toString() || "").trim();
-      const order_index = Number(form.get("order_index") || 0);
       const is_published =
         String(form.get("is_published") || "true") === "true";
       if (title) allowed.title = title;
       if (description) allowed.description = description;
-      if (!Number.isNaN(order_index)) allowed.order_index = order_index;
       allowed.is_published = is_published;
 
       // For materi file replacement
@@ -247,12 +243,7 @@ export async function PATCH(
       }
     } else {
       const body = (await req.json()) as Record<string, unknown>;
-      const fields = [
-        "title",
-        "description",
-        "order_index",
-        "is_published",
-      ] as const;
+      const fields = ["title", "description", "is_published"] as const;
       for (const f of fields) {
         if (Object.prototype.hasOwnProperty.call(body, f)) {
           allowed[f] = body[f] as unknown;

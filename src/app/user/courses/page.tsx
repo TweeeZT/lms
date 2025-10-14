@@ -37,6 +37,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "../../../hooks/useAuth";
+import PrimeLoader from "../../../components/PrimeLoader";
 
 type ApiCourse = {
   id: string;
@@ -68,7 +69,7 @@ type ApiEnrollmentItem = {
 export default function UserCoursesPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<ApiEnrollmentItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [studentStats, setStudentStats] = useState<{
     points: number;
@@ -185,6 +186,63 @@ export default function UserCoursesPage() {
   const totalPages = Math.ceil(items.length / limit);
   const paginatedItems = items.slice((page - 1) * limit, page * limit);
 
+  if (loading) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <Container size="xl">
       <Stack gap="xl">
@@ -227,11 +285,7 @@ export default function UserCoursesPage() {
 
         {/* Course List */}
         {loading && items.length === 0 ? (
-          <Stack gap="md">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} height={200} radius="md" />
-            ))}
-          </Stack>
+          <PrimeLoader />
         ) : (
           <>
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">

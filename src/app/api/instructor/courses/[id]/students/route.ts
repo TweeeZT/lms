@@ -41,28 +41,55 @@ export async function GET(
     // Fetch modules of kind tugas AND their assignment + submissions
     const { data: tugasMods, error: tmErr } = await supabase
       .from("modules")
-      .select("id, title, order_index")
+      .select("id, title")
       .eq("course_id", courseId)
       .eq("module_kind", "tugas")
-      .order("order_index", { ascending: true });
-    if (tmErr) throw tmErr;
+      .order("created_at", { ascending: true });
+    if (tmErr) {
+      console.error("Error fetching tugas modules:", tmErr);
+      throw tmErr;
+    }
     const tugasIds = (tugasMods || []).map((m) => m.id);
+
+    // If no assignment modules exist, return empty
+    if (tugasIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        course: { id: course.id, title: course.title },
+        items: [],
+      });
+    }
 
     const { data: assignments, error: asErr } = await supabase
       .from("module_assignments")
       .select("id, module_id, max_score")
-      .in("module_id", tugasIds.length ? tugasIds : ["__none__"]);
-    if (asErr) throw asErr;
+      .in("module_id", tugasIds);
+    if (asErr) {
+      console.error("Error fetching assignments:", asErr);
+      throw asErr;
+    }
     const assignmentIds = (assignments || []).map((a) => a.id);
+
+    // If no assignments found, return empty
+    if (assignmentIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        course: { id: course.id, title: course.title },
+        items: [],
+      });
+    }
 
     const { data: subs, error: subErr } = await supabase
       .from("module_submissions")
       .select(
-        "id, assignment_id, user_id, file_url, link_url, score, note, submitted_at"
+        "id, assignment_id, user_id, file_url, link_url, score, note, submitted_at, status"
       )
-      .in("assignment_id", assignmentIds.length ? assignmentIds : ["__none__"])
+      .in("assignment_id", assignmentIds)
       .order("submitted_at", { ascending: false });
-    if (subErr) throw subErr;
+    if (subErr) {
+      console.error("Error fetching submissions:", subErr);
+      throw subErr;
+    }
 
     const assignmentById = new Map<
       string,
@@ -89,6 +116,7 @@ export async function GET(
       note: string | null;
       submitted_at: string;
       max_score: number | null;
+      status: string | null;
     };
     const rows: Item[] = (subs || []).map((s) => {
       const a = assignmentById.get(s.assignment_id)!;
@@ -105,6 +133,7 @@ export async function GET(
         note: s.note,
         submitted_at: s.submitted_at,
         max_score: a?.max_score ?? null,
+        status: s.status,
       };
     });
 
@@ -150,26 +179,41 @@ export async function GET(
   }
 }
 
-// PATCH grading: body { instructorId, submissionId, score, note }
+// PATCH grading: body { instructorId, submissionId, score?, note?, action? }
+// action='reject' -> set status='rejected', no progress update
+// action='grade' or missing -> set status='graded', update progress if passed
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   const courseId = params.id;
   const body = await req.json();
-  const { instructorId, submissionId, score, note, override } = body as {
-    instructorId?: string;
-    submissionId?: string;
-    score?: number | null;
-    note?: string | null;
-    override?: boolean;
-  };
+  const { instructorId, submissionId, score, note, override, action } =
+    body as {
+      instructorId?: string;
+      submissionId?: string;
+      score?: number | null;
+      note?: string | null;
+      override?: boolean;
+      action?: "reject" | "grade";
+    };
   if (!instructorId || !submissionId) {
     return NextResponse.json(
       { success: false, error: "instructorId & submissionId wajib" },
       { status: 400 }
     );
   }
+
+  // Reject action: hanya butuh note, tidak perlu score
+  if (action === "reject") {
+    if (!note || !note.trim()) {
+      return NextResponse.json(
+        { success: false, error: "Catatan wajib diisi saat menolak tugas" },
+        { status: 400 }
+      );
+    }
+  }
+
   try {
     const { data: course, error: cErr } = await supabase
       .from("courses")
@@ -183,10 +227,11 @@ export async function PATCH(
         { status: 403 }
       );
     }
+
     // Load submission + assignment to get module + max_score
     const { data: subRow, error: subErr } = await supabase
       .from("module_submissions")
-      .select("id, assignment_id, user_id, score")
+      .select("id, assignment_id, user_id, score, status")
       .eq("id", submissionId)
       .maybeSingle();
     if (subErr) throw subErr;
@@ -196,6 +241,7 @@ export async function PATCH(
         { status: 404 }
       );
     }
+
     const { data: assignment, error: aErr } = await supabase
       .from("module_assignments")
       .select("id, module_id, max_score")
@@ -209,8 +255,28 @@ export async function PATCH(
       );
     }
 
+    // Handle REJECT action
+    if (action === "reject") {
+      const { error: uErr } = await supabase
+        .from("module_submissions")
+        .update({
+          status: "rejected",
+          note: note,
+          score: null, // Clear score saat ditolak
+        })
+        .eq("id", submissionId);
+      if (uErr) throw uErr;
+
+      return NextResponse.json({
+        success: true,
+        rejected: true,
+        message: "Tugas ditolak, siswa dapat submit ulang",
+      });
+    }
+
+    // Default: GRADE action
     // Prevent re-grading if already graded and no override
-    if (subRow.score != null && !override) {
+    if (subRow.status === "graded" && !override) {
       return NextResponse.json(
         {
           success: false,
@@ -230,7 +296,11 @@ export async function PATCH(
 
     const { error: uErr } = await supabase
       .from("module_submissions")
-      .update({ score: finalScore, note: note ?? null })
+      .update({
+        score: finalScore,
+        note: note ?? null,
+        status: "graded", // Set status ke graded
+      })
       .eq("id", submissionId);
     if (uErr) throw uErr;
 

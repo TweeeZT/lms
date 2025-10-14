@@ -19,7 +19,7 @@ export async function GET(
   // Base module
   const { data: mod, error: modErr } = await supabaseAdmin
     .from("modules")
-    .select("id, course_id, title, description, module_kind, order_index")
+    .select("id, course_id, title, description, module_kind")
     .eq("id", moduleId)
     .maybeSingle();
   if (modErr || !mod)
@@ -93,7 +93,7 @@ export async function GET(
     correct_count: number;
     total_questions: number;
     passed: boolean;
-    created_at: string;
+    submitted_at: string;
     answers?: Array<{ questionId: string; answer: string }>;
   };
   let lastAttempt: AttemptRow | null = null;
@@ -101,13 +101,13 @@ export async function GET(
     const { data: attemptData } = await supabaseAdmin
       .from("quiz_attempts")
       .select(
-        "id, score, correct_count, total_questions, passed, created_at, answers"
+        "id, score, correct_count, total_questions, passed, submitted_at, answers"
       )
       .eq("user_id", userId)
       .eq("course_id", mod.course_id)
       .eq("module_id", moduleId)
       .eq("quiz_id", quiz.id)
-      .order("created_at", { ascending: false })
+      .order("submitted_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (attemptData) lastAttempt = attemptData as AttemptRow;
@@ -184,30 +184,62 @@ export async function GET(
     .select("id, instructions, due_date, max_score")
     .eq("module_id", moduleId)
     .maybeSingle();
-  // Existing submission (if any)
+
+  // Get passing grade for assignment
+  let assignmentPassingGrade = 70;
+  if (assignment?.id) {
+    const { data: quiz } = await supabaseAdmin
+      .from("module_quizzes")
+      .select("passing_score")
+      .eq("module_id", moduleId)
+      .maybeSingle();
+
+    if (quiz?.passing_score) {
+      assignmentPassingGrade = quiz.passing_score;
+    } else if (assignment.max_score) {
+      assignmentPassingGrade = Math.ceil((assignment.max_score * 70) / 100);
+    }
+  }
+
+  // Existing submission (if any) WITH STATUS
   let submission: {
     id: string;
     file_url: string | null;
     link_url: string | null;
-    created_at: string;
+    submitted_at: string;
     score: number | null;
     note: string | null;
+    status: string | null;
   } | null = null;
   interface SubmissionRow {
     id: string;
     file_url: string | null;
     link_url: string | null;
-    created_at: string;
+    submitted_at: string;
     score: number | null;
     note: string | null;
+    status: string | null;
   }
   if (assignment?.id) {
-    const { data: subData } = await supabaseAdmin
+    console.log(
+      "Looking for submission with assignment_id:",
+      assignment.id,
+      "user_id:",
+      userId
+    );
+    // First try to find submission by assignment_id
+    const { data: subData, error: subError } = await supabaseAdmin
       .from("module_submissions")
-      .select("id, file_url, link_url, created_at, score, note")
+      .select("id, file_url, link_url, submitted_at, score, note, status")
       .eq("assignment_id", assignment.id)
       .eq("user_id", userId)
       .maybeSingle();
+
+    if (subError) {
+      console.error("Error fetching submission:", subError);
+    }
+
+    console.log("Submission query result:", subData);
     if (subData) submission = subData as SubmissionRow;
   }
 
@@ -247,7 +279,6 @@ export async function GET(
       title: mod.title,
       description: mod.description,
       kind: mod.module_kind,
-      order: mod.order_index,
       content: content
         ? {
             type: content.content_type,
@@ -271,6 +302,7 @@ export async function GET(
             instructions: assignment.instructions,
             dueDate: assignment.due_date,
             maxScore: assignment.max_score,
+            passingGrade: assignmentPassingGrade,
           }
         : null,
       liveSession: liveSession
@@ -298,7 +330,7 @@ export async function GET(
           correct: lastAttempt.correct_count,
           total: lastAttempt.total_questions,
           passed: lastAttempt.passed,
-          createdAt: lastAttempt.created_at,
+          createdAt: lastAttempt.submitted_at,
         }
       : null,
     attemptAnswers,
@@ -321,32 +353,15 @@ export async function POST(
     );
   }
 
-  // Helper to fetch ordered modules and compute next & progress
-  const getNextModuleAndProgress = async (completedSet: Set<string>) => {
-    const { data: modRow } = await supabaseAdmin
-      .from("modules")
-      .select("id, order_index")
-      .eq("id", moduleId)
-      .maybeSingle();
-    if (!modRow)
-      return { nextId: moduleId, progressPct: null as number | null };
+  // Helper to compute progress percentage
+  const getProgressPercentage = async (completedSet: Set<string>) => {
     const { data: allMods } = await supabaseAdmin
       .from("modules")
-      .select("id, order_index")
-      .eq("course_id", courseId)
-      .order("order_index", { ascending: true });
-    const ordered = (allMods || [])
-      .filter((m) => m.order_index != null)
-      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
-    const index = ordered.findIndex((m) => m.id === moduleId);
-    const next =
-      index >= 0 && index < ordered.length - 1
-        ? ordered[index + 1].id
-        : moduleId;
-    // progress percentage = completed / total * 100 (rounded)
-    const total = ordered.length || 1;
+      .select("id")
+      .eq("course_id", courseId);
+    const total = (allMods || []).length || 1;
     const progressPct = Math.round((completedSet.size / total) * 100);
-    return { nextId: next, progressPct };
+    return progressPct;
   };
 
   // Helper to load / init progress row
@@ -395,7 +410,6 @@ export async function POST(
         { status: 400 }
       );
     }
-    const { nextModuleId } = body as { nextModuleId?: string };
     const { prog, completed, error } = await loadProgress();
     if (error)
       return NextResponse.json(
@@ -403,55 +417,27 @@ export async function POST(
         { status: 500 }
       );
 
-    // Fetch ordered modules to enforce gating (cannot skip)
-    const { data: allMods, error: modsErr } = await supabaseAdmin
-      .from("modules")
-      .select("id, order_index")
-      .eq("course_id", courseId)
-      .order("order_index", { ascending: true });
-    if (modsErr)
-      return NextResponse.json(
-        { success: false, error: modsErr.message },
-        { status: 500 }
-      );
-    const ordered = (allMods || [])
-      .filter((m) => m.order_index != null)
-      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     const completedSet = new Set<string>(completed);
-    // Determine the first incomplete module (the only one allowed to be manually completed)
-    const firstIncomplete = ordered.find((m) => !completedSet.has(m.id))?.id;
-    if (firstIncomplete && firstIncomplete !== moduleId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Belum bisa menyelesaikan modul ini. Selesaikan modul sebelumnya dulu.",
-        },
-        { status: 400 }
-      );
-    }
-    // Add moduleId to completed set
+    // Add current module to completed set (no prerequisite gating)
     completedSet.add(moduleId);
     const updated = Array.from(completedSet);
-    // Determine next module id AFTER current one
-    const currentIndex = ordered.findIndex((m) => m.id === moduleId);
-    const nextOrdered =
-      currentIndex >= 0 && currentIndex < ordered.length - 1
-        ? ordered[currentIndex + 1].id
-        : moduleId; // stay if last
-    const advanceId =
-      nextModuleId && updated.includes(moduleId)
-        ? nextModuleId // frontend hint (still validated by gating above)
-        : nextOrdered;
-    const progressPct = Math.round(
-      (updated.length / (ordered.length || 1)) * 100
-    );
+
+    // Calculate progress percentage
+    const progressPct = await getProgressPercentage(completedSet);
 
     // Check for course completion and award points
     let courseCompleted = false;
     let pointsAwarded = 0;
     let certificateGenerated = false;
-    if (updated.length === ordered.length) {
+
+    // Get total modules to check if course is completed
+    const { data: allModules } = await supabaseAdmin
+      .from("modules")
+      .select("id")
+      .eq("course_id", courseId);
+    const totalModules = (allModules || []).length;
+
+    if (updated.length === totalModules && totalModules > 0) {
       // Course is complete, award points
       courseCompleted = true;
 
@@ -528,7 +514,6 @@ export async function POST(
         .from("user_progress")
         .update({
           completed_modules: updated,
-          current_module_id: advanceId,
           progress_percentage: progressPct,
           last_accessed_at: new Date().toISOString(),
         })
@@ -549,7 +534,7 @@ export async function POST(
           user_id: userId,
           course_id: courseId,
           completed_modules: updated,
-          current_module_id: advanceId,
+          current_module_id: moduleId, // Set current module to the one just completed
           progress_percentage: progressPct,
         });
       if (insErr)
@@ -561,8 +546,6 @@ export async function POST(
     return NextResponse.json({
       success: true,
       completedModules: updated,
-      currentModuleId: advanceId,
-      nextModuleId: advanceId === moduleId ? null : advanceId,
       progressPercentage: progressPct,
       courseCompleted,
       pointsAwarded: pointsAwarded > 0 ? pointsAwarded : undefined,
@@ -814,7 +797,6 @@ export async function POST(
     }
 
     let updated: string[] | undefined;
-    let nextModuleId: string | null = null;
     let progressPct: number | null = null;
     let courseCompleted = false;
     let pointsAwarded = 0;
@@ -830,9 +812,7 @@ export async function POST(
       const set = new Set<string>(completed);
       set.add(moduleId);
       updated = Array.from(set);
-      const helper = await getNextModuleAndProgress(set);
-      nextModuleId = helper.nextId === moduleId ? null : helper.nextId;
-      progressPct = helper.progressPct;
+      progressPct = await getProgressPercentage(set);
 
       // Check for course completion
       const { data: allMods } = await supabaseAdmin
@@ -908,8 +888,8 @@ export async function POST(
           .from("user_progress")
           .update({
             completed_modules: updated,
-            current_module_id: helper.nextId,
-            progress_percentage: helper.progressPct,
+            current_module_id: moduleId,
+            progress_percentage: progressPct,
           })
           .eq("id", prog.id)
           .eq("user_id", userId)
@@ -926,8 +906,8 @@ export async function POST(
             user_id: userId,
             course_id: courseId,
             completed_modules: updated,
-            current_module_id: helper.nextId,
-            progress_percentage: helper.progressPct,
+            current_module_id: moduleId,
+            progress_percentage: progressPct,
           });
         if (insErr)
           return NextResponse.json(
@@ -946,7 +926,6 @@ export async function POST(
       attemptId,
       completedModules: updated,
       attemptAnswers,
-      nextModuleId,
       progressPercentage: progressPct,
       courseCompleted,
       pointsAwarded: pointsAwarded > 0 ? pointsAwarded : undefined,
@@ -969,7 +948,7 @@ export async function POST(
     // Validate assignment exists for module
     const { data: assign } = await supabaseAdmin
       .from("module_assignments")
-      .select("id")
+      .select("id, max_score")
       .eq("module_id", moduleId)
       .maybeSingle();
     if (!assign) {
@@ -978,28 +957,132 @@ export async function POST(
         { status: 404 }
       );
     }
-    // Manual `upsert` because table lacks composite unique constraint
-    let existing: { id: string } | null = null;
+
+    // Get passing grade from quiz if exists, otherwise use 70% of max_score or default 70
+    let passingGrade = 70;
+    const { data: quiz } = await supabaseAdmin
+      .from("module_quizzes")
+      .select("passing_score")
+      .eq("module_id", moduleId)
+      .maybeSingle();
+
+    if (quiz?.passing_score) {
+      passingGrade = quiz.passing_score;
+    } else if (assign.max_score) {
+      passingGrade = Math.ceil((assign.max_score * 70) / 100); // 70% of max score
+    }
+
+    // Check for existing submission
+    let existing: { id: string; score: number | null } | null = null;
     try {
       const { data: ex } = await supabaseAdmin
         .from("module_submissions")
-        .select("id")
+        .select("id, score")
         .eq("assignment_id", assign.id)
         .eq("user_id", userId)
         .maybeSingle();
-      if (ex) existing = { id: (ex as { id: string }).id };
+      if (ex)
+        existing = {
+          id: (ex as { id: string; score: number | null }).id,
+          score: (ex as { id: string; score: number | null }).score,
+        };
     } catch {}
+
+    // Check for existing submission WITH status
+    let existingWithStatus: {
+      id: string;
+      score: number | null;
+      status: string | null;
+    } | null = null;
     if (existing) {
-      const { error: updErr } = await supabaseAdmin
+      const { data: exStatus } = await supabaseAdmin
         .from("module_submissions")
-        .update({ file_url: fileUrl || null, link_url: linkUrl || null })
-        .eq("id", existing.id);
-      if (updErr)
+        .select("id, score, status")
+        .eq("assignment_id", assign.id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (exStatus)
+        existingWithStatus = exStatus as {
+          id: string;
+          score: number | null;
+          status: string | null;
+        };
+    }
+
+    if (existingWithStatus) {
+      const currentStatus = existingWithStatus.status;
+      const currentScore = existingWithStatus.score ?? 0;
+
+      // Guard: if status='waiting', block resubmission
+      if (currentStatus === "waiting") {
         return NextResponse.json(
-          { success: false, error: updErr.message },
+          {
+            success: false,
+            error:
+              "Tugas sudah dikumpulkan dan menunggu penilaian. Tidak dapat submit ulang saat ini.",
+          },
+          { status: 409 }
+        );
+      }
+
+      // Guard: if status='graded' AND score >= passing grade, block resubmission
+      if (currentStatus === "graded" && currentScore >= passingGrade) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Tugas sudah diterima dengan nilai memuaskan dan tidak dapat diubah",
+          },
+          { status: 409 }
+        );
+      }
+
+      // Allowed when: status='rejected' OR (status='graded' AND score < passingGrade)
+      // Get old submission data to delete old files
+      const { data: oldSubmission } = await supabaseAdmin
+        .from("module_submissions")
+        .select("file_url")
+        .eq("id", existingWithStatus.id)
+        .single();
+
+      // Delete old file from storage if exists
+      // - When uploading new file (file → file)
+      // - When switching from file to link (file → link)
+      if (oldSubmission?.file_url) {
+        try {
+          const { deleteStorageFile, extractStoragePath } = await import(
+            "@/lib/storageHelper"
+          );
+          const oldPath = extractStoragePath(oldSubmission.file_url);
+          if (oldPath) {
+            await deleteStorageFile("assignments-submissions", oldPath);
+            console.log(`Deleted old assignment file: ${oldPath}`);
+          }
+        } catch (err) {
+          console.error("Error deleting old file:", err);
+          // Continue even if delete fails
+        }
+      }
+
+      // Update existing submission, clearing old data
+      const { error: updateErr } = await supabaseAdmin
+        .from("module_submissions")
+        .update({
+          file_url: fileUrl || null,
+          link_url: linkUrl || null,
+          submitted_at: new Date().toISOString(),
+          status: "waiting",
+          score: null,
+          note: null, // Clear previous instructor notes
+        })
+        .eq("id", existingWithStatus.id);
+      if (updateErr)
+        return NextResponse.json(
+          { success: false, error: updateErr.message },
           { status: 500 }
         );
     } else {
+      // Create new submission with status='waiting'
       const submissionId = randomUUID();
       const { error: insErr } = await supabaseAdmin
         .from("module_submissions")
@@ -1009,6 +1092,7 @@ export async function POST(
           user_id: userId,
           file_url: fileUrl || null,
           link_url: linkUrl || null,
+          status: "waiting", // Set status awal
         });
       if (insErr)
         return NextResponse.json(
@@ -1020,6 +1104,10 @@ export async function POST(
     return NextResponse.json({
       success: true,
       submitted: true,
+      resubmission: !!existing,
+      message: existing
+        ? "Tugas berhasil disubmit ulang"
+        : "Tugas berhasil dikumpulkan",
       // progress not updated until graded & passed
     });
   }

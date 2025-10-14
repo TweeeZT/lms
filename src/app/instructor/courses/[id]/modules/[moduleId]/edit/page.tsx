@@ -21,8 +21,6 @@ import Link from "next/link";
 import { DateTimePicker } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { IconChevronLeft, IconUpload } from "@tabler/icons-react";
-// Use absolute import via root alias; adjust if your tsconfig paths differ
-import PrimeLoader from "@/components/PrimeLoader";
 import { useAuth } from "../../../../../../../hooks/useAuth";
 import RichTextEditor from "@/components/RichTextEditor";
 
@@ -67,7 +65,6 @@ export default function EditModulePage() {
 
   // Tugas
   const [instructions, setInstructions] = useState("");
-  const [dueDate, setDueDate] = useState<string>("");
   const [maxScore, setMaxScore] = useState<number | "">(100);
 
   // Live session
@@ -170,11 +167,10 @@ export default function EditModulePage() {
           }
         } else if (m.module_kind === "tugas") {
           const a = json.detail as
-            | { instructions?: string; due_date?: string; max_score?: number }
+            | { instructions?: string; max_score?: number }
             | undefined;
           if (a) {
             setInstructions(a.instructions || "");
-            setDueDate(a.due_date || "");
             setMaxScore(a.max_score || 100);
           }
         } else if (m.module_kind === "live") {
@@ -266,7 +262,6 @@ export default function EditModulePage() {
         } else if (moduleKind === "tugas") {
           payload.assignment = {
             instructions,
-            due_date: dueDate || undefined,
             max_score: Number(maxScore || 100),
           };
         } else if (moduleKind === "live") {
@@ -313,13 +308,60 @@ export default function EditModulePage() {
     }
   };
 
-  if (loading) {
+  if (loading || saving) {
     return (
-      <Container size="md">
-        <Group justify="center" mt="lg">
-          <PrimeLoader />
-        </Group>
-      </Container>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
     );
   }
 
@@ -358,19 +400,6 @@ export default function EditModulePage() {
                 value={description}
                 onChange={(e) => setDescription(e.currentTarget.value)}
               />
-              <Group grow>
-                <NumberInput
-                  label="Urutan"
-                  value={orderIndex}
-                  onChange={(v) => setOrderIndex(Number(v || 0))}
-                  min={0}
-                />
-                {/* <Checkbox
-                  label="Published"
-                  checked={isPublished}
-                  onChange={(e) => setIsPublished(e.currentTarget.checked)}
-                /> */}
-              </Group>
 
               {moduleKind === "materi" && (
                 <Paper p="md" radius="md" withBorder>
@@ -716,20 +745,14 @@ export default function EditModulePage() {
                       value={instructions}
                       onChange={(e) => setInstructions(e.currentTarget.value)}
                       minRows={4}
+                      required
                     />
-                    <Group grow>
-                      <TextInput
-                        label="Batas Waktu (ISO)"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.currentTarget.value)}
-                      />
-                      <NumberInput
-                        label="Nilai Maks"
-                        value={maxScore}
-                        onChange={(v) => setMaxScore(Number(v || 100))}
-                        min={1}
-                      />
-                    </Group>
+                    <NumberInput
+                      label="Nilai Maksimal"
+                      value={maxScore}
+                      onChange={(v) => setMaxScore(Number(v || 100))}
+                      min={1}
+                    />
                   </Stack>
                 </Paper>
               )}

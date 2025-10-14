@@ -55,7 +55,6 @@ export default function AdminNewModulePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [moduleKind, setModuleKind] = useState<string>("materi");
-  const [orderIndex, setOrderIndex] = useState<number | undefined>(undefined);
   const [isPublished, setIsPublished] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +74,7 @@ export default function AdminNewModulePage() {
 
   // Tugas fields
   const [tugasInstructions, setTugasInstructions] = useState("");
+  const [maxScore, setMaxScore] = useState<number | "">(100);
 
   // Live session (schema tanpa title; gunakan agenda, start_at, join_url, passcode)
   const [liveAgenda, setLiveAgenda] = useState("");
@@ -124,7 +124,6 @@ export default function AdminNewModulePage() {
         fd.set("title", title);
         fd.set("description", description);
         fd.set("module_kind", moduleKind);
-        fd.set("order_index", String(orderIndex ?? 0));
         fd.set("is_published", String(isPublished));
         fd.set("content_type", contentType);
         if (contentUrl) fd.set("url", contentUrl);
@@ -140,7 +139,6 @@ export default function AdminNewModulePage() {
           title,
           description,
           module_kind: moduleKind,
-          order_index: orderIndex ?? 0,
           is_published: isPublished,
         };
 
@@ -160,8 +158,7 @@ export default function AdminNewModulePage() {
         } else if (moduleKind === "tugas") {
           body.assignment = {
             instructions: tugasInstructions,
-            due_date: undefined,
-            max_score: 100,
+            max_score: Number(maxScore || 100),
           };
         } else if (moduleKind === "live") {
           body.live = {
@@ -471,11 +468,20 @@ export default function AdminNewModulePage() {
             <Title order={5}>Tugas</Title>
             <Stack gap="sm" mt="xs">
               <Textarea
-                label="Deskripsi Tugas"
+                label="Instruksi Tugas"
+                description="Deskripsi lengkap tugas yang harus dikerjakan siswa"
                 value={tugasInstructions}
                 onChange={(e) => setTugasInstructions(e.currentTarget.value)}
                 minRows={4}
                 required
+              />
+              <NumberInput
+                label="Nilai Maksimal"
+                description="Nilai maksimal yang bisa didapat siswa"
+                value={maxScore}
+                onChange={(v) => setMaxScore(typeof v === "number" ? v : 100)}
+                min={1}
+                max={1000}
               />
             </Stack>
           </Card>
@@ -532,15 +538,6 @@ export default function AdminNewModulePage() {
               ))}
             </Group>
           </Radio.Group>
-          <NumberInput
-            label="Urutan"
-            placeholder="0"
-            value={orderIndex}
-            onChange={(val) =>
-              setOrderIndex(typeof val === "number" ? val : undefined)
-            }
-            min={1}
-          />
           <Radio.Group
             name="publish"
             label="Status"

@@ -45,6 +45,7 @@ type AssignmentSubmission = {
   score: number | null;
   max_score: number | null;
   graded: boolean;
+  status: string | null;
 };
 
 export default function StudentAssignmentsPage() {
@@ -61,6 +62,7 @@ export default function StudentAssignmentsPage() {
   const [submissions, setSubmissions] = useState<AssignmentSubmission[]>([]);
   const [grading, setGrading] = useState(false);
   const [gradeModal, setGradeModal] = useState(false);
+  const [rejectModal, setRejectModal] = useState(false);
   const [selectedSubmission, setSelectedSubmission] =
     useState<AssignmentSubmission | null>(null);
   const [score, setScore] = useState<number | "">(0);
@@ -106,18 +108,26 @@ export default function StudentAssignmentsPage() {
     setGradeModal(true);
   };
 
+  const openRejectModal = (submission: AssignmentSubmission) => {
+    setSelectedSubmission(submission);
+    setFeedback(submission.note || "");
+    setRejectModal(true);
+  };
+
   const handleGrade = async () => {
-    if (!selectedSubmission) return;
+    if (!selectedSubmission || !user?.id) return;
 
     try {
       setGrading(true);
-      const res = await fetch(`/api/instructor/assignments/grade`, {
-        method: "POST",
+      const res = await fetch(`/api/instructor/courses/${courseId}/students`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          instructorId: user.id,
           submissionId: selectedSubmission.submission_id,
           score: Number(score),
-          feedback,
+          note: feedback || null,
+          action: "grade",
         }),
       });
 
@@ -140,6 +150,56 @@ export default function StudentAssignmentsPage() {
       notifications.show({
         title: "Error",
         message: err instanceof Error ? err.message : "Gagal memberikan nilai",
+        color: "red",
+      });
+    } finally {
+      setGrading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedSubmission || !user?.id) return;
+    if (!feedback.trim()) {
+      notifications.show({
+        title: "Error",
+        message: "Catatan wajib diisi saat menolak tugas",
+        color: "red",
+      });
+      return;
+    }
+
+    try {
+      setGrading(true);
+      const res = await fetch(`/api/instructor/courses/${courseId}/students`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instructorId: user.id,
+          submissionId: selectedSubmission.submission_id,
+          note: feedback,
+          action: "reject",
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Gagal menolak tugas");
+      }
+
+      notifications.show({
+        title: "Tugas Ditolak",
+        message: "Tugas ditolak, siswa dapat submit ulang",
+        color: "orange",
+      });
+
+      setRejectModal(false);
+      fetchSubmissions();
+    } catch (err) {
+      console.error("Error rejecting:", err);
+      notifications.show({
+        title: "Error",
+        message: err instanceof Error ? err.message : "Gagal menolak tugas",
         color: "red",
       });
     } finally {
@@ -195,7 +255,7 @@ export default function StudentAssignmentsPage() {
                         )}
                       </Text>
                     </div>
-                    {submission.graded ? (
+                    {submission.status === "graded" ? (
                       <Badge
                         color="green"
                         size="lg"
@@ -204,8 +264,16 @@ export default function StudentAssignmentsPage() {
                         Dinilai: {submission.score}/
                         {submission.max_score || 100}
                       </Badge>
-                    ) : (
+                    ) : submission.status === "rejected" ? (
+                      <Badge color="red" size="lg">
+                        Ditolak
+                      </Badge>
+                    ) : submission.status === "waiting" ? (
                       <Badge color="yellow" size="lg">
+                        Menunggu Penilaian
+                      </Badge>
+                    ) : (
+                      <Badge color="gray" size="lg">
                         Belum Dinilai
                       </Badge>
                     )}
@@ -260,10 +328,10 @@ export default function StudentAssignmentsPage() {
                     )}
                   </Stack>
 
-                  {submission.graded && submission.note && (
-                    <Paper withBorder p="sm" bg="#f0f9ff">
-                      <Text size="sm" fw={500} mb={4} c="blue">
-                        Feedback Instruktur:
+                  {submission.note && (
+                    <Paper withBorder p="sm" bg="#fff4e6">
+                      <Text size="sm" fw={500} mb={4} c="orange">
+                        Feedback/Catatan Instruktur:
                       </Text>
                       <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
                         {submission.note}
@@ -271,12 +339,29 @@ export default function StudentAssignmentsPage() {
                     </Paper>
                   )}
 
-                  <Button
-                    onClick={() => openGradeModal(submission)}
-                    variant={submission.graded ? "light" : "filled"}
-                  >
-                    {submission.graded ? "Edit Nilai" : "Beri Nilai"}
-                  </Button>
+                  <Group>
+                    <Button
+                      onClick={() => openGradeModal(submission)}
+                      variant={
+                        submission.status === "graded" ? "light" : "filled"
+                      }
+                      disabled={submission.status === "rejected"}
+                    >
+                      {submission.status === "graded"
+                        ? "Edit Nilai"
+                        : "Beri Nilai"}
+                    </Button>
+                    {submission.status !== "graded" &&
+                      submission.status !== "rejected" && (
+                        <Button
+                          onClick={() => openRejectModal(submission)}
+                          variant="outline"
+                          color="red"
+                        >
+                          Tolak
+                        </Button>
+                      )}
+                  </Group>
                 </Stack>
               </Card>
             ))}
@@ -321,6 +406,48 @@ export default function StudentAssignmentsPage() {
               disabled={score === "" || Number(score) < 0}
             >
               Simpan Nilai
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Reject Modal */}
+      <Modal
+        opened={rejectModal}
+        onClose={() => setRejectModal(false)}
+        title={
+          <Text fw={600} c="red">
+            Tolak Tugas
+          </Text>
+        }
+        size="md"
+      >
+        <Stack gap="md">
+          <Alert color="orange" title="Catatan Penting">
+            Tugas akan ditolak dan siswa dapat submit ulang dengan perbaikan.
+          </Alert>
+
+          <Textarea
+            label="Catatan untuk Siswa"
+            placeholder="Jelaskan apa yang perlu diperbaiki..."
+            value={feedback}
+            onChange={(e) => setFeedback(e.currentTarget.value)}
+            minRows={4}
+            required
+            description="Wajib diisi untuk memberi arahan pada siswa"
+          />
+
+          <Group justify="flex-end" mt="md">
+            <Button variant="subtle" onClick={() => setRejectModal(false)}>
+              Batal
+            </Button>
+            <Button
+              onClick={handleReject}
+              loading={grading}
+              color="red"
+              disabled={!feedback.trim()}
+            >
+              Tolak Tugas
             </Button>
           </Group>
         </Stack>

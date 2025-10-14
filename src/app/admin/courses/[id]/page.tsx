@@ -55,7 +55,6 @@ interface ModuleItem {
   title: string;
   description: string | null;
   module_kind: "materi" | "quiz" | "tugas" | "live";
-  order_index: number | null;
   is_published: boolean | null;
   created_at?: string;
   updated_at?: string;
@@ -121,26 +120,8 @@ export default function AdminCourseDetailPage() {
     fetchData();
   }, [fetchData]);
 
-  const sortedModules = useMemo(
-    () =>
-      [...modules].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)),
-    [modules]
-  );
-
-  // Check for order issues
-  const orderWarnings = useMemo(() => {
-    const warnings: string[] = [];
-    for (let i = 0; i < sortedModules.length; i++) {
-      const current = sortedModules[i].order_index || 0;
-      const expected = i + 1;
-      if (current !== expected) {
-        warnings.push(
-          `Modul "${sortedModules[i].title}" memiliki urutan ${current}, seharusnya ${expected}`
-        );
-      }
-    }
-    return warnings;
-  }, [sortedModules]);
+  // No more ordering needed - modules are displayed in creation order
+  const sortedModules = modules;
 
   const handleDelete = async () => {
     if (!showDelete || !adminId) return;
@@ -199,18 +180,6 @@ export default function AdminCourseDetailPage() {
             </Badge>
           </Group>
 
-          {orderWarnings.length > 0 && (
-            <Alert color="yellow" title="Peringatan Urutan Modul">
-              <Stack gap={4}>
-                {orderWarnings.map((w, i) => (
-                  <Text key={i} size="sm">
-                    • {w}
-                  </Text>
-                ))}
-              </Stack>
-            </Alert>
-          )}
-
           <Grid gutter="lg">
             <Grid.Col span={{ base: 12, md: 8 }}>
               <Card padding="lg" radius="md">
@@ -256,26 +225,12 @@ export default function AdminCourseDetailPage() {
                 ) : (
                   <Stack gap="sm">
                     {sortedModules.map((m, idx) => {
-                      const hasOrderIssue = (m.order_index || 0) !== idx + 1;
                       return (
-                        <Card
-                          key={m.id}
-                          padding="md"
-                          withBorder
-                          style={{
-                            borderLeft: hasOrderIssue
-                              ? "4px solid var(--mantine-color-yellow-6)"
-                              : undefined,
-                          }}
-                        >
+                        <Card key={m.id} padding="md" withBorder>
                           <Group justify="space-between" wrap="nowrap">
                             <Group gap="md" style={{ flex: 1 }}>
-                              <Badge
-                                size="lg"
-                                variant="filled"
-                                color={hasOrderIssue ? "yellow" : "blue"}
-                              >
-                                #{m.order_index ?? 0}
+                              <Badge size="lg" variant="filled" color="blue">
+                                #{idx + 1}
                               </Badge>
                               <Stack gap={4} style={{ flex: 1 }}>
                                 <Group gap="xs">

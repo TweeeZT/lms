@@ -21,18 +21,22 @@ import {
   IconInfoCircle,
 } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
+import PrimeLoader from "@/components/PrimeLoader";
 
 export default function UserProjectsPage() {
   const { user } = useAuth();
   const router = useRouter();
 
   const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const scratchUsername = user?.username ?? null;
 
   useEffect(() => {
-    if (!user?.id || !scratchUsername) return;
+    if (!user?.id || !scratchUsername) {
+      setLoading(false);
+      return;
+    }
 
     const loadProjects = async () => {
       setLoading(true);
@@ -68,6 +72,18 @@ export default function UserProjectsPage() {
       setLoading(false);
     }
   };
+
+  // Show PrimeLoader on initial load only
+  const [initialLoad, setInitialLoad] = useState(true);
+  useEffect(() => {
+    if (initialLoad && !loading) {
+      setInitialLoad(false);
+    }
+  }, [loading, initialLoad]);
+
+  if (initialLoad && loading) {
+    return <PrimeLoader />;
+  }
 
   return (
     <Stack gap="lg" p="md">

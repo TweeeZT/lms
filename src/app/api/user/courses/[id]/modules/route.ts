@@ -15,22 +15,20 @@ export async function GET(
       { status: 400 }
     );
 
-  // Load modules for the course (ordered)
+  // Load modules for the course
   type ModRow = {
     id: string;
     title: string;
     description?: string | null;
     module_kind?: string | null;
-    order_index?: number | null;
     is_published?: boolean | null;
   };
 
   const { data: modules, error: modErr } = await supabaseAdmin
     .from("modules")
-    .select("id, title, description, module_kind, order_index, is_published")
+    .select("id, title, description, module_kind, is_published")
     .eq("course_id", courseId)
-    .or("is_published.eq.true,is_published.is.null")
-    .order("order_index", { ascending: true });
+    .or("is_published.eq.true,is_published.is.null");
   if (modErr)
     return NextResponse.json(
       { success: false, error: modErr.message },
@@ -62,19 +60,15 @@ export async function GET(
     title: m.title,
     description: m.description,
     kind: (m.module_kind as string) || "content",
-    order: m.order_index ?? 0,
     isCompleted: completed.includes(m.id),
   }));
 
-  const ordered = items.sort(
-    (a: { order: number }, b: { order: number }) => a.order - b.order
-  );
   const firstIncomplete =
-    ordered.find((i: { isCompleted: boolean; id: string }) => !i.isCompleted)
+    items.find((i: { isCompleted: boolean; id: string }) => !i.isCompleted)
       ?.id ||
-    ordered.at(-1)?.id ||
+    items.at(-1)?.id ||
     null;
   const currentModuleId = upRows?.current_module_id || firstIncomplete;
 
-  return NextResponse.json({ success: true, items: ordered, currentModuleId });
+  return NextResponse.json({ success: true, items, currentModuleId });
 }

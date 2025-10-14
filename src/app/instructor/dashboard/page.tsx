@@ -188,15 +188,64 @@ export default function InstructorDashboard() {
   }, [authLoading, user]);
 
   // Make numbers compact and prevent wrapping
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat("id-ID", {
+  const formatCurrency = (n: number) => {
+    if (n >= 1000000) {
+      // 1 juta atau lebih
+      const jutaVal = n / 1000000;
+      return `Rp ${jutaVal.toFixed(1).replace(".", ",")}jt`;
+    }
+    if (n >= 1000) {
+      // 1 ribu atau lebih
+      const ribuVal = n / 1000;
+      return `Rp ${ribuVal.toFixed(0)}rb`;
+    }
+    return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
-      notation: "compact",
-      maximumFractionDigits: 1,
-    })
-      .format(n)
-      .replace("IDR", "Rp");
+      maximumFractionDigits: 0,
+    }).format(n);
+  };
+
+  const formatDate = (d: string | Date) => {
+    const dt = typeof d === "string" ? new Date(d) : d;
+    const day = dt.getDate().toString().padStart(2, "0");
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agt",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+    const month = monthNames[dt.getMonth()];
+    const year = dt.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  const formatMonth = (monthStr: string) => {
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agt",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+    const date = new Date(monthStr + "-01");
+    return `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+  };
 
   // Trend from API
   const earningsTrend = useMemo(() => {
@@ -454,12 +503,7 @@ export default function InstructorDashboard() {
                               strokeWidth={2}
                             >
                               <title>
-                                {new Date(d.month + "-01").toLocaleDateString(
-                                  "id-ID",
-                                  {
-                                    month: "long",
-                                  }
-                                )}
+                                {formatMonth(d.month)}
                                 {"\n"}Pendapatan:{" "}
                                 {new Intl.NumberFormat("id-ID").format(
                                   d.revenue
@@ -477,12 +521,7 @@ export default function InstructorDashboard() {
                               strokeWidth={2}
                             >
                               <title>
-                                {new Date(d.month + "-01").toLocaleDateString(
-                                  "id-ID",
-                                  {
-                                    month: "long",
-                                  }
-                                )}
+                                {formatMonth(d.month)}
                                 {"\n"}Orders:{" "}
                                 {new Intl.NumberFormat("id-ID").format(
                                   d.orders
@@ -509,12 +548,7 @@ export default function InstructorDashboard() {
                           textAnchor="middle"
                           fill="var(--mantine-color-dimmed)"
                         >
-                          {new Date(d.month + "-01").toLocaleDateString(
-                            "id-ID",
-                            {
-                              month: "short",
-                            }
-                          )}
+                          {formatMonth(d.month).split(" ")[0]}
                         </text>
                       );
                     })}

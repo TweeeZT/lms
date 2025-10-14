@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* Admin modules route */
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../../../lib/supabaseServer";
@@ -50,10 +49,10 @@ export async function GET(
     const { data, error } = await supabaseAdmin
       .from("modules")
       .select(
-        "id, course_id, title, description, module_kind, order_index, is_published, created_at, updated_at"
+        "id, course_id, title, description, module_kind, is_published, created_at, updated_at"
       )
       .eq("course_id", courseId)
-      .order("order_index", { ascending: true });
+      .order("created_at", { ascending: true });
     if (error) throw error;
     return NextResponse.json({ success: true, items: data || [] });
   } catch (e) {
@@ -83,7 +82,6 @@ export async function POST(
 
   // helper
   const extractPgError = (e: unknown) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const obj = e as any;
     return {
       error_code: typeof obj?.code === "string" ? obj.code : undefined,
@@ -111,7 +109,6 @@ export async function POST(
     let title = "";
     let description: string | null = null;
     let module_kind: "materi" | "quiz" | "tugas" | "live" = "materi";
-    let order_index = 0;
     let is_published = true;
 
     // Materi
@@ -162,7 +159,6 @@ export async function POST(
       } else {
         module_kind = "materi";
       }
-      order_index = Number(form.get("order_index") || 0);
       is_published = String(form.get("is_published") || "true") === "true";
       if (module_kind === "materi") {
         content_type = (form.get("content_type") as string) || undefined;
@@ -209,7 +205,6 @@ export async function POST(
       title = (body.title || "").trim();
       description = (body.description || "").trim() || null;
       module_kind = body.module_kind || "materi";
-      order_index = Number(body.order_index || 0);
       is_published = body.is_published !== false;
       if (module_kind === "materi") {
         const c = body.content || {};
@@ -261,29 +256,6 @@ export async function POST(
       );
     }
 
-    // order_index normalization / collision resolution
-    if (order_index < 0 || !Number.isFinite(order_index)) order_index = 0;
-    const { data: existingSameOrder } = await supabaseAdmin
-      .from("modules")
-      .select("order_index")
-      .eq("course_id", courseId)
-      .eq("order_index", order_index)
-      .limit(1);
-    if (existingSameOrder && existingSameOrder.length) {
-      const { data: allOrders } = await supabaseAdmin
-        .from("modules")
-        .select("order_index")
-        .eq("course_id", courseId);
-      const maxOrder = (allOrders || []).reduce(
-        (m, r) =>
-          typeof r.order_index === "number" && r.order_index > m
-            ? r.order_index
-            : m,
-        0
-      );
-      order_index = maxOrder + 1;
-    }
-
     // insert module
     const moduleId =
       globalThis?.crypto?.randomUUID?.() ||
@@ -294,7 +266,6 @@ export async function POST(
       title,
       description,
       module_kind,
-      order_index,
       is_published,
     });
     if (modErr) {
@@ -308,7 +279,7 @@ export async function POST(
             debug: {
               stage: "insert-module",
               module_kind,
-              payload: { title, description, order_index, is_published },
+              payload: { title, description, is_published },
             },
           }),
         },
@@ -326,7 +297,8 @@ export async function POST(
             filename && filename.includes(".")
               ? filename.split(".").pop()!
               : ct.split("/").pop() || "bin";
-          const objectPath = `courses/${courseId}/modules/${moduleId}/${Date.now()}-${Math.random()
+          // Fixed storage structure: {courseId}/{moduleId}/{timestamp}-{random}.{ext}
+          const objectPath = `${courseId}/${moduleId}/${Date.now()}-${Math.random()
             .toString(36)
             .slice(2, 8)}.${ext}`;
           const { error: upErr } = await supabaseAdmin.storage
@@ -428,7 +400,6 @@ export async function POST(
       } catch {}
       const meta = {
         ...extractPgError(detailErr),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         constraint: (detailErr as any)?.constraint,
         message: detailErr instanceof Error ? detailErr.message : undefined,
       };
@@ -460,7 +431,6 @@ export async function POST(
           stage: "done",
           module_kind,
           hasDetail: module_kind !== "materi" ? true : !!content_type,
-          order_index,
         },
       }),
     });

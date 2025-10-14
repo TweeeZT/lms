@@ -43,10 +43,10 @@ export async function GET(
     const { data: modules, error } = await supabase
       .from("modules")
       .select(
-        "id, course_id, title, description, module_kind, order_index, is_published, created_at, updated_at"
+        "id, course_id, title, description, module_kind, is_published, created_at, updated_at"
       )
       .eq("course_id", courseId)
-      .order("order_index", { ascending: true });
+      .order("created_at", { ascending: true });
     if (error) throw error;
 
     return NextResponse.json({ success: true, items: modules || [] });
@@ -117,7 +117,6 @@ export async function POST(
     let title = "";
     let description: string | null = null;
     let module_kind: "materi" | "quiz" | "tugas" | "live" = "materi";
-    let order_index = 0;
     let is_published = true;
 
     // Materi specifics
@@ -167,7 +166,6 @@ export async function POST(
       ) {
         module_kind = kindVal;
       }
-      order_index = Number(form.get("order_index") || 0);
       is_published = String(form.get("is_published") || "true") === "true";
 
       content_type = (form.get("content_type") as string) || undefined;
@@ -201,7 +199,6 @@ export async function POST(
       const mk = body.module_kind as string | undefined;
       if (mk === "materi" || mk === "quiz" || mk === "tugas" || mk === "live")
         module_kind = mk;
-      order_index = Number(body.order_index || 0);
       is_published = Boolean(
         typeof body.is_published === "boolean" ? body.is_published : true
       );
@@ -301,7 +298,6 @@ export async function POST(
       title,
       description,
       module_kind,
-      order_index,
       is_published,
     });
     if (modErr) {
@@ -321,7 +317,8 @@ export async function POST(
             filename && filename.includes(".")
               ? filename.split(".").pop()!
               : ct.split("/").pop() || "bin";
-          const objectPath = `courses/${courseId}/modules/${moduleId}/${Date.now()}-${Math.random()
+          // Fixed storage structure: {courseId}/{moduleId}/{timestamp}-{random}.{ext}
+          const objectPath = `${courseId}/${moduleId}/${Date.now()}-${Math.random()
             .toString(36)
             .slice(2, 8)}.${ext}`;
           const { publicUrl, objectPath: p } = await uploadToStorage(

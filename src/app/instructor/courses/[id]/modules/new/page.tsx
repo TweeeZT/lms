@@ -50,7 +50,6 @@ export default function NewModulePage() {
   // Common
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [orderIndex, setOrderIndex] = useState<number | undefined>(undefined);
   const [isPublished, setIsPublished] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +110,6 @@ export default function NewModulePage() {
         fd.set("title", title);
         fd.set("description", description);
         fd.set("module_kind", safeKind);
-        fd.set("order_index", String(orderIndex ?? 0));
         fd.set("is_published", String(isPublished));
         fd.set("content_type", contentType);
         if (url) fd.set("url", url);
@@ -130,7 +128,6 @@ export default function NewModulePage() {
           title,
           description,
           module_kind: safeKind,
-          order_index: orderIndex ?? 0,
           is_published: isPublished,
         };
         if (safeKind === "materi") {
@@ -209,6 +206,63 @@ export default function NewModulePage() {
     }
   };
 
+  if (saving) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <Container size="md">
       <Paper p="lg" radius="md" withBorder>
@@ -259,15 +313,6 @@ export default function NewModulePage() {
                   <Radio value="live" label="Live" />
                 </Group>
               </Radio.Group>
-              <NumberInput
-                label="Urutan"
-                placeholder="0"
-                value={orderIndex}
-                onChange={(val) =>
-                  setOrderIndex(typeof val === "number" ? val : undefined)
-                }
-                min={0}
-              />
               <Radio.Group
                 name="publish"
                 label="Status"

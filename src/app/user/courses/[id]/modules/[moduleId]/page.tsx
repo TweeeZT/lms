@@ -37,6 +37,7 @@ import { useAuth } from "../../../../../../hooks/useAuth";
 import MaterialContent from "../../../../../../components/course-detail/MaterialContent";
 import QuizSection from "../../../../../../components/course-detail/QuizSection";
 import AssignmentSection from "../../../../../../components/course-detail/AssignmentSection";
+import PrimeLoader from "../../../../../../components/PrimeLoader";
 
 // Types
 type QuizQuestionRuntime = {
@@ -73,6 +74,7 @@ export interface ModuleDetailType {
       instructions?: string | null;
       dueDate?: string | null;
       maxScore?: string | null;
+      passingGrade?: number;
     } | null;
     liveSession?: {
       id: string;
@@ -92,6 +94,14 @@ export interface ModuleDetailType {
     } | null;
   };
   progress: { currentModuleId: string | null; completedModules: string[] };
+  assignmentSubmission?: {
+    id: string;
+    file_url: string | null;
+    link_url: string | null;
+    created_at: string;
+    score: number | null;
+    note: string | null;
+  } | null;
   attempt?: {
     passed?: boolean;
     score?: number;
@@ -141,6 +151,7 @@ export default function ModuleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<ModuleDetailType | null>(null);
+  // Removed module order locking; modules can be completed independently
 
   // Load module detail
   useEffect(() => {
@@ -167,6 +178,8 @@ export default function ModuleDetailPage() {
 
     loadDetail();
   }, [user, moduleId]);
+
+  // Locking disabled: progression no longer enforced
 
   // Handle completion callbacks
   const handleQuizSubmit = useCallback(
@@ -288,14 +301,33 @@ export default function ModuleDetailPage() {
         const json = await res.json();
         if (res.ok && json.success) {
           notifications.show({
-            title: "Tugas Terkirim!",
-            message: "Tugas Anda telah berhasil dikirim.",
+            title: json.resubmission
+              ? "Tugas Submit Ulang Berhasil!"
+              : "Tugas Terkirim!",
+            message:
+              json.message ||
+              (json.resubmission
+                ? "Tugas berhasil disubmit ulang."
+                : "Tugas Anda telah berhasil dikirim."),
             color: "green",
           });
+          // Reload page to show updated submission state
           setTimeout(() => {
-            router.push(`/user/courses/${courseId}`);
+            window.location.reload();
           }, 1500);
         } else {
+          // If conflict due to existing submission (pending/accepted), notify and reload to reflect
+          if (res.status === 409) {
+            notifications.show({
+              title: "Tidak Bisa Submit",
+              message: json.error || "Tugas sudah dikumpulkan",
+              color: "yellow",
+            });
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+            return;
+          }
           throw new Error(json.error || "Gagal submit tugas");
         }
       } catch (err) {
@@ -404,17 +436,65 @@ export default function ModuleDetailPage() {
     }
   }, [user, moduleId, courseId]);
 
-  if (!user) {
-    router.push("/login");
-    return null;
-  }
-
   if (loading) {
     return (
-      <Center h="100vh">
-        <Loader size="xl" />
-      </Center>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   if (error) {
@@ -445,19 +525,25 @@ export default function ModuleDetailPage() {
   const label =
     MODULE_LABELS[moduleData.kind as keyof typeof MODULE_LABELS] || "Modul";
 
-  const isCompleted = detail.progress.completedModules.includes(moduleId);
+  const orderedCompleted = new Set(detail.progress.completedModules);
+  const isCompleted = orderedCompleted.has(moduleId);
 
   return (
     <Container size="lg" py="xl">
       <Stack gap="xl">
         {/* Back Button */}
-        <Button
-          variant="subtle"
-          leftSection={<IconArrowLeft size={20} />}
-          onClick={() => router.push(`/user/courses/${courseId}`)}
-        >
-          Kembali ke Kursus
-        </Button>
+        <Group>
+          <Button
+            variant="subtle"
+            leftSection={<IconArrowLeft size={20} />}
+            onClick={() => router.push(`/user/courses/${courseId}`)}
+          >
+            Kembali ke Kursus
+          </Button>
+          <Button variant="light" onClick={() => router.push(`/user/courses`)}>
+            Kembali ke Kursus Saya
+          </Button>
+        </Group>
 
         {/* Module Header */}
         <Paper withBorder p="xl" radius="lg">
@@ -513,10 +599,24 @@ export default function ModuleDetailPage() {
         <Card withBorder p="xl" radius="lg">
           {/* MATERI */}
           {moduleData.kind === "materi" && moduleData.content && (
-            <MaterialContent
-              content={moduleData.content}
-              onAutoComplete={handleMaterialComplete}
-            />
+            <>
+              <MaterialContent
+                content={moduleData.content}
+                onAutoComplete={handleMaterialComplete}
+              />
+              {!isCompleted && (
+                <>
+                  <Divider my="lg" />
+                  <Button
+                    color="green"
+                    leftSection={<IconCircleCheck size={18} />}
+                    onClick={handleMaterialComplete}
+                  >
+                    Tandai Selesai
+                  </Button>
+                </>
+              )}
+            </>
           )}
 
           {/* QUIZ */}
@@ -527,6 +627,7 @@ export default function ModuleDetailPage() {
               attemptAnswers={detail.attemptAnswers}
               onSubmit={handleQuizSubmit}
               onRetry={handleQuizRetry}
+              userId={user?.id}
             />
           )}
 
@@ -535,7 +636,8 @@ export default function ModuleDetailPage() {
             <AssignmentSection
               assignment={moduleData.assignment}
               onSubmit={handleAssignmentSubmit}
-              isSubmitted={isCompleted}
+              isSubmitted={!!detail.assignmentSubmission}
+              submittedInfo={detail.assignmentSubmission}
             />
           )}
 
@@ -863,6 +965,8 @@ export default function ModuleDetailPage() {
                 })()}
             </Stack>
           )}
+
+          {/* Assignment Section duplicated block removed to avoid double inputs */}
         </Card>
       </Stack>
     </Container>

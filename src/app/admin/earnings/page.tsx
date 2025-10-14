@@ -1,10 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Container,
   Stack,
   Title,
-  Grid,
   Group,
   Text,
   Badge,
@@ -13,13 +12,13 @@ import {
   Modal,
   TextInput,
   Select,
-  Divider,
   Paper,
-  Collapse,
   ActionIcon,
   Tooltip,
   Pagination,
   Card,
+  Loader,
+  Alert,
 } from "@mantine/core";
 import {
   IconReportMoney,
@@ -27,18 +26,19 @@ import {
   IconTrendingUp,
   IconEye,
   IconPrinter,
-  IconChevronDown,
-  IconChevronUp,
   IconArrowUp,
   IconArrowDown,
   IconReceipt2,
+  IconFileTypeCsv,
+  IconX,
+  IconCalendar,
 } from "@tabler/icons-react";
+import { DatePickerInput } from "@mantine/dates";
+import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../../hooks/useAuth";
 
-// Added constants for thermal receipt (monospaced 300px style)
+// Thermal receipt constants
 const RECEIPT_INFO = {
-  // header: "AFTERSCHOLA",
-  // Could map campus/company info; using placeholders derived from landing/user profile
   addressLines: [
     "Jl. Cisaranten Wetan No.167 A, Cisaranten Wetan,",
     "Kec. Cinambo, Kota Bandung, Jawa Barat 40294",
@@ -49,51 +49,62 @@ const RECEIPT_INFO = {
     "www.afterschola.com",
     "support@afterschola.com",
   ],
-  width: 300,
 };
 
-// Types
-interface FinanceTransaction {
+type TxRow = {
   id: string;
-  date: string; // ISO string
-  userId?: string | null;
-  userName: string;
-  courseId: string;
-  courseTitle: string;
+  date: string;
+  user_id?: string | null;
+  user_name: string;
+  course_id: string;
+  course_title: string;
   amount: number;
   method: string;
-  status: string; // paid | pending | failed
+  status: string;
+};
+
+// Animated counter component
+function AnimatedCounter({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const duration = 1000;
+    const steps = 60;
+    const stepValue = value / steps;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      if (currentStep <= steps) {
+        setDisplayValue(Math.floor(stepValue * currentStep));
+      } else {
+        setDisplayValue(value);
+        clearInterval(timer);
+      }
+    }, duration / steps);
+
+    return () => clearInterval(timer);
+  }, [value]);
+
+  return <>{displayValue.toLocaleString("id-ID")}</>;
 }
 
-interface PayoutRow {
-  id: string;
-  instructorName: string;
-  amount: number;
-  status: string; // paid | pending
-  date: string;
-}
-
-interface SummaryData {
-  totalRevenue: number;
-  totalOrders: number;
-  avgOrder: number;
-  activeInstructors: number;
-}
-
-// Reusable StatCard (vertical) similar style to admin
+// Reusable StatCard
 function StatCard({
   label,
   value,
   Icon,
+  isLoading,
 }: {
   label: string;
   value: React.ReactNode;
   Icon: React.ComponentType<{ size?: number; color?: string }>;
+  isLoading?: boolean;
 }) {
-  // Use brand gradient and soft frosted icon badge
-  const bg = "var(--primary-color)"; // defined in globals.css
+  const bg = "var(--primary-color)";
   const iconBadgeBg = "var(--secondary-color)";
   const textColor = "#ffffff";
+
   return (
     <Card
       withBorder
@@ -105,11 +116,9 @@ function StatCard({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        position: "relative",
-        overflow: "hidden",
-        transition: "transform .25s, box-shadow .25s",
         background: bg,
         minHeight: 170,
+        transition: "transform .25s, box-shadow .25s",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-4px)";
@@ -137,726 +146,1054 @@ function StatCard({
       >
         <Icon size={32} color="#1e3769" />
       </div>
-      <Title order={2} style={{ lineHeight: 1 }} c={textColor}>
-        {value}
-      </Title>
+      {isLoading ? (
+        <Loader size="sm" color="white" />
+      ) : (
+        <Title order={2} style={{ lineHeight: 1 }} c={textColor}>
+          {value}
+        </Title>
+      )}
     </Card>
   );
 }
 
-// Helpers
-function rupiah(n: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
-function displayMethod(m: string) {
-  if (!m) return m;
-  const key = m.toLowerCase();
-  const map: Record<string, string> = {
-    bca: "BCA",
-    bni: "BNI",
-    bri: "BRI",
-    mandiri: "Mandiri",
-    permata: "Permata",
-    bca_va: "BCA VA",
-    bni_va: "BNI VA",
-    bri_va: "BRI VA",
-    mandiri_va: "Mandiri VA",
-    gopay: "GoPay",
-    ovo: "OVO",
-    dana: "DANA",
-    shopeepay: "ShopeePay",
-    qris: "QRIS",
-    credit_card: "Kartu Kredit",
-    debit_card: "Kartu Debit",
-  };
-  if (map[key]) return map[key];
-  // Fallback: prettify underscores
-  if (key.includes("_")) {
-    return key
-      .split("_")
-      .map((p) => (p.length ? p[0].toUpperCase() + p.slice(1) : p))
-      .join(" ");
-  }
-  return /^[a-z0-9]+$/.test(key) ? key.toUpperCase() : m;
-}
-
-function statusLabel(id: string) {
-  const s = id.toLowerCase();
-  if (s === "paid") return "Selesai";
-  if (s === "pending") return "Menunggu";
-  if (s === "failed") return "Gagal";
-  return id;
-}
-
-function printThermalReceipt(t: FinanceTransaction) {
-  const w = window.open("", "_blank", "width=800,height=1000");
-  if (!w) return;
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-  const timeStr = now.toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const line = (text = "") => `<div class="ln">${text}</div>`;
-  const hr = `<pre style="margin:0;text-align:center;">------------------------------------------</pre>`;
-  const pad = (label: string, value: string) => {
-    const max = 40;
-    const raw = `${label}${value}`;
-    return raw.length > max ? raw.slice(0, max) : raw;
-  };
-
-  const html = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <title>Struk Pembayaran</title>
-    <style>
-      @page {
-        size: A5;
-        margin: 0; /* hilangkan margin bawaan */
-      }
-      body {
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-        width: 80mm;
-        margin: 0 auto;
-        padding: 10mm;
-        color: #000;
-      }
-      .logo { text-align: center; margin-bottom: 8px; }
-      .logo img { width: 90px; height: auto; }
-      h1 { font-size: 16px; text-align: center; margin: 6px 0; }
-      .addr, .ftr { text-align: center; white-space: pre-line; margin-bottom: 6px; }
-      .sep {
-  text-align: center;
-  font-size: 12px;
-  margin: 0;
-  line-height: 1;
-}
-      .ln { display: block; }
-      .center { text-align: center; }
-      @media print {
-        header, footer { display: none !important; }
-        body { -webkit-print-color-adjust: exact; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="logo"><img src="/logo-text.png" alt="Logo" /></div>
-   
-    <div class="addr">${RECEIPT_INFO.addressLines.join("<br>")}</div>
-    ${hr}
-    ${line(pad("ID Transaksi: ", t.id))}
-    ${line(pad("Tanggal: ", dateStr))}
-    ${line(pad("Waktu: ", timeStr))}
-    ${line(pad("Nama: ", t.userName))}
-    ${line(pad("Kursus: ", t.courseTitle))}
-    ${line(pad("Metode: ", displayMethod(t.method)))}
-    ${line(pad("Status: ", statusLabel(t.status)))}
-    ${hr}
-    ${line(pad("Total Bayar: ", rupiah(t.amount)))}
-    ${hr}
-    <div class="ftr">${RECEIPT_INFO.footer.join("<br>")}</div>
-    <div class="center" style="margin-top:16px;font-size:10px;">Dicetak: ${dateStr} ${timeStr}</div>
-    <script>
-      window.onload = () => {
-        window.print();
-        window.onafterprint = () => window.close();
-      };
-    </script>
-  </body>
-  </html>
-  `;
-
-  w.document.write(html);
-  w.document.close();
-}
-
 export default function AdminEarningsPage() {
   const { user } = useAuth();
+
+  // Filter states
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
-  const [, setPayouts] = useState<PayoutRow[]>([]);
-  const [summary, setSummary] = useState<SummaryData>({
-    totalRevenue: 0,
-    totalOrders: 0,
-    avgOrder: 0,
-    activeInstructors: 0,
-  });
-  const [totalPages, setTotalPages] = useState(1);
+  // Stats
+  const [totals, setTotals] = useState<{
+    gross: number;
+    commission: number;
+    net: number;
+  }>({ gross: 0, commission: 0, net: 0 });
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [commissionPercent] = useState(10);
 
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [method, setMethod] = useState<string | null>(null);
-  const [methodOptions, setMethodOptions] = useState<string[]>([]);
-  const [filtersOpen, setFiltersOpen] = useState(true);
-  const [viewItem, setViewItem] = useState<FinanceTransaction | null>(null);
+  // Transaction list
+  const [tx, setTx] = useState<{
+    items: TxRow[];
+    total: number;
+    page: number;
+    limit: number;
+  }>({ items: [], total: 0, page: 1, limit: 10 });
 
-  type SortCol =
-    | "date"
-    | "userName"
-    | "courseTitle"
-    | "method"
-    | "status"
-    | "amount";
-  const [sortBy, setSortBy] = useState<SortCol>("date");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<
+    "date" | "course_title" | "user_name" | "status" | "amount"
+  >("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const pageSize = 5;
-  const [page, setPage] = useState(1);
+  const [opened, setOpened] = useState(false);
+  const [activeTx, setActiveTx] = useState<TxRow | null>(null);
 
-  async function fetchData() {
-    if (!user?.id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("userId", user.id); // optional context
-      params.set("page", String(page));
-      params.set("limit", String(pageSize));
-      if (q) params.set("q", q);
-      if (status) params.set("status", status);
-      if (method) params.set("method", method);
-      params.set(
-        "sortBy",
-        sortBy === "userName"
-          ? "user_name"
-          : sortBy === "courseTitle"
-          ? "course_title"
-          : sortBy
-      );
-      params.set("sortDir", sortDir);
-      const res = await fetch(`/api/admin/earnings?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        if (res.status === 403) throw new Error("Akses ditolak (bukan admin)");
-        throw new Error(json.error || "Gagal memuat data");
-      }
-      const mapped: FinanceTransaction[] = (json.items || []).map(
-        (r: {
-          id: string;
-          date: string;
-          user_id?: string | null;
-          user_name: string;
-          course_id: string;
-          course_title: string;
-          amount?: number | string;
-          method: string;
-          status: string;
-        }) => ({
-          id: r.id,
-          date: r.date,
-          userId: r.user_id,
-          userName: r.user_name,
-          courseId: r.course_id,
-          courseTitle: r.course_title,
-          amount: Number(r.amount || 0),
-          method: r.method,
-          status: r.status,
-        })
-      );
-      setTransactions(mapped);
-      setSummary(
-        json.summary || {
-          totalRevenue: 0,
-          totalOrders: 0,
-          avgOrder: 0,
-          activeInstructors: 0,
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil((tx.total || 0) / (tx.limit || 10))),
+    [tx.total, tx.limit]
+  );
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
+
+  const formatDate = (d: string | Date) => {
+    const dt = typeof d === "string" ? new Date(d) : d;
+    const day = dt.getDate().toString().padStart(2, "0");
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agt",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+    const month = monthNames[dt.getMonth()];
+    const year = dt.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  const fetchData = useCallback(
+    async (page = 1, limit = tx.limit || 10) => {
+      if (!user?.id) return;
+
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          userId: user.id,
+          page: String(page),
+          limit: String(limit),
+          sortBy,
+          sortDir,
+        });
+
+        if (search) params.set("q", search);
+        if (startDate) {
+          const dateStr =
+            typeof startDate === "string" ? startDate : startDate.toISOString();
+          params.set("startDate", dateStr);
         }
-      );
-      setPayouts(json.instructorTotals || []);
-      setMethodOptions(Array.isArray(json.methods) ? json.methods : []);
-      setTotalPages(Math.max(1, Math.ceil((json.total || 0) / pageSize)));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Gagal memuat data");
-      setTransactions([]);
-      setPayouts([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+        if (endDate) {
+          const dateStr =
+            typeof endDate === "string" ? endDate : endDate.toISOString();
+          params.set("endDate", dateStr);
+        }
+
+        const res = await fetch(`/api/admin/earnings?${params.toString()}`);
+        const json = await res.json();
+
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Gagal memuat data");
+        }
+
+        setTx({
+          items: json.items || [],
+          total: json.total || 0,
+          page,
+          limit,
+        });
+
+        setTotals({
+          gross: json.summary?.totalRevenue || 0,
+          commission:
+            (json.summary?.totalRevenue || 0) * (commissionPercent / 100),
+          net: json.summary?.totalRevenue || 0,
+        });
+
+        setTotalTransactions(json.summary?.totalOrders || 0);
+      } catch (err) {
+        console.error("Fetch error:", err);
+        setError(err instanceof Error ? err.message : "Gagal memuat data");
+        notifications.show({
+          title: "Error",
+          message: err instanceof Error ? err.message : "Gagal memuat data",
+          color: "red",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      user?.id,
+      search,
+      startDate,
+      endDate,
+      sortBy,
+      sortDir,
+      commissionPercent,
+      tx.limit,
+    ]
+  );
 
   useEffect(() => {
-    fetchData();
-  }, [user?.id, q, status, method, sortBy, sortDir, page]);
+    fetchData(1);
+  }, [user?.id, search, startDate, endDate, sortBy, sortDir]);
 
-  function changeSort(col: SortCol) {
-    setPage(1);
-    if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortBy(col);
-      setSortDir("asc");
+  const toggleSort = (key: typeof sortBy) => {
+    if (sortBy === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortDir("desc");
     }
-  }
+  };
 
-  function printTransaction(t: FinanceTransaction) {
-    const w = window.open("", "_blank", "width=600,height=720");
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${t.id}</title>
+  // Fetch ALL transactions (for export/print)
+  const fetchAllTransactions = async (): Promise<TxRow[]> => {
+    if (!user?.id) return [];
+
+    try {
+      const params = new URLSearchParams({
+        userId: user.id,
+        page: "1",
+        limit: "10000", // Fetch all
+        sortBy,
+        sortDir,
+      });
+
+      if (search) params.set("q", search);
+      if (startDate) {
+        const dateStr =
+          typeof startDate === "string" ? startDate : startDate.toISOString();
+        params.set("startDate", dateStr);
+      }
+      if (endDate) {
+        const dateStr =
+          typeof endDate === "string" ? endDate : endDate.toISOString();
+        params.set("endDate", dateStr);
+      }
+
+      const res = await fetch(`/api/admin/earnings?${params.toString()}`);
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Gagal memuat data");
+      }
+
+      return json.items || [];
+    } catch (err) {
+      console.error("Fetch all error:", err);
+      notifications.show({
+        title: "Error",
+        message: "Gagal memuat data untuk export",
+        color: "red",
+      });
+      return [];
+    }
+  };
+
+  // Export functions
+  const toCSV = (rows: TxRow[]) => {
+    const headers = [
+      "Tanggal",
+      "Siswa",
+      "Kursus",
+      "Metode",
+      "Status",
+      "Jumlah",
+    ];
+    const data = rows.map((r) => [
+      formatDate(r.date),
+      r.user_name,
+      r.course_title,
+      displayMethod(r.method),
+      statusLabel(r.status),
+      r.amount.toString(),
+    ]);
+    return [headers, ...data].map((row) => row.join(",")).join("\n");
+  };
+
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportList = async (type: "csv" | "pdf") => {
+    // Fetch all transactions based on current filters
+    const allRows = await fetchAllTransactions();
+
+    if (allRows.length === 0) {
+      notifications.show({
+        title: "Tidak Ada Data",
+        message: "Tidak ada transaksi untuk diekspor",
+        color: "yellow",
+      });
+      return;
+    }
+
+    if (type === "csv") {
+      const csv = toCSV(allRows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      downloadBlob(blob, `pendapatan-admin-${Date.now()}.csv`);
+      notifications.show({
+        title: "Berhasil!",
+        message: "Data berhasil diekspor ke CSV",
+        color: "green",
+      });
+    } else {
+      // Print thermal receipts for all rows
+      printAllThermalReceipts(allRows);
+    }
+  };
+
+  const tableHTML = (rows: TxRow[]) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Laporan Pendapatan - Admin</title>
       <style>
-        body { font-family: system-ui, Arial, sans-serif; padding:24px; }
-        h1 { font-size:18px; margin:0 0 12px; }
-        table { width:100%; border-collapse:collapse; margin-top:12px; }
-        td { padding:6px 4px; vertical-align:top; }
-        tr:nth-child(even){ background:#f5f7fa; }
-        .total { font-weight:700; }
-      </style></head><body>
-      <h1>Struk Transaksi</h1>
-      <div>ID: <strong>${t.id}</strong></div>
-      <div>Tanggal: ${new Date(t.date).toLocaleString("id-ID")}</div>
-      <table><tbody>
-        <tr><td>User</td><td>${t.userName}</td></tr>
-        <tr><td>Kursus</td><td>${t.courseTitle}</td></tr>
-        <tr><td>Metode</td><td>${displayMethod(t.method)}</td></tr>
-  <tr><td>Status</td><td>${statusLabel(t.status)}</td></tr>
-        <tr><td class="total">Jumlah</td><td class="total">${rupiah(
-          t.amount
-        )}</td></tr>
-      </tbody></table>
-      <p style="margin-top:24px;font-size:12px;color:#666">Dokumen ini dicetak otomatis dari sistem.</p>
-      <script>window.print();</script>
-      </body></html>`);
-    w.document.close();
-  }
+        @page { size: A4 landscape; margin: 15mm; }
+        body { font-family: Arial, sans-serif; font-size: 11px; }
+        h2 { text-align: center; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #1e3769; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .total { font-weight: bold; background-color: #e3f2fd; }
+      </style>
+    </head>
+    <body>
+      <h2>Laporan Pendapatan - AfterSchola (Admin)</h2>
+      <p>Tanggal Cetak: ${new Date().toLocaleDateString("id-ID")}</p>
+      ${
+        startDate || endDate
+          ? `<p>Periode: ${startDate ? formatDate(startDate) : "Awal"} - ${
+              endDate ? formatDate(endDate) : "Sekarang"
+            }</p>`
+          : ""
+      }
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Tanggal</th>
+            <th>Siswa</th>
+            <th>Kursus</th>
+            <th>Metode</th>
+            <th>Status</th>
+            <th>Jumlah</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map(
+              (r, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${formatDate(r.date)}</td>
+              <td>${r.user_name}</td>
+              <td>${r.course_title}</td>
+              <td>${displayMethod(r.method)}</td>
+              <td>${statusLabel(r.status)}</td>
+              <td>${formatCurrency(r.amount)}</td>
+            </tr>
+          `
+            )
+            .join("")}
+          <tr class="total">
+            <td colspan="6" style="text-align: right;">Total:</td>
+            <td>${formatCurrency(
+              rows.reduce((sum, r) => sum + r.amount, 0)
+            )}</td>
+          </tr>
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `;
 
-  const paged = transactions; // already paginated by server
+  const displayMethod = (method: string) => {
+    if (!method) return method;
+    const key = method.toLowerCase();
+    const map: Record<string, string> = {
+      bca: "BCA",
+      bni: "BNI",
+      bri: "BRI",
+      mandiri: "Mandiri",
+      bca_va: "BCA VA",
+      bni_va: "BNI VA",
+      bri_va: "BRI VA",
+      mandiri_va: "Mandiri VA",
+      gopay: "GoPay",
+      ovo: "OVO",
+      dana: "DANA",
+      shopeepay: "ShopeePay",
+      qris: "QRIS",
+      credit_card: "Kartu Kredit",
+      debit_card: "Kartu Debit",
+    };
+    return map[key] || method.toUpperCase();
+  };
+
+  const statusLabel = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "paid" || s === "completed") return "Selesai";
+    if (s === "pending") return "Menunggu";
+    if (s === "failed") return "Gagal";
+    return status;
+  };
+
+  const statusLabelUI = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "paid" || s === "completed")
+      return (
+        <Badge color="green" variant="light">
+          Selesai
+        </Badge>
+      );
+    if (s === "pending")
+      return (
+        <Badge color="yellow" variant="light">
+          Menunggu
+        </Badge>
+      );
+    if (s === "failed")
+      return (
+        <Badge color="red" variant="light">
+          Gagal
+        </Badge>
+      );
+    return <Badge variant="light">{status}</Badge>;
+  };
+
+  const printThermalReceipt = (t: TxRow) => {
+    const w = window.open("", "_blank", "width=800,height=1000");
+    if (!w) return;
+
+    const now = new Date();
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Struk Pembayaran</title>
+        <style>
+          @page { size: 80mm auto; margin: 0; }
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            width: 80mm;
+            margin: 0 auto;
+            padding: 5mm;
+            color: #000;
+          }
+          .logo { text-align: center; margin-bottom: 8px; }
+          h1 { font-size: 14px; text-align: center; margin: 6px 0; font-weight: bold; }
+          .addr, .ftr { text-align: center; font-size: 10px; margin: 4px 0; line-height: 1.3; }
+          .sep { text-align: center; margin: 8px 0; }
+          .row { display: flex; justify-content: space-between; margin: 3px 0; }
+          .lbl { font-weight: bold; }
+          .total { font-size: 14px; font-weight: bold; border-top: 1px dashed #000; padding-top: 6px; margin-top: 6px; }
+          @media print {
+            body { width: 80mm; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="logo">
+          <img src="/logo-text.png" style="width: 80px; height: auto;" alt="AfterSchola" />
+        </div>
+        <h1>AFTERSCHOLA</h1>
+        <div class="addr">
+          ${RECEIPT_INFO.addressLines.join("<br>")}
+        </div>
+        <div class="sep">========================================</div>
+        <div class="row">
+          <span class="lbl">No. Transaksi:</span>
+          <span>${t.id.slice(0, 12)}</span>
+        </div>
+        <div class="row">
+          <span class="lbl">Tanggal:</span>
+          <span>${formatDate(t.date)} ${new Date(t.date).toLocaleTimeString(
+      "id-ID",
+      { hour: "2-digit", minute: "2-digit" }
+    )}</span>
+        </div>
+        <div class="row">
+          <span class="lbl">Cetak:</span>
+          <span>${now.toLocaleString("id-ID", {
+            dateStyle: "short",
+            timeStyle: "short",
+          })}</span>
+        </div>
+        <div class="sep">========================================</div>
+        <div class="row">
+          <span class="lbl">Siswa:</span>
+          <span>${t.user_name}</span>
+        </div>
+        <div class="row">
+          <span class="lbl">Kursus:</span>
+          <span style="text-align: right; max-width: 60%;">${
+            t.course_title
+          }</span>
+        </div>
+        <div class="row">
+          <span class="lbl">Metode:</span>
+          <span>${displayMethod(t.method)}</span>
+        </div>
+        <div class="row">
+          <span class="lbl">Status:</span>
+          <span>${statusLabel(t.status)}</span>
+        </div>
+        <div class="sep">========================================</div>
+        <div class="row total">
+          <span>TOTAL:</span>
+          <span>${formatCurrency(t.amount)}</span>
+        </div>
+        <div class="sep">========================================</div>
+        <div class="ftr">
+          ${RECEIPT_INFO.footer.join("<br>")}
+        </div>
+        <script>window.print();</script>
+      </body>
+      </html>
+    `;
+
+    w.document.write(html);
+    w.document.close();
+  };
+
+  const printAllThermalReceipts = async (rowsToUse?: TxRow[]) => {
+    // If no rows provided, fetch all transactions
+    const rows = rowsToUse || (await fetchAllTransactions());
+
+    if (rows.length === 0) {
+      notifications.show({
+        title: "Tidak Ada Data",
+        message: "Tidak ada transaksi untuk dicetak",
+        color: "yellow",
+      });
+      return;
+    }
+
+    const w = window.open("", "_blank", "width=800,height=1000");
+    if (!w) {
+      notifications.show({
+        title: "Gagal",
+        message: "Popup diblokir oleh browser",
+        color: "red",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const day = now.getDate().toString().padStart(2, "0");
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    const dateStr = `${day} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    const timeStr = now.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const totalAmount = rows.reduce((sum, t) => sum + t.amount, 0);
+    const transactionCount = rows.length;
+
+    const transactionRows = rows
+      .map((t, idx) => {
+        const tDate = new Date(t.date);
+        const tDay = tDate.getDate().toString().padStart(2, "0");
+        const tMonth = monthNames[tDate.getMonth()].substring(0, 3);
+        return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${tDay} ${tMonth}</td>
+        <td>${t.user_name.substring(0, 15)}</td>
+        <td>${t.course_title.substring(0, 20)}</td>
+        <td style="text-align:right;">${formatCurrency(t.amount)}</td>
+      </tr>
+    `;
+      })
+      .join("");
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Laporan Transaksi Admin</title>
+      <style>
+        @page {
+          size: A4;
+          margin: 15mm;
+        }
+        body {
+          font-family: 'Courier New', monospace;
+          font-size: 11px;
+          margin: 0;
+          padding: 10mm;
+          color: #000;
+        }
+        .logo { text-align: center; margin-bottom: 8px; }
+        .logo img { width: 100px; height: auto; }
+        h1 { font-size: 18px; text-align: center; margin: 8px 0; }
+        .addr { text-align: center; margin-bottom: 12px; line-height: 1.4; }
+        .info { margin: 12px 0; }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 12px 0;
+        }
+        th, td {
+          border: 1px solid #333;
+          padding: 6px;
+          text-align: left;
+        }
+        th {
+          background: #f0f0f0;
+          font-weight: bold;
+        }
+        .summary {
+          margin-top: 12px;
+          padding: 8px;
+          background: #f9f9f9;
+          border: 1px solid #333;
+        }
+        .ftr { text-align: center; margin-top: 16px; font-size: 10px; }
+        @media print {
+          header, footer { display: none !important; }
+          body { -webkit-print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="logo"><img src="/logo-text.png" alt="Logo" /></div>
+      <h1>LAPORAN TRANSAKSI ADMIN</h1>
+      <div class="addr">
+        ${RECEIPT_INFO.addressLines.join("<br>")}
+      </div>
+      <div class="info">
+        <div><b>Tanggal Cetak:</b> ${dateStr}, ${timeStr}</div>
+        <div><b>Periode:</b> ${
+          startDate && endDate
+            ? `${formatDate(startDate)} - ${formatDate(endDate)}`
+            : "Semua Data"
+        }</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Tanggal</th>
+            <th>Siswa</th>
+            <th>Kursus</th>
+            <th style="text-align:right;">Jumlah</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${transactionRows}
+        </tbody>
+      </table>
+      <div class="summary">
+        <div><b>Total Transaksi:</b> ${transactionCount}</div>
+        <div style="font-size:14px;margin-top:6px;"><b>TOTAL PENDAPATAN:</b> ${formatCurrency(
+          totalAmount
+        )}</div>
+      </div>
+      <div class="ftr">
+        ${RECEIPT_INFO.footer.join("<br>")}
+      </div>
+      <script>window.print();</script>
+    </body>
+    </html>
+    `;
+
+    w.document.write(html);
+    w.document.close();
+  };
 
   return (
-    <Container size="xl">
-      <style>{`@media print { button, [role=button], input, select { display:none !important;} .mantine-Modal-root, header, nav {display:none !important;} body {background:#fff;} }`}</style>
+    <Container size="xl" py="xl">
       <Stack gap="lg">
-        <Title order={2}>Keuangan</Title>
-        {/* Summary */}
-        <Grid gutter="lg">
-          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-            <StatCard
-              label="Total Pendapatan"
-              value={rupiah(summary.totalRevenue)}
-              Icon={IconReportMoney}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-            <StatCard
-              label="Total Order"
-              value={summary.totalOrders}
-              Icon={IconTrendingUp}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-            <StatCard
-              label="Rerata Order"
-              value={rupiah(summary.avgOrder)}
-              Icon={IconCash}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-            <StatCard
-              label="Instruktur Aktif"
-              value={summary.activeInstructors}
-              Icon={IconCash}
-            />
-          </Grid.Col>
-        </Grid>
+        <Group justify="space-between" align="center">
+          <div>
+            <Title order={2}> Total pendapatan</Title>
+            <Text size="sm" c="dimmed">
+              Kelola semua pendapatan platform
+            </Text>
+          </div>
+        </Group>
+
+        {/* Stats Cards */}
+        <Group grow>
+          <StatCard
+            label="Total Pendapatan"
+            value={
+              loading ? (
+                <Loader size="sm" color="white" />
+              ) : (
+                formatCurrency(totals.gross)
+              )
+            }
+            Icon={IconReportMoney}
+            isLoading={loading}
+          />
+          <StatCard
+            label="Total Transaksi"
+            value={
+              loading ? (
+                <Loader size="sm" color="white" />
+              ) : (
+                <AnimatedCounter value={totalTransactions} />
+              )
+            }
+            Icon={IconCash}
+            isLoading={loading}
+          />
+          <StatCard
+            label="Rata-rata per Order"
+            value={
+              loading ? (
+                <Loader size="sm" color="white" />
+              ) : (
+                formatCurrency(
+                  totalTransactions > 0 ? totals.gross / totalTransactions : 0
+                )
+              )
+            }
+            Icon={IconTrendingUp}
+            isLoading={loading}
+          />
+        </Group>
 
         {/* Filters */}
-        <Paper p="sm" radius="md" withBorder>
-          <Group justify="space-between" mb="xs">
-            <Group gap="xs">
-              <Text fw={600}>Filter</Text>
-              <ActionIcon
-                variant="subtle"
-                onClick={() => setFiltersOpen((o) => !o)}
-                aria-label={
-                  filtersOpen ? "Sembunyikan filter" : "Tampilkan filter"
-                }
-              >
-                {filtersOpen ? (
-                  <IconChevronUp size={16} />
-                ) : (
-                  <IconChevronDown size={16} />
-                )}
-              </ActionIcon>
+        <Paper withBorder p="md">
+          <Stack gap="md">
+            <Text fw={600} size="sm">
+              Filter & Pencarian
+            </Text>
+            <Group grow>
+              <TextInput
+                placeholder="Cari siswa atau kursus..."
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+              />
+              <DatePickerInput
+                placeholder="Tanggal Mulai"
+                value={startDate}
+                onChange={(val) => setStartDate(val as Date | null)}
+                clearable
+                leftSection={<IconCalendar size={16} />}
+              />
+              <DatePickerInput
+                placeholder="Tanggal Akhir"
+                value={endDate}
+                onChange={(val) => setEndDate(val as Date | null)}
+                clearable
+                leftSection={<IconCalendar size={16} />}
+              />
             </Group>
-            <Tooltip label="Cetak semua transaksi">
-              <ActionIcon
-                variant="light"
-                color="blue"
-                onClick={() => window.print()}
-                aria-label="Print halaman"
-              >
-                <IconPrinter size={16} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-          <Collapse in={filtersOpen}>
-            <Grid gutter="md" mb="xs">
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  placeholder="Cari id/user/kursus..."
-                  value={q}
-                  onChange={(e) => setQ(e.currentTarget.value)}
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 6, md: 3 }}>
-                <Select
-                  placeholder="Status"
-                  data={[
-                    { value: "paid", label: "Selesai" },
-                    { value: "pending", label: "Menunggu" },
-                    { value: "failed", label: "Gagal" },
-                  ]}
-                  value={status}
-                  onChange={setStatus}
-                  clearable
-                />
-              </Grid.Col>
-              <Grid.Col span={{ base: 6, md: 3 }}>
-                <Select
-                  placeholder="Metode"
-                  data={methodOptions.map((m) => ({
-                    value: m,
-                    label: displayMethod(m),
-                  }))}
-                  value={method}
-                  onChange={setMethod}
-                  clearable
-                />
-              </Grid.Col>
-            </Grid>
-          </Collapse>
+            {(startDate || endDate || search) && (
+              <Group>
+                {startDate && (
+                  <Badge
+                    rightSection={
+                      <ActionIcon
+                        size="xs"
+                        color="blue"
+                        radius="xl"
+                        variant="transparent"
+                        onClick={() => setStartDate(null)}
+                      >
+                        <IconX size={10} />
+                      </ActionIcon>
+                    }
+                  >
+                    Dari: {formatDate(startDate)}
+                  </Badge>
+                )}
+                {endDate && (
+                  <Badge
+                    rightSection={
+                      <ActionIcon
+                        size="xs"
+                        color="blue"
+                        radius="xl"
+                        variant="transparent"
+                        onClick={() => setEndDate(null)}
+                      >
+                        <IconX size={10} />
+                      </ActionIcon>
+                    }
+                  >
+                    Sampai: {formatDate(endDate)}
+                  </Badge>
+                )}
+              </Group>
+            )}
+          </Stack>
         </Paper>
 
-        {/* Transactions */}
-        <Paper
-          p="md"
-          radius="md"
-          withBorder
-          style={{ position: "relative", overflow: "hidden" }}
-        >
-          <Group justify="space-between" align="center" mb="md">
-            <Title order={3}>Transaksi</Title>
-          </Group>
-          <div
-            style={{
-              borderRadius: 8,
-              border: "1px solid var(--mantine-color-gray-3)",
-              overflowX: "auto",
-            }}
+        {/* Action Buttons */}
+        <Group>
+          <Button
+            leftSection={<IconFileTypeCsv size={18} />}
+            variant="light"
+            onClick={() => exportList("csv")}
+            disabled={tx.items.length === 0}
           >
-            <Table
-              striped
-              highlightOnHover
-              withTableBorder
-              withColumnBorders
-              horizontalSpacing="md"
-              verticalSpacing={6}
-              style={{ fontSize: 13, minWidth: 920 }}
-            >
+            Export CSV
+          </Button>
+          <Button
+            leftSection={<IconReceipt2 size={18} />}
+            variant="light"
+            color="green"
+            onClick={() => exportList("pdf")}
+            disabled={tx.items.length === 0}
+          >
+            Cetak PDF
+          </Button>
+        </Group>
+
+        {/* Transactions Table */}
+        {error && (
+          <Alert color="red" title="Error">
+            {error}
+          </Alert>
+        )}
+
+        {loading ? (
+          <Group justify="center" py="xl">
+            <Loader />
+          </Group>
+        ) : tx.items.length === 0 ? (
+          <Alert color="blue" title="Tidak ada data">
+            Belum ada transaksi yang sesuai dengan filter
+          </Alert>
+        ) : (
+          <Paper withBorder>
+            <Table striped highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th
-                    onClick={() => changeSort("date")}
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
+                  <Table.Th>
+                    <Group
+                      gap={4}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => toggleSort("date")}
                     >
-                      <span style={{ lineHeight: 1 }}>Tanggal</span>
+                      <Text size="sm" fw={600}>
+                        Tanggal
+                      </Text>
                       {sortBy === "date" &&
                         (sortDir === "asc" ? (
-                          <IconArrowUp size={12} />
+                          <IconArrowUp size={14} />
                         ) : (
-                          <IconArrowDown size={12} />
+                          <IconArrowDown size={14} />
                         ))}
-                    </div>
+                    </Group>
                   </Table.Th>
-                  <Table.Th
-                    onClick={() => changeSort("userName")}
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
+                  <Table.Th>
+                    <Group
+                      gap={4}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => toggleSort("user_name")}
                     >
-                      <span style={{ lineHeight: 1 }}>User</span>
-                      {sortBy === "userName" &&
+                      <Text size="sm" fw={600}>
+                        Siswa
+                      </Text>
+                      {sortBy === "user_name" &&
                         (sortDir === "asc" ? (
-                          <IconArrowUp size={12} />
+                          <IconArrowUp size={14} />
                         ) : (
-                          <IconArrowDown size={12} />
+                          <IconArrowDown size={14} />
                         ))}
-                    </div>
+                    </Group>
                   </Table.Th>
-                  <Table.Th
-                    onClick={() => changeSort("courseTitle")}
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
+                  <Table.Th>
+                    <Group
+                      gap={4}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => toggleSort("course_title")}
                     >
-                      <span style={{ lineHeight: 1 }}>Kursus</span>
-                      {sortBy === "courseTitle" &&
+                      <Text size="sm" fw={600}>
+                        Kursus
+                      </Text>
+                      {sortBy === "course_title" &&
                         (sortDir === "asc" ? (
-                          <IconArrowUp size={12} />
+                          <IconArrowUp size={14} />
                         ) : (
-                          <IconArrowDown size={12} />
+                          <IconArrowDown size={14} />
                         ))}
-                    </div>
+                    </Group>
                   </Table.Th>
-                  <Table.Th
-                    onClick={() => changeSort("method")}
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
+                  <Table.Th>Metode</Table.Th>
+                  <Table.Th>
+                    <Group
+                      gap={4}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => toggleSort("status")}
                     >
-                      <span style={{ lineHeight: 1 }}>Metode</span>
-                      {sortBy === "method" &&
-                        (sortDir === "asc" ? (
-                          <IconArrowUp size={12} />
-                        ) : (
-                          <IconArrowDown size={12} />
-                        ))}
-                    </div>
-                  </Table.Th>
-                  <Table.Th
-                    onClick={() => changeSort("status")}
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      <span style={{ lineHeight: 1 }}>Status</span>
+                      <Text size="sm" fw={600}>
+                        Status
+                      </Text>
                       {sortBy === "status" &&
                         (sortDir === "asc" ? (
-                          <IconArrowUp size={12} />
+                          <IconArrowUp size={14} />
                         ) : (
-                          <IconArrowDown size={12} />
+                          <IconArrowDown size={14} />
                         ))}
-                    </div>
+                    </Group>
                   </Table.Th>
-                  <Table.Th
-                    onClick={() => changeSort("amount")}
-                    style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                    align="right"
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "flex-end",
-                        gap: 6,
-                        width: "100%",
-                      }}
+                  <Table.Th>
+                    <Group
+                      gap={4}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => toggleSort("amount")}
                     >
-                      <span style={{ lineHeight: 1 }}>Jumlah</span>
+                      <Text size="sm" fw={600}>
+                        Jumlah
+                      </Text>
                       {sortBy === "amount" &&
                         (sortDir === "asc" ? (
-                          <IconArrowUp size={12} />
+                          <IconArrowUp size={14} />
                         ) : (
-                          <IconArrowDown size={12} />
+                          <IconArrowDown size={14} />
                         ))}
-                    </div>
+                    </Group>
                   </Table.Th>
                   <Table.Th>Aksi</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {paged.map((t) => (
+                {tx.items.map((t) => (
                   <Table.Tr key={t.id}>
                     <Table.Td>
-                      {new Date(t.date).toLocaleString("id-ID")}
+                      <Text size="sm">{formatDate(t.date)}</Text>
                     </Table.Td>
-                    <Table.Td>{t.userName}</Table.Td>
-                    <Table.Td style={{ minWidth: 160 }}>
-                      {t.courseTitle}
-                    </Table.Td>
-                    <Table.Td>{displayMethod(t.method)}</Table.Td>
                     <Table.Td>
-                      <Badge
-                        color={
-                          t.status.toLowerCase() === "paid"
-                            ? "green"
-                            : t.status.toLowerCase() === "pending"
-                            ? "yellow"
-                            : "red"
-                        }
-                        variant="light"
-                      >
-                        {statusLabel(t.status)}
-                      </Badge>
+                      <Text size="sm" fw={500}>
+                        {t.user_name}
+                      </Text>
                     </Table.Td>
-                    <Table.Td align="right">{rupiah(t.amount)}</Table.Td>
                     <Table.Td>
-                      <Group gap={4} wrap="nowrap">
-                        <Button
-                          size="xs"
-                          variant="light"
-                          leftSection={<IconEye size={14} />}
-                          onClick={() => setViewItem(t)}
-                        >
-                          Lihat
-                        </Button>
-                        <Tooltip label="Cetak detail" withArrow>
+                      <Text size="sm" lineClamp={1}>
+                        {t.course_title}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{displayMethod(t.method)}</Text>
+                    </Table.Td>
+                    <Table.Td>{statusLabelUI(t.status)}</Table.Td>
+                    <Table.Td>
+                      <Text size="sm" fw={600}>
+                        {formatCurrency(t.amount)}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Tooltip label="Lihat Detail">
                           <ActionIcon
                             variant="light"
-                            size="sm"
-                            onClick={() => printTransaction(t)}
-                            aria-label="Print transaksi"
+                            color="blue"
+                            onClick={() => {
+                              setActiveTx(t);
+                              setOpened(true);
+                            }}
                           >
-                            <IconPrinter size={14} />
+                            <IconEye size={16} />
                           </ActionIcon>
                         </Tooltip>
-                        <Tooltip label="Struk thermal" withArrow>
+                        <Tooltip label="Print Struk">
                           <ActionIcon
                             variant="light"
-                            size="sm"
+                            color="green"
                             onClick={() => printThermalReceipt(t)}
-                            aria-label="Print struk thermal"
                           >
-                            <IconReceipt2 size={14} />
+                            <IconReceipt2 size={16} />
                           </ActionIcon>
                         </Tooltip>
                       </Group>
                     </Table.Td>
                   </Table.Tr>
                 ))}
-                {!paged.length && (
-                  <Table.Tr>
-                    <Table.Td colSpan={7}>
-                      <Text ta="center" c="dimmed" size="sm">
-                        Tidak ada data
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                )}
               </Table.Tbody>
             </Table>
-          </div>
-          {transactions.length > 0 && (
-            <Group justify="space-between" mt="sm" className="no-print">
-              <Text size="xs" c="dimmed">
-                Halaman {page} dari {totalPages}
+
+            <Group justify="space-between" p="md">
+              <Text size="sm" c="dimmed">
+                Menampilkan {tx.items.length} dari {tx.total} transaksi
               </Text>
               <Pagination
+                value={tx.page}
+                onChange={(p) => fetchData(p, tx.limit)}
                 total={totalPages}
-                value={page}
-                onChange={setPage}
-                size="sm"
-                radius="md"
               />
             </Group>
-          )}
-        </Paper>
-
-        {/* Detail modal */}
-        <Modal
-          opened={!!viewItem}
-          onClose={() => setViewItem(null)}
-          title="Detail Transaksi"
-          centered
-        >
-          {viewItem && (
-            <Stack gap="xs">
-              <Text fw={600}>{viewItem.courseTitle}</Text>
-              <Text size="sm" c="dimmed">
-                {viewItem.userName} •{" "}
-                {new Date(viewItem.date).toLocaleString("id-ID")}
-              </Text>
-              <Divider />
-              <Group justify="space-between">
-                <Text>Metode</Text>
-                <Text>{displayMethod(viewItem.method)}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text>Status</Text>
-                <Badge
-                  color={
-                    viewItem.status.toLowerCase() === "paid"
-                      ? "green"
-                      : viewItem.status.toLowerCase() === "pending"
-                      ? "yellow"
-                      : "red"
-                  }
-                >
-                  {statusLabel(viewItem.status)}
-                </Badge>
-              </Group>
-              <Group justify="space-between">
-                <Text>Jumlah</Text>
-                <Text fw={700}>{rupiah(viewItem.amount)}</Text>
-              </Group>
-              <Group justify="end" mt="xs">
-                <Button
-                  size="xs"
-                  variant="default"
-                  onClick={() => setViewItem(null)}
-                >
-                  Tutup
-                </Button>
-                <Button
-                  size="xs"
-                  leftSection={<IconPrinter size={14} />}
-                  onClick={() => printTransaction(viewItem)}
-                >
-                  Print
-                </Button>
-              </Group>
-            </Stack>
-          )}
-        </Modal>
-
-        {error && (
-          <Paper
-            p="sm"
-            radius="md"
-            withBorder
-            style={{ borderColor: "var(--mantine-color-red-5)" }}
-          >
-            <Text c="red" size="sm">
-              {error}
-            </Text>
-          </Paper>
-        )}
-        {loading && (
-          <Paper p="sm" radius="md" withBorder>
-            <Text size="sm" c="dimmed">
-              Memuat data...
-            </Text>
           </Paper>
         )}
       </Stack>
+
+      {/* Detail Modal */}
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Detail Transaksi"
+        size="md"
+      >
+        {activeTx && (
+          <Stack gap="md">
+            <Paper withBorder p="md">
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    No. Transaksi
+                  </Text>
+                  <Text size="sm" fw={500} style={{ fontFamily: "monospace" }}>
+                    {activeTx.id.slice(0, 16)}
+                  </Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Tanggal
+                  </Text>
+                  <Text size="sm" fw={500}>
+                    {formatDate(activeTx.date)}
+                  </Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Siswa
+                  </Text>
+                  <Text size="sm" fw={500}>
+                    {activeTx.user_name}
+                  </Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Kursus
+                  </Text>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    style={{ maxWidth: "60%", textAlign: "right" }}
+                  >
+                    {activeTx.course_title}
+                  </Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Metode Pembayaran
+                  </Text>
+                  <Text size="sm" fw={500}>
+                    {displayMethod(activeTx.method)}
+                  </Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Status
+                  </Text>
+                  {statusLabelUI(activeTx.status)}
+                </Group>
+                <Paper withBorder p="sm" bg="#f0f9ff">
+                  <Group justify="space-between">
+                    <Text fw={600}>Total</Text>
+                    <Text fw={700} size="lg" c="blue">
+                      {formatCurrency(activeTx.amount)}
+                    </Text>
+                  </Group>
+                </Paper>
+              </Stack>
+            </Paper>
+
+            <Group justify="flex-end">
+              <Button
+                variant="light"
+                onClick={() => printThermalReceipt(activeTx)}
+                leftSection={<IconPrinter size={18} />}
+              >
+                Print Struk
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
     </Container>
   );
 }

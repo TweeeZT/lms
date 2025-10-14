@@ -38,6 +38,7 @@ import {
   IconSum,
 } from "@tabler/icons-react";
 import { useAuth } from "../../../hooks/useAuth";
+import PrimeLoader from "../../../components/PrimeLoader";
 
 // StatCard component (kept minimal)
 function StatCard({
@@ -357,9 +358,14 @@ export default function UserDashboard() {
     }
   };
 
+  if (loading) {
+    return <PrimeLoader />;
+  }
+
   return (
     <Container size="xl">
       <Stack gap="xl">
+        \n
         <div>
           <Title order={1} mb="md">
             Dashboard Belajar
@@ -593,7 +599,7 @@ export default function UserDashboard() {
                     <div
                       key={i}
                       style={{
-                        minHeight: 30,
+                        minHeight: 20,
                         border: "1px solid var(--border-color,#e3e6ea)",
                         borderRadius: 6,
                         padding: 4,

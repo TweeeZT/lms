@@ -125,18 +125,41 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Summary calculations (server side for accuracy) - operate on filtered set but without pagination.
-    // For full summary ignoring pagination, re-run count query without range.
+    // Summary calculations - HITUNG SEMUA TRANSAKSI (tidak per page)
+    // Query semua transaksi paid/completed untuk total revenue
+    let summaryQuery = supabaseAdmin
+      .from("transactions")
+      .select("amount, status");
+
+    if (status) {
+      const s = status.toLowerCase();
+      if (s === "completed" || s === "paid") {
+        summaryQuery = summaryQuery.in("status", ["completed", "paid"]);
+      } else {
+        summaryQuery = summaryQuery.eq("status", status);
+      }
+    }
+    if (method) summaryQuery = summaryQuery.eq("method", method);
+    if (q) {
+      const safe = q.replace(/%/g, "");
+      summaryQuery = summaryQuery.or(
+        `user_name.ilike.%${safe}%,course_title.ilike.%${safe}%,id.ilike.%${safe}%`
+      );
+    }
+
+    const { data: allTransactions } = await summaryQuery;
+
     let summaryTotalRevenue = 0;
     let summaryTotalOrders = 0;
-    items.forEach((r) => {
-      // Only count revenue for completed/paid transactions
-      const s = String(r.status).toLowerCase();
-      if (s === "paid") {
+
+    (allTransactions || []).forEach((r: any) => {
+      const s = String(r.status || "").toLowerCase();
+      if (s === "paid" || s === "completed") {
         summaryTotalRevenue += Number(r.amount || 0);
         summaryTotalOrders += 1;
       }
     });
+
     const summaryAvgOrder = summaryTotalOrders
       ? Math.round(summaryTotalRevenue / summaryTotalOrders)
       : 0;

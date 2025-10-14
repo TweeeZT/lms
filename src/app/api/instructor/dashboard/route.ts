@@ -153,7 +153,23 @@ export async function GET(req: Request) {
       (s, c) => s + (c.enrolled_count || 0),
       0
     );
-    const totalEarnings = instQ.data?.total_earnings || 0;
+
+    // Calculate totalEarnings from transactions table
+    let totalEarnings = 0;
+    if (courses.length) {
+      const courseIds = courses.map((c) => c.id);
+      const { data: transactionsData } = await supabase
+        .from("transactions")
+        .select("amount, status")
+        .eq("instructors_id", instructorId)
+        .in("status", ["paid", "completed"]);
+
+      totalEarnings = (transactionsData || []).reduce(
+        (sum, t) => sum + (Number(t.amount) || 0),
+        0
+      );
+    }
+
     const avgRating = courses.length
       ? courses.reduce((s: number, c) => s + (c.rating || 0), 0) /
         courses.length

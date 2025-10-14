@@ -176,12 +176,36 @@ export default function InstructorEarningsPage() {
       maximumFractionDigits: 0,
     }).format(amount || 0);
   const formatDate = (d: string | Date) => {
-    const dt = typeof d === "string" ? new Date(d) : d;
-    return dt.toLocaleDateString("id-ID", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    if (!d) return "-";
+
+    // pastikan format tanggal bisa dibaca dengan benar
+    const date =
+      typeof d === "string"
+        ? new Date(d.replace(/-/g, "/")) // ubah tanda agar aman di semua browser
+        : new Date(d);
+
+    if (isNaN(date.getTime())) return "-";
+
+    // Ambil hari, bulan, tahun manual
+    const day = date.getDate().toString().padStart(2, "0");
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    const month = monthNames[date.getMonth()];
+    const year = date.getFullYear();
+
+    return `${day} ${month} ${year}`;
   };
 
   const fetchData = async (page = 1, limit = tx.limit || 10) => {
@@ -235,6 +259,39 @@ export default function InstructorEarningsPage() {
     }
   };
 
+  // Fetch ALL transactions (for export/print)
+  const fetchAllTransactions = async (): Promise<TxRow[]> => {
+    if (!user) return [];
+
+    try {
+      const params = new URLSearchParams();
+      params.set("instructorId", user.id);
+      params.set("page", "1");
+      params.set("limit", "10000"); // Fetch all
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
+      if (search) params.set("q", search);
+      if (startDate) params.set("startDate", startDate);
+      if (endDate) params.set("endDate", endDate);
+
+      const res = await fetch(`/api/instructor/earnings?${params}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Gagal memuat data");
+      }
+
+      return json.transactions?.items || [];
+    } catch (e: unknown) {
+      console.error("Fetch all error:", e);
+      notifications.show({
+        title: "Error",
+        message: "Gagal memuat data untuk export",
+        color: "red",
+      });
+      return [];
+    }
+  };
+
   // exports
   const toCSV = (rows: TxRow[]) => {
     const header = [
@@ -269,8 +326,11 @@ export default function InstructorEarningsPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
-  const exportList = (type: "csv" | "pdf") => {
-    if (tx.items.length === 0) {
+  const exportList = async (type: "csv" | "pdf") => {
+    // Fetch all transactions based on current filters
+    const allRows = await fetchAllTransactions();
+
+    if (allRows.length === 0) {
       notifications.show({
         title: "Tidak Ada Data",
         message: "Tidak ada transaksi untuk diekspor",
@@ -283,7 +343,7 @@ export default function InstructorEarningsPage() {
       startDate && endDate ? `${startDate}_hingga_${endDate}` : "semua_data";
 
     if (type === "csv") {
-      const csv = toCSV(tx.items);
+      const csv = toCSV(allRows);
       downloadBlob(
         new Blob([csv], { type: "text/csv;charset=utf-8;" }),
         `transaksi_${dateRange}.csv`
@@ -294,58 +354,17 @@ export default function InstructorEarningsPage() {
         color: "green",
       });
     } else {
-      const html = `<!doctype html><title>Transaksi</title><style>body{font:12px system-ui} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ddd;padding:6px} th{text-align:left}</style><h3>Transaksi (${
-        startDate && endDate ? `${startDate} - ${endDate}` : "Semua Data"
-      })</h3>${tableHTML(tx.items)}</body>`;
-      const w = window.open("", "_blank");
-      if (!w) {
-        notifications.show({
-          title: "Gagal",
-          message: "Popup diblokir oleh browser",
-          color: "red",
-        });
-        return;
-      }
-      w.document.write(html);
-      w.document.close();
-      w.focus();
-      w.print();
+      // Print thermal receipts for all rows
+      printAllThermalReceipts(allRows);
     }
   };
-  const tableHTML = (rows: TxRow[]) => {
-    const head = `<thead><tr><th>Tanggal</th><th>Kursus</th><th>Nama Siswa</th><th>Status</th><th>Jumlah</th></tr></thead>`;
-    const body = rows
-      .map(
-        (r) =>
-          `<tr><td>${formatDate(r.date)}</td><td>${r.course_title}</td><td>${
-            r.user_name
-          }</td><td>${statusLabelUI(r.status)}</td><td>${formatCurrency(
-            r.amount
-          )}</td></tr>`
-      )
-      .join("");
-    return `<table>${head}<tbody>${body}</tbody></table>`;
-  };
+
   const downloadSingleCSV = (r: TxRow) => {
     const csv = toCSV([r]);
     downloadBlob(
       new Blob([csv], { type: "text/csv;charset=utf-8;" }),
       `transaction_${r.id}.csv`
     );
-  };
-
-  const printSingle = (r: TxRow) => {
-    const html = `<!doctype html><title>Transaksi #${
-      r.id
-    }</title><style>body{font:12px system-ui} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ddd;padding:6px} th{text-align:left}</style><h3>Detail Transaksi</h3>${tableHTML(
-      [r]
-    )}`;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
   };
 
   // Thermal Receipt Print
@@ -404,11 +423,22 @@ export default function InstructorEarningsPage() {
     }
 
     const now = new Date();
-    const dateStr = now.toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+    const day = now.getDate().toString().padStart(2, "0");
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    const dateStr = `${day} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
     const timeStr = now.toLocaleTimeString("id-ID", {
       hour: "2-digit",
       minute: "2-digit",
@@ -490,8 +520,11 @@ export default function InstructorEarningsPage() {
   };
 
   // Print all transactions (thermal style)
-  const printAllThermalReceipts = () => {
-    if (tx.items.length === 0) {
+  const printAllThermalReceipts = async (rowsToUse?: TxRow[]) => {
+    // If no rows provided, fetch all transactions
+    const rows = rowsToUse || (await fetchAllTransactions());
+
+    if (rows.length === 0) {
       notifications.show({
         title: "Tidak Ada Data",
         message: "Tidak ada transaksi untuk dicetak",
@@ -511,11 +544,22 @@ export default function InstructorEarningsPage() {
     }
 
     const now = new Date();
-    const dateStr = now.toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+    const day = now.getDate().toString().padStart(2, "0");
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    const dateStr = `${day} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
     const timeStr = now.toLocaleTimeString("id-ID", {
       hour: "2-digit",
       minute: "2-digit",
@@ -523,24 +567,24 @@ export default function InstructorEarningsPage() {
 
     const hr = `<pre style="margin:0;text-align:center;">------------------------------------------</pre>`;
 
-    const totalAmount = tx.items.reduce((sum, t) => sum + t.amount, 0);
-    const transactionCount = tx.items.length;
+    const totalAmount = rows.reduce((sum, t) => sum + t.amount, 0);
+    const transactionCount = rows.length;
 
-    const transactionRows = tx.items
-      .map(
-        (t, idx) => `
+    const transactionRows = rows
+      .map((t, idx) => {
+        const tDate = new Date(t.date);
+        const tDay = tDate.getDate().toString().padStart(2, "0");
+        const tMonth = monthNames[tDate.getMonth()].substring(0, 3);
+        return `
       <tr>
         <td>${idx + 1}</td>
-        <td>${new Date(t.date).toLocaleDateString("id-ID", {
-          day: "2-digit",
-          month: "short",
-        })}</td>
+        <td>${tDay} ${tMonth}</td>
         <td>${t.user_name.substring(0, 15)}</td>
         <td>${t.course_title.substring(0, 20)}</td>
         <td style="text-align:right;">${formatCurrency(t.amount)}</td>
       </tr>
-    `
-      )
+    `;
+      })
       .join("");
 
     const html = `
@@ -662,10 +706,10 @@ export default function InstructorEarningsPage() {
                 leftSection={<IconPrinter size={16} />}
                 variant="light"
                 color="blue"
-                onClick={printAllThermalReceipts}
+                onClick={() => printAllThermalReceipts()}
                 disabled={tx.items.length === 0}
               >
-                Export PDF
+                Cetak PDF
               </Button>
               <Button
                 leftSection={<IconDownload size={16} />}

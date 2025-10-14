@@ -53,7 +53,6 @@ interface ModuleFull {
   title: string;
   description: string | null;
   module_kind: "materi" | "quiz" | "tugas" | "live";
-  order_index: number | null;
   is_published: boolean | null;
   content?: string | null;
   quiz_questions?: QuizQuestion[] | null;
@@ -157,16 +156,25 @@ export default function AdminEditModulePage({
     setLoading(true);
     setError(null);
     try {
+      console.log("🔍 Fetching module:", moduleId, "with adminId:", adminId);
       const res = await fetch(
         `/api/admin/modules/${moduleId}?userId=${adminId}`
       );
-      if (!res.ok) throw new Error("Gagal memuat modul");
+      console.log("📡 Response status:", res.status, res.statusText);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("❌ API Error:", errorText);
+        throw new Error("Gagal memuat modul: " + errorText);
+      }
+
       const json = await res.json();
+      console.log("✅ API Response:", json);
       const m: ModuleFull = json.item;
+      console.log("📦 Module data:", m);
       setModuleData(m);
       setTitle(m.title);
       setDescription(m.description || "");
-      setOrderIndex(m.order_index ?? undefined);
       setIsPublished(m.is_published !== false);
 
       // Parse based on module kind
@@ -254,7 +262,6 @@ export default function AdminEditModulePage({
       const body: Record<string, unknown> = {
         title,
         description: description || null,
-        order_index: orderIndex ?? 0,
         is_published: isPublished,
       };
 

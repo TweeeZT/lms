@@ -40,11 +40,10 @@ export async function GET(
   const { data: modules, error: mErr } = await supabaseAdmin
     .from("modules")
     .select(
-      "id,title,description,module_kind,order_index, module_live_sessions(start_at,duration_min)"
+      "id,title,description,module_kind, module_live_sessions(start_at,duration_min)"
     )
     .eq("course_id", courseId)
-    .eq("is_published", true)
-    .order("order_index", { ascending: true });
+    .eq("is_published", true);
   if (mErr) {
     return NextResponse.json(
       { success: false, error: mErr.message },

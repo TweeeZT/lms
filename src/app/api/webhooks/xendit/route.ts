@@ -307,15 +307,14 @@ export async function POST(req: NextRequest) {
         if (!progress) {
           console.log("creating user_progress");
           const id = crypto.randomUUID();
-          // Determine first published module (lowest order_index) as starting current_module_id
+          // Get first published module as starting current_module_id
           let firstModule: string | null = null;
           try {
             const { data: first } = await supabaseAdmin
               .from("modules")
-              .select("id, order_index")
+              .select("id")
               .eq("course_id", course)
               .eq("is_published", true)
-              .order("order_index", { ascending: true })
               .limit(1);
             if (first && first.length) firstModule = first[0].id;
           } catch {}

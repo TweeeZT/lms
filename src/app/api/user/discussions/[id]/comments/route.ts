@@ -29,7 +29,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       post_id: postId,
       user_id: userId,
       content,
-      likes: 0,
     });
     if (insErr) return NextResponse.json({ success: false, error: insErr.message }, { status: 400 });
 
@@ -46,7 +45,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         post_id: postId,
         user_id: userId,
         content,
-        likes: 0,
         created_at: new Date().toISOString(),
         user: author || null,
       },

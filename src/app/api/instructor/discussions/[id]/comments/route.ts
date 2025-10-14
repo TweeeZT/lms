@@ -63,7 +63,6 @@ export async function POST(
         post_id: postId,
         user_id: instructorId,
         content,
-        likes: 0,
       });
     if (insErr) {
       return NextResponse.json(
@@ -86,7 +85,6 @@ export async function POST(
         post_id: postId,
         user_id: instructorId,
         content,
-        likes: 0,
         created_at: new Date().toISOString(),
         user: author || null,
       },

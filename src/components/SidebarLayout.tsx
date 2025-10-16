@@ -36,6 +36,7 @@ import {
   IconAward,
   IconWallet,
   IconShoppingCart,
+  IconCode,
 } from "@tabler/icons-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -129,11 +130,7 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           href: "/user/discussions",
           icon: "IconMessageCircle",
         },
-        {
-          label: "Proyek Saya",
-          href: "/user/projects",
-          icon: "IconChartBar",
-        },
+
       ];
 
     default:
@@ -158,6 +155,7 @@ const iconMap: Record<
   IconAward,
   IconWallet,
   IconShoppingCart,
+  IconCode,
 };
 
 export function DashboardLayout({

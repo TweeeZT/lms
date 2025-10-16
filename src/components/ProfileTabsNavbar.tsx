@@ -9,6 +9,7 @@ import {
   IconTrophy,
   IconReceipt2,
   IconCertificate,
+  IconCode,
 } from "@tabler/icons-react";
 
 const tabs = [
@@ -16,6 +17,7 @@ const tabs = [
   { id: "achievements", label: "Pencapaian", Icon: IconTrophy },
   { id: "purchases", label: "Pembelian", Icon: IconReceipt2 },
   { id: "certificates", label: "Sertifikat", Icon: IconCertificate },
+  { id: "scratch-projects", label: "Proyek Scratch", Icon: IconCode },
 ] as const;
 
 export default function ProfileTabsNavbar() {

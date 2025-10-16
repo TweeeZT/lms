@@ -184,33 +184,19 @@ export default function SchoolDashboard() {
         Dashboard Sekolah
       </Title>
 
-      <Grid gutter="lg">
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+      <Grid gutter="lg" justify="center">
+        <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
           <StatCard
             label="Total Siswa"
             value={totalStudents}
             Icon={IconUsers}
           />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+        <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
           <StatCard
             label="Kursus Aktif"
             value={activeCourses}
             Icon={IconBook}
-          />
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <StatCard
-            label="Total Enrollment"
-            value={totalEnrollments}
-            Icon={IconCertificate}
-          />
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
-          <StatCard
-            label="Tingkat Penyelesaian"
-            value={`${completionRate.toFixed(1)}%`}
-            Icon={IconTrendingUp}
           />
         </Grid.Col>
       </Grid>
@@ -228,23 +214,14 @@ export default function SchoolDashboard() {
       <Grid gutter="lg" mt="xl">
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Card padding="lg" radius="md" withBorder>
-            <Group justify="space-between">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <Title order={3}>Transaksi Terbaru</Title>
                 <Text size="sm" c="dimmed">
                   Ringkasan transaksi terakhir untuk sekolah ini
                 </Text>
               </div>
-              <Button
-                size="xs"
-                variant="light"
-                component="a"
-                href="/school/transactions"
-                style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}
-              >
-                Lihat Selengkapnya
-              </Button>
-            </Group>
+            </div>
             <Divider my="sm" />
             <Stack gap="sm">
               {transactions === null && (
@@ -267,20 +244,28 @@ export default function SchoolDashboard() {
                 </Group>
               ))}
             </Stack>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <Button
+                size="xs"
+                variant="light"
+                component="a"
+                href="/school/transactions"
+                style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}
+              >
+                Lihat Selengkapnya
+              </Button>
+            </div>
           </Card>
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Card padding="lg" radius="md" withBorder>
-            <Group justify="space-between">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <Title order={3}>Daftar Siswa</Title>
                 <Text size="sm" c="dimmed">Beberapa siswa teratas yang terdaftar di sekolah ini</Text>
               </div>
-              <Button size="xs" variant="light" component="a" href="/school/students" style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}>
-                Kelola Siswa
-              </Button>
-            </Group>
+            </div>
             <Divider my="sm" />
             <Stack gap="sm">
               {students === null && <Text c="dimmed">Memuat siswa...</Text>}
@@ -295,6 +280,11 @@ export default function SchoolDashboard() {
                 </Group>
               ))}
             </Stack>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <Button size="xs" variant="light" component="a" href="/school/students" style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}>
+                Kelola Siswa
+              </Button>
+            </div>
           </Card>
         </Grid.Col>
       </Grid>

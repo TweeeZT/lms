@@ -1,246 +1,316 @@
 "use client";
-import { useAuth } from "@/hooks/useAuth";
-import { useState, useEffect } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import {
-  Box,
+  Container,
   Title,
-  Paper,
-  TextInput,
-  Button,
+  Text,
   Grid,
   Card,
-  Image,
-  Text,
-  Badge,
+  Stack,
   Group,
+  Badge,
+  Button,
+  TextInput,
   Select,
-  Loader,
-  Pagination,
+  SimpleGrid,
+  Image,
+  Skeleton,
 } from "@mantine/core";
 import {
   IconSearch,
+  IconFilter,
   IconBook,
-  IconShoppingCart,
   IconStar,
+  IconUsers,
+  IconClock,
+  IconShoppingCart,
 } from "@tabler/icons-react";
-import { useRouter } from "next/navigation";
+import { useAuth } from "../../../hooks/useAuth";
+import PrimeLoader from "../../../components/PrimeLoader";
 
-type CourseRow = {
-  id: string;
-  title: string;
-  description?: string;
-  thumbnail?: string;
-  category: string;
-  price: number;
-  duration_min?: number;
-  level: string;
-  total_modules?: number;
-  enrolled_count?: number;
-  rating?: number;
-  is_published?: boolean;
-  points?: number;
-  instructor_id?: string;
-};
-
-function rupiah(n: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
-export default function SchoolExplorePage() {
+export default function UserExplorePage() {
   const { user } = useAuth();
-  const router = useRouter();
-  const [courses, setCourses] = useState<CourseRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<string>("");
-  const [level, setLevel] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>("all");
+  const [levelFilter, setLevelFilter] = useState<string | null>("all");
+  const [sort] = useState<string | null>("latest");
   const [page, setPage] = useState(1);
+  const limit = 9;
   const [total, setTotal] = useState(0);
-  const limit = 12;
+  type ExploreCourse = {
+    id: string;
+    title: string;
+    description: string;
+    thumbnail?: string | null;
+    category: string;
+    price: number | null;
+    durationMin: number | null;
+    level: "beginner" | "intermediate" | "advanced";
+    totalModules: number;
+    enrolledCount: number | null;
+    rating: number | null;
+    instructor?: {
+      id: string;
+      fullName: string;
+      avatar?: string | null;
+    } | null;
+  };
+  const [items, setItems] = useState<ExploreCourse[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const fetchCourses = async () => {
+  const fetchItems = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set("q", search);
-      if (category) params.set("category", category);
-      if (level) params.set("level", level);
-      params.set("page", page.toString());
-      params.set("limit", limit.toString());
-
-      const res = await fetch(`/api/school/explore?${params}`);
+      const params = new URLSearchParams({
+        q: searchQuery.trim(),
+        category: categoryFilter || "all",
+        level: levelFilter || "all",
+        sort: sort || "latest",
+        page: String(page),
+        limit: String(limit),
+        userId: user?.id || "",
+      });
+      const res = await fetch(`/api/user/courses/explore?${params.toString()}`);
       const json = await res.json();
       if (res.ok && json.success) {
-        setCourses(json.courses);
-        setTotal(json.total);
-      } else {
-        setError(json.error || "Gagal memuat kursus");
+        setItems(json.items);
+        setTotal(json.total || 0);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, categoryFilter, levelFilter, sort, page, limit, user?.id]);
 
   useEffect(() => {
-    fetchCourses();
-  }, [search, category, level, page]);
+    fetchItems();
+  }, [fetchItems]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, category, level]);
+  }, [searchQuery, categoryFilter, levelFilter, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(total / limit));
+  // enroll handled via checkout flow now
+
+  if (loading && items.length === 0) {
+    return <PrimeLoader />;
+  }
 
   return (
-    <Box p="lg">
-      <Title order={2} mb="lg" style={{ color: "var(--primary-color)" }}>
-        Jelajahi Kursus
-      </Title>
+    <Container size="xl">
+      <Stack gap="xl">
+        <div>
+          <Title order={1} mb="md">
+            Jelajahi Kursus
+          </Title>
+          <Text size="lg" c="dimmed">
+            Temukan kursus yang sesuai dengan minat dan level Anda
+          </Text>
+        </div>
 
-      <Paper withBorder p="md" radius="md" mb="lg">
-        <Group>
-          <TextInput
-            placeholder="Cari kursus..."
-            leftSection={<IconSearch size={18} />}
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            style={{ flex: 1 }}
-          />
-          <Select
-            placeholder="Kategori"
-            data={[
-              { value: "", label: "Semua" },
-              { value: "scratch", label: "Scratch" },
-              { value: "roblox", label: "Roblox" },
-              { value: "robotics", label: "Robotics" },
-            ]}
-            value={category}
-            onChange={(val) => setCategory(val || "")}
-            style={{ width: 160 }}
-            clearable
-          />
-          <Select
-            placeholder="Level"
-            data={[
-              { value: "", label: "Semua" },
-              { value: "beginner", label: "Pemula" },
-              { value: "intermediate", label: "Menengah" },
-              { value: "advanced", label: "Lanjutan" },
-            ]}
-            value={level}
-            onChange={(val) => setLevel(val || "")}
-            style={{ width: 160 }}
-            clearable
-          />
-        </Group>
-      </Paper>
+        {/* Search and Filters */}
+        <Card padding="lg" radius="md">
+          <Grid gutter="md" align="end">
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <TextInput
+                placeholder="Cari kursus..."
+                leftSection={<IconSearch size="1rem" />}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 3 }}>
+              <Select
+                placeholder="Kategori"
+                leftSection={<IconFilter size="1rem" />}
+                data={[
+                  { value: "all", label: "Semua Kategori" },
+                  { value: "scratch", label: "Scratch" },
+                  { value: "roblox", label: "Roblox" },
+                ]}
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 3 }}>
+              <Select
+                placeholder="Level"
+                data={[
+                  { value: "all", label: "Semua Level" },
+                  { value: "beginner", label: "Pemula" },
+                  { value: "intermediate", label: "Menengah" },
+                  { value: "advanced", label: "Lanjutan" },
+                ]}
+                value={levelFilter}
+                onChange={setLevelFilter}
+              />
+            </Grid.Col>
+          </Grid>
+        </Card>
 
-      {loading && (
-        <Box style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-          <Loader size="lg" />
-        </Box>
-      )}
-
-      {error && (
-        <Paper
-          withBorder
-          p="lg"
-          radius="md"
-          style={{ background: "#fee", color: "#c00" }}
-        >
-          <Text>{error}</Text>
-        </Paper>
-      )}
-
-      {!loading && !error && (
-        <>
-          <Grid gutter="lg">
-            {courses.length === 0 && (
-              <Grid.Col span={12}>
-                <Paper withBorder p="xl" radius="md">
-                  <Text c="dimmed" ta="center">
-                    Tidak ada kursus ditemukan
-                  </Text>
-                </Paper>
-              </Grid.Col>
-            )}
-            {courses.map((course) => (
-              <Grid.Col key={course.id} span={{ base: 12, sm: 6, md: 4 }}>
-                <Card
-                  shadow="sm"
-                  padding="lg"
-                  radius="md"
-                  withBorder
-                  className="course-card"
-                  style={{ cursor: "pointer", height: "100%" }}
-                  onClick={() => router.push(`/school/explore/${course.id}`)}
-                >
-                  <Card.Section>
+        {/* Course Grid */}
+        {loading && items.length === 0 ? (
+          <Stack gap="md">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} height={260} radius="md" />
+            ))}
+          </Stack>
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+            {items.map((course) => (
+              <Card key={course.id} radius="lg" className="course-card">
+                <Card.Section>
+                  {course.thumbnail ? (
                     <Image
-                      src={course.thumbnail || "/placeholder.png"}
-                      height={160}
+                      src={course.thumbnail}
                       alt={course.title}
+                      h={200}
+                      fit="cover"
                     />
-                  </Card.Section>
-
-                  <Group justify="space-between" mt="md" mb="xs">
-                    <Text fw={600} lineClamp={1}>
-                      {course.title}
-                    </Text>
-                    <Badge color="blue">{course.level}</Badge>
-                  </Group>
-
-                  <Text size="sm" c="dimmed" lineClamp={2} mb="md">
-                    {course.description || "Tidak ada deskripsi"}
-                  </Text>
-
-                  <Group justify="space-between" mb="xs">
-                    <Group gap="xs">
-                      <IconBook size={16} />
-                      <Text size="sm" c="dimmed">
-                        {course.total_modules || 0} Modul
-                      </Text>
-                    </Group>
-                    <Group gap="xs">
-                      <IconStar size={16} style={{ color: "#ffd700" }} />
-                      <Text size="sm" c="dimmed">
-                        {course.rating?.toFixed(1) || "0.0"}
-                      </Text>
-                    </Group>
-                  </Group>
-
-                  <Group justify="space-between" align="center" mt="md">
-                    <Text
-                      fw={700}
-                      size="lg"
-                      style={{ color: "var(--primary-color)" }}
+                  ) : (
+                    <div
+                      style={{
+                        height: 200,
+                        background: "var(--gradient-accent)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "white",
+                        fontSize: "2rem",
+                        fontWeight: 700,
+                      }}
                     >
-                      {rupiah(course.price || 0)}
-                    </Text>
-                    <Badge variant="light" color="green">
-                      {course.enrolled_count || 0} siswa
+                      {course.category === "scratch" ? "🎨" : "🎮"}
+                    </div>
+                  )}
+                </Card.Section>
+
+                <Stack p="md" gap="sm">
+                  <Group justify="space-between">
+                    <Badge
+                      variant="light"
+                      color={course.category === "scratch" ? "orange" : "cyan"}
+                    >
+                      {course.category}
+                    </Badge>
+                    <Badge
+                      variant="light"
+                      color={
+                        course.level === "beginner"
+                          ? "green"
+                          : course.level === "intermediate"
+                          ? "yellow"
+                          : "red"
+                      }
+                    >
+                      {course.level === "beginner"
+                        ? "Pemula"
+                        : course.level === "intermediate"
+                        ? "Menengah"
+                        : "Lanjutan"}
                     </Badge>
                   </Group>
-                </Card>
-              </Grid.Col>
-            ))}
-          </Grid>
 
-          {totalPages > 1 && (
-            <Group justify="center" mt="xl">
-              <Pagination total={totalPages} value={page} onChange={setPage} />
-            </Group>
-          )}
-        </>
-      )}
-    </Box>
+                  <Title order={4} lineClamp={2}>
+                    {course.title}
+                  </Title>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      color: "var(--mantine-color-dimmed)",
+                      overflow: "hidden",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: course.description || "",
+                    }}
+                  />
+
+                  <Group gap="xs" mb="sm">
+                    <IconUsers size="1rem" />
+                    <Text size="sm">{course.enrolledCount || 0} siswa</Text>
+                    <IconStar size="1rem" color="gold" />
+                    <Text size="sm">
+                      {course.rating?.toFixed?.(1) ?? course.rating}
+                    </Text>
+                    <IconClock size="1rem" />
+                    <Text size="sm">
+                      {Math.round((course.durationMin || 0) / 60)}h
+                    </Text>
+                  </Group>
+
+                  <Group justify="space-between" align="center">
+                    <div>
+                      <Text size="lg" fw={700} c="green">
+                        Rp {(course.price || 0).toLocaleString()}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        oleh {course.instructor?.fullName || "-"}
+                      </Text>
+                    </div>
+                    <Group gap="xs">
+                      <Button
+                        variant="light"
+                        size="sm"
+                        p={8}
+                        component="a"
+                        href={`/school/explore/${course.id}`}
+                      >
+                        Detail
+                      </Button>
+                      <Button
+                        className="btn-primary"
+                        size="sm"
+                        leftSection={<IconShoppingCart size="1rem" />}
+                        component="a"
+                        href={`/school/checkout/${course.id}`}
+                      >
+                        Beli
+                      </Button>
+                    </Group>
+                  </Group>
+                </Stack>
+              </Card>
+            ))}
+          </SimpleGrid>
+        )}
+
+        {items.length === 0 && !loading && (
+          <Card padding="xl" radius="md">
+            <Stack align="center" gap="md">
+              <IconBook size="3rem" color="gray" />
+              <Text size="lg" c="dimmed">
+                Tidak ada kursus ditemukan
+              </Text>
+              <Text size="sm" c="dimmed" ta="center">
+                Coba ubah filter atau kata kunci pencarian Anda
+              </Text>
+            </Stack>
+          </Card>
+        )}
+
+        {total > limit && (
+          <Group justify="center" mt="lg">
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {Array.from(
+                { length: Math.ceil(total / limit) },
+                (_, i) => i + 1
+              ).map((p) => (
+                <Button
+                  key={p}
+                  variant={p === page ? "filled" : "light"}
+                  size="xs"
+                  onClick={() => setPage(p)}
+                >
+                  {p}
+                </Button>
+              ))}
+            </div>
+          </Group>
+        )}
+      </Stack>
+    </Container>
   );
 }

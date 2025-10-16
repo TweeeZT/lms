@@ -26,14 +26,14 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Validate role = user
+    // Validate role: allow regular users and school accounts to access forum
     const { data: actor, error: uErr } = await supabase
       .from("users")
       .select("id, role")
       .eq("id", userId)
       .maybeSingle();
     if (uErr) throw uErr;
-    if (!actor || actor.role !== "user") {
+    if (!actor || (actor.role !== "user" && actor.role !== "school")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 403 }
@@ -137,14 +137,14 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    // Validate role
+    // Validate role (allow both user and school)
     const { data: actor, error: uErr } = await supabase
       .from("users")
       .select("id, role")
       .eq("id", userId)
       .maybeSingle();
     if (uErr) throw uErr;
-    if (!actor || actor.role !== "user") {
+    if (!actor || (actor.role !== "user" && actor.role !== "school")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 403 }

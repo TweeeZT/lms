@@ -103,13 +103,13 @@ export async function PATCH(
     }
     // action can be like/unlike OR update
     const action = body.action as string | undefined; // like|unlike|update
-    // Validate actor exists
+    // Validate actor exists (allow user or school)
     const { data: actor } = await supabase
       .from("users")
       .select("id, role")
       .eq("id", userId)
       .maybeSingle();
-    if (!actor)
+    if (!actor || (actor.role !== "user" && actor.role !== "school"))
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 403 }

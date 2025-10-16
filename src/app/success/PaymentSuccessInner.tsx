@@ -62,23 +62,56 @@ export default function PaymentSuccessInner() {
           userId = parsed.id;
         } catch {}
       }
-      const url = `/api/user/checkout/confirm?invoiceId=${encodeURIComponent(
-        invoiceId
-      )}${
-        courseId ? `&courseId=${encodeURIComponent(courseId)}` : ""
-      }$${""}`.replace(/\$\$/g, "");
-      const withUser = userId
-        ? `${url}&userId=${encodeURIComponent(userId)}`
-        : url;
-      const res = await fetch(withUser, { cache: "no-store" });
+
+      // Check if school user
+      const schoolUserId = localStorage.getItem("pending_schoolUserId");
+      const includeSchool =
+        localStorage.getItem("pending_includeSchool") === "1";
+      const isSchool = schoolUserId || role === "school";
+
+      // Call appropriate confirm API
+      const confirmUrl = isSchool
+        ? `/api/school/checkout/confirm`
+        : `/api/user/checkout/confirm`;
+
+      const params = new URLSearchParams();
+      if (invoiceId) params.set("invoiceId", invoiceId);
+      if (courseId) params.set("courseId", courseId);
+      if (isSchool && schoolUserId) {
+        params.set("schoolUserId", schoolUserId);
+      } else if (userId) {
+        params.set("userId", userId);
+      }
+
+      const res = await fetch(`${confirmUrl}?${params.toString()}`, {
+        method: isSchool ? "POST" : "GET",
+        headers: isSchool ? { "Content-Type": "application/json" } : {},
+        body: isSchool
+          ? JSON.stringify({
+              schoolUserId: schoolUserId || userId,
+              courseId,
+              isFree: false,
+              includeSchool,
+              invoiceId,
+            })
+          : undefined,
+        cache: "no-store",
+      });
+
       const json = await res.json();
       if (json.success) {
-        setStatus(json.status);
-        if (json.status === "completed" || json.status === "cancelled") {
+        setStatus(json.status || "completed");
+        if (
+          json.status === "completed" ||
+          json.status === "cancelled" ||
+          json.success
+        ) {
           // cleanup
           try {
             localStorage.removeItem("pending_invoiceId");
             localStorage.removeItem("pending_courseId");
+            localStorage.removeItem("pending_schoolUserId");
+            localStorage.removeItem("pending_includeSchool");
           } catch {}
         }
       } else {
@@ -89,7 +122,7 @@ export default function PaymentSuccessInner() {
     } finally {
       setAttempts((a) => a + 1);
     }
-  }, [invoiceId, courseId]);
+  }, [invoiceId, courseId, role]);
 
   // Poll every 4s up to 20 attempts (~80s)
   useEffect(() => {
@@ -111,6 +144,8 @@ export default function PaymentSuccessInner() {
       ? "/admin/dashboard"
       : role === "instructor"
       ? "/instructor/dashboard"
+      : role === "school"
+      ? "/school/courses"
       : role === "user"
       ? "/user/courses"
       : "/";

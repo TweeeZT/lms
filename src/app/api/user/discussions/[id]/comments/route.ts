@@ -8,29 +8,59 @@ const supabase = createClient(url, serviceRole);
 
 // POST /api/user/discussions/[id]/comments
 // Body: { userId: string; content: string }
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const body = (await req.json()) as { userId?: string; content?: string };
     const userId = (body.userId || "").trim();
     const content = (body.content || "").trim();
     if (!userId || !content) {
-      return NextResponse.json({ success: false, error: "userId dan content wajib" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: "userId dan content wajib" },
+        { status: 400 }
+      );
     }
-    const { data: user } = await supabase.from("users").select("id").eq("id", userId).maybeSingle();
-    if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 403 });
+    const { data: user } = await supabase
+      .from("users")
+      .select("id, role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!user || (user.role !== "user" && user.role !== "school"))
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 403 }
+      );
 
     const postId = params.id;
-    const { data: post } = await supabase.from("discussion_posts").select("id").eq("id", postId).maybeSingle();
-    if (!post) return NextResponse.json({ success: false, error: "Post tidak ditemukan" }, { status: 404 });
+    const { data: post } = await supabase
+      .from("discussion_posts")
+      .select("id")
+      .eq("id", postId)
+      .maybeSingle();
+    if (!post)
+      return NextResponse.json(
+        { success: false, error: "Post tidak ditemukan" },
+        { status: 404 }
+      );
 
-    const commentId = globalThis.crypto?.randomUUID?.() || `cmt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const { error: insErr } = await supabase.from("discussion_comments").insert({
-      id: commentId,
-      post_id: postId,
-      user_id: userId,
-      content,
-    });
-    if (insErr) return NextResponse.json({ success: false, error: insErr.message }, { status: 400 });
+    const commentId =
+      globalThis.crypto?.randomUUID?.() ||
+      `cmt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const { error: insErr } = await supabase
+      .from("discussion_comments")
+      .insert({
+        id: commentId,
+        post_id: postId,
+        user_id: userId,
+        content,
+      });
+    if (insErr)
+      return NextResponse.json(
+        { success: false, error: insErr.message },
+        { status: 400 }
+      );
 
     const { data: author } = await supabase
       .from("users")
@@ -50,7 +80,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Gagal menambah komentar";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const message =
+      err instanceof Error ? err.message : "Gagal menambah komentar";
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
   }
 }

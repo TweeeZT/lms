@@ -57,6 +57,14 @@ export async function GET(req: Request) {
           ) / progressData.length
         : 0;
 
+    // Recent transactions for this school (optional for UI)
+    const { data: recentTx } = await supabase
+      .from("transactions")
+      .select("id, date, course_title, amount, status")
+      .eq("user_id", schoolUserId)
+      .order("date", { ascending: false })
+      .limit(5);
+
     return NextResponse.json({
       success: true,
       stats: {
@@ -65,6 +73,7 @@ export async function GET(req: Request) {
         totalEnrollments,
         completionRate,
       },
+      transactions: recentTx || [],
     });
   } catch (err: unknown) {
     const message =

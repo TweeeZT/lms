@@ -150,6 +150,11 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           href: "/school/courses",
           icon: "IconBook",
         },
+        {
+          label: "Diskusi & Forum",
+          href: "/school/discussions",
+          icon: "IconMessageCircle",
+        },
       ];
 
     default:

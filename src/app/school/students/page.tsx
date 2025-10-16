@@ -30,6 +30,7 @@ type StudentRow = {
   invited_at: string;
   created_at: string;
   updated_at: string;
+  avatar?: string | null;
 };
 
 export default function SchoolStudentsPage() {
@@ -301,8 +302,13 @@ export default function SchoolStudentsPage() {
                 {students.map((s) => (
                   <Table.Tr key={s.id}>
                     <Table.Td>
-                      <Group gap="xs">
-                        <IconUser size={18} />
+                      <Group gap="xs" align="center">
+                        {/* show avatar when available, otherwise use IconUser initials */}
+                        {s.avatar ? (
+                          <img src={s.avatar} alt={s.name} style={{ width: 28, height: 28, borderRadius: 999 }} />
+                        ) : (
+                          <IconUser size={18} />
+                        )}
                         <Text>{s.name}</Text>
                       </Group>
                     </Table.Td>

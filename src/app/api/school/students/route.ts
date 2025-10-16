@@ -41,9 +41,45 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
+    const studentsData = data || [];
+
+    // Enrich student rows with avatar from users table when possible
+    if (studentsData.length > 0) {
+      const userIds = studentsData
+        .map((s: any) => s.user_id)
+        .filter((id: any) => !!id);
+
+      if (userIds.length > 0) {
+        const { data: users, error: usersErr } = await supabase
+          .from("users")
+          .select("id, avatar")
+          .in("id", userIds);
+
+        if (usersErr) throw usersErr;
+
+        const avatarMap: Record<string, string | null> = {};
+        (users || []).forEach((u: any) => {
+          avatarMap[u.id] = u.avatar ?? null;
+        });
+
+        const enriched = studentsData.map((s: any) => ({
+          ...s,
+          avatar: avatarMap[s.user_id] ?? null,
+        }));
+
+        return NextResponse.json({
+          success: true,
+          students: enriched,
+          total: count || 0,
+          page,
+          limit,
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      students: data || [],
+      students: studentsData,
       total: count || 0,
       page,
       limit,

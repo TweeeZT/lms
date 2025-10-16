@@ -15,6 +15,12 @@ import {
   Badge,
   Modal,
   Textarea,
+  ActionIcon,
+  Image,
+  Loader,
+  ScrollArea,
+  SimpleGrid,
+  Tooltip,
 } from "@mantine/core";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
@@ -34,12 +40,14 @@ import {
   IconTrophy,
   IconLock,
   IconPrinter,
+  IconExternalLink,
+  IconInfoCircle,
+  IconRefresh,
 } from "@tabler/icons-react";
 import NextImage from "next/image";
 import Cropper from "react-easy-crop";
 import CertificateThumbnail from "../../../components/CertificateThumbnail";
 import { notifications } from "@mantine/notifications";
-import PrimeLoader from "../../../components/PrimeLoader";
 
 export default function UserProfilePage() {
   const { user, updateUser } = useAuth();
@@ -50,6 +58,7 @@ export default function UserProfilePage() {
       | "achievements"
       | "purchases"
       | "certificates"
+      | "scratch-projects"
       | null;
     return t ?? "profile";
   }, [params]);
@@ -100,6 +109,11 @@ export default function UserProfilePage() {
   const [certificates, setCertificates] = useState<
     { id: string; courseTitle: string; date: string; url: string | null }[]
   >([]);
+
+  // Scratch projects state
+  const [scratchProjects, setScratchProjects] = useState<any[]>([]);
+  const [scratchProjectsLoading, setScratchProjectsLoading] = useState(false);
+
 
   // keep initial snapshot for reset
   const initialRef = useRef<{
@@ -192,8 +206,6 @@ export default function UserProfilePage() {
   }
 
   // Thermal Receipt Print for purchases
-  // Loader rendering is handled within the page sections to avoid conditional hooks
-
   const RECEIPT_INFO = {
     addressLines: [
       "AfterSchola Learning Platform",
@@ -441,6 +453,26 @@ export default function UserProfilePage() {
         } else {
           setCertificates([]);
         }
+
+        // Scratch projects - hanya untuk user yang sedang login
+        if (user.username) {
+          setScratchProjectsLoading(true);
+          try {
+            const sp = await fetch(
+              `/api/scratch/projects?username=${encodeURIComponent(user.username)}&userId=${user.id}`
+            );
+            const spj = await sp.json();
+            if (sp.ok && spj.success) {
+              setScratchProjects(spj.projects || []);
+            } else {
+              setScratchProjects([]);
+            }
+          } catch {
+            setScratchProjects([]);
+          } finally {
+            setScratchProjectsLoading(false);
+          }
+        }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Gagal memuat profil");
       } finally {
@@ -448,13 +480,9 @@ export default function UserProfilePage() {
       }
     };
     load();
-  }, [user?.id, txPage]);
+  }, [user?.id, user?.username, txPage]);
 
   if (!user) return null;
-
-  if (loading) {
-    return <PrimeLoader />;
-  }
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -616,6 +644,7 @@ export default function UserProfilePage() {
         </Group>
       </Card>
 
+
       {/* Content */}
       <Card
         radius="xl"
@@ -703,6 +732,7 @@ export default function UserProfilePage() {
                 Simpan Perubahan
               </Button>
             </Group>
+
           </Stack>
         )}
 
@@ -972,6 +1002,145 @@ export default function UserProfilePage() {
                   Belum ada sertifikat yang diperoleh
                 </Text>
               </Card>
+            )}
+          </Stack>
+        )}
+
+        {activeTab === "scratch-projects" && (
+          <Stack gap="lg">
+            <Group justify="space-between" align="center">
+              <div>
+                <Title order={3} c="var(--primary-color)">
+                  Proyek Scratch Saya
+                </Title>
+                <Text c="dimmed">
+                  Proyek Scratch yang telah Anda buat dan publikasikan
+                </Text>
+              </div>
+              <Group>
+                <Tooltip label="Refresh">
+                  <ActionIcon
+                    variant="light"
+                    onClick={async () => {
+                      if (!user?.username) return;
+                      setScratchProjectsLoading(true);
+                      try {
+                        const sp = await fetch(
+                          `/api/scratch/projects?username=${encodeURIComponent(user.username)}&userId=${user.id}`
+                        );
+                        const spj = await sp.json();
+                        if (sp.ok && spj.success) {
+                          setScratchProjects(spj.projects || []);
+                        }
+                      } catch {
+                        // ignore error
+                      } finally {
+                        setScratchProjectsLoading(false);
+                      }
+                    }}
+                    aria-label="refresh"
+                  >
+                    <IconRefresh size={18} />
+                  </ActionIcon>
+                </Tooltip>
+                <Button
+                  leftSection={<IconExternalLink size={16} />}
+                  onClick={() => window.open("https://scratch.mit.edu/", "_blank")}
+                >
+                  Buka Scratch
+                </Button>
+              </Group>
+            </Group>
+
+            {/* Info Box */}
+            <Card withBorder radius="md" p="sm" bg="blue.0">
+              <Group align="flex-start" gap="sm">
+                <IconInfoCircle size={20} color="var(--mantine-color-blue-filled)" />
+                <Text size="sm" c="blue.8">
+                  Pastikan proyek Scratch Anda sudah diset <b>Publik</b> agar dapat
+                  tampil di daftar proyek. Proyek yang masih <i>Private</i> tidak akan
+                  muncul di sini.
+                </Text>
+              </Group>
+            </Card>
+
+            {/* Content */}
+            {scratchProjectsLoading ? (
+              <Group justify="center" mt="xl">
+                <Loader />
+              </Group>
+            ) : !user?.username ? (
+              <Card withBorder p="md">
+                <Text>
+                  Username akun Anda akan digunakan sebagai username Scratch. Pastikan
+                  username Anda sama dengan akun Scratch.
+                </Text>
+              </Card>
+            ) : (
+              <ScrollArea h="calc(100vh - 400px)">
+                <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
+                  {scratchProjects.length > 0 ? (
+                    scratchProjects.map((p: any) => {
+                      const desc =
+                        p.description?.trim() ||
+                        p.instructions?.trim() ||
+                        p.details?.trim() ||
+                        "";
+
+                      return (
+                        <Card key={p.id} withBorder shadow="sm" radius="md" p="md">
+                          <Stack gap={8}>
+                            <Image
+                              src={
+                                p.image ||
+                                p.image_url ||
+                                `https://uploads.scratch.mit.edu/projects/${p.id}/thumbnail.png`
+                              }
+                              alt={p.title || `Project ${p.id}`}
+                              height={160}
+                              onError={() => {}}
+                            />
+
+                            <Group justify="space-between" align="flex-start">
+                              <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                                <Text fw={600} lineClamp={2}>
+                                  {p.title || `Project ${p.id}`}
+                                </Text>
+
+                                <Text size="sm" c="dimmed" lineClamp={3}>
+                                  {desc || "Tidak ada deskripsi."}
+                                </Text>
+                              </Stack>
+
+                              <ActionIcon
+                                variant="subtle"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(
+                                    `https://scratch.mit.edu/projects/${p.id}`,
+                                    "_blank"
+                                  );
+                                }}
+                                aria-label="open-external"
+                              >
+                                <IconExternalLink size={16} />
+                              </ActionIcon>
+                            </Group>
+                          </Stack>
+                        </Card>
+                      );
+                    })
+                  ) : (
+                    <Card withBorder shadow="sm" p="xl" radius="md">
+                      <Stack align="center" gap="sm">
+                        <Text size="sm" c="dimmed">
+                          Belum ada proyek publik di akun Scratch ini.
+                        </Text>
+                      </Stack>
+                    </Card>
+                  )}
+                </SimpleGrid>
+              </ScrollArea>
             )}
           </Stack>
         )}
@@ -1604,7 +1773,7 @@ function TierCarouselCard({
             }}
             className="progress-grid"
           >
-            {/* XP Progress
+            {/* XP Progress */}
             <div
               style={{
                 padding: 16,
@@ -1642,7 +1811,8 @@ function TierCarouselCard({
                   }}
                 />
               </div>
-            </div> */}
+            </div>
+
             {/* Points Progress */}
             <div
               style={{
@@ -1682,6 +1852,7 @@ function TierCarouselCard({
                 />
               </div>
             </div>
+
             {/* Courses Progress */}
             <div
               style={{
@@ -1747,7 +1918,7 @@ function TierCarouselCard({
           />
         ))}
       </Group>
-
+        
       {/* Navigation Arrows */}
       {canGoLeft && (
         <button

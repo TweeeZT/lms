@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             let role: User["role"] | null = profile.role ?? null;
             if (!role) {
               const pid = profile.id as string;
-              const [a, i, s] = await Promise.all([
+              const [a, i, sc, s] = await Promise.all([
                 supabase
                   .from("admins")
                   .select("user_id")
@@ -102,6 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   .eq("user_id", pid)
                   .maybeSingle(),
                 supabase
+                  .from("schools")
+                  .select("user_id")
+                  .eq("user_id", pid)
+                  .maybeSingle(),
+                supabase
                   .from("students")
                   .select("user_id")
                   .eq("user_id", pid)
@@ -109,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ]);
               if (!a.error && a.data) role = "admin";
               else if (!i.error && i.data) role = "instructor";
+              else if (!sc.error && sc.data) role = "school";
               else if (!s.error && s.data) role = "user";
               else role = "user";
             }

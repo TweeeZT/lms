@@ -130,7 +130,26 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           href: "/user/discussions",
           icon: "IconMessageCircle",
         },
+      ];
 
+    case "school":
+      return [
+        ...baseItems,
+        {
+          label: "Siswa",
+          href: "/school/students",
+          icon: "IconUsers",
+        },
+        {
+          label: "Jelajah Kursus",
+          href: "/school/explore",
+          icon: "IconBookmark",
+        },
+        {
+          label: "Kursus Saya",
+          href: "/school/courses",
+          icon: "IconBook",
+        },
       ];
 
     default:
@@ -194,6 +213,8 @@ export function DashboardLayout({
         return "Instruktur";
       case "user":
         return "Siswa";
+      case "school":
+        return "Sekolah";
       default:
         return "User";
     }

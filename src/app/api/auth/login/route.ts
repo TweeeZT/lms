@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       avatar?: string | null;
       phone?: string | null;
       bio?: string | null;
-      role?: "admin" | "instructor" | "user" | null;
+      role?: "admin" | "instructor" | "user" | "school" | null;
       created_at: string;
       updated_at: string;
     } | null;
@@ -129,6 +129,20 @@ export async function POST(req: Request) {
             .eq("id", profile.id)
             .maybeSingle();
 
+      // Schools table (try user_id then id)
+      const schoolByUserId = await supabaseAdmin
+        .from("schools")
+        .select("user_id")
+        .eq("user_id", profile.id)
+        .maybeSingle();
+      const schoolById = schoolByUserId.data
+        ? { data: null, error: null }
+        : await supabaseAdmin
+            .from("schools")
+            .select("id")
+            .eq("id", profile.id)
+            .maybeSingle();
+
       if (
         (!adminById.error && adminById.data) ||
         (!adminByUserId.error && adminByUserId.data)
@@ -139,6 +153,11 @@ export async function POST(req: Request) {
         (!instrById.error && instrById.data)
       ) {
         role = "instructor";
+      } else if (
+        (!schoolByUserId.error && schoolByUserId.data) ||
+        (!schoolById.error && schoolById.data)
+      ) {
+        role = "school";
       } else if (
         (!studByUserId.error && studByUserId.data) ||
         (!studById.error && studById.data)

@@ -113,6 +113,8 @@ export function LoginForm() {
           router.push("/admin/dashboard");
         } else if (userRole === "instructor") {
           router.push("/instructor/dashboard");
+        } else if (userRole === "school") {
+          router.push("/school/dashboard");
         } else if (userRole === "user") {
           router.push("/user/dashboard");
         } else {
@@ -132,6 +134,7 @@ export function LoginForm() {
     if (role === "admin") return "/admin/dashboard";
     if (role === "instructor") return "/instructor/dashboard";
     if (role === "user") return "/user/dashboard";
+    if (role === "school") return "/school/dashboard";
     return "/";
   };
 

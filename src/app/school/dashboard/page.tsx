@@ -1,7 +1,19 @@
 "use client";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from "react";
-import { Box, Title, Paper, Grid, Text, Loader } from "@mantine/core";
+import {
+  Box,
+  Title,
+  Paper,
+  Grid,
+  Text,
+  Loader,
+  Card,
+  Button,
+  Divider,
+  Group,
+  Stack,
+} from "@mantine/core";
 import {
   IconUsers,
   IconBook,
@@ -78,6 +90,14 @@ export default function SchoolDashboard() {
     totalEnrollments: number;
     completionRate: number;
   } | null>(null);
+  const [transactions, setTransactions] = useState<
+    | Array<{ id: string; date: string; course_title: string; amount: number; status: string }>
+    | null
+  >(null);
+  const [students, setStudents] = useState<
+    | Array<{ id: string; name: string; email: string; status?: string }>
+    | null
+  >(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -90,6 +110,8 @@ export default function SchoolDashboard() {
         const json = await res.json();
         if (res.ok && json.success) {
           setStats(json.stats);
+          // set transactions if provided by the API
+          if (Array.isArray(json.transactions)) setTransactions(json.transactions);
         } else {
           setError(json.error || "Gagal memuat data");
         }
@@ -100,6 +122,24 @@ export default function SchoolDashboard() {
       }
     };
     fetchStats();
+
+    // fetch students separately
+    const fetchStudents = async () => {
+      if (!user?.id) return;
+      try {
+        const res = await fetch(`/api/school/students?schoolUserId=${user.id}&limit=10`);
+        const json = await res.json();
+        if (res.ok && json.success) {
+          setStudents(json.students || []);
+        } else {
+          // keep students as null to indicate not loaded or error
+          setStudents([]);
+        }
+      } catch (e) {
+        setStudents([]);
+      }
+    };
+    fetchStudents();
   }, [user?.id]);
 
   if (loading) {
@@ -184,6 +224,80 @@ export default function SchoolDashboard() {
           navigasi di sebelah kiri untuk mulai.
         </Text>
       </Paper>
+
+      <Grid gutter="lg" mt="xl">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card padding="lg" radius="md" withBorder>
+            <Group justify="space-between">
+              <div>
+                <Title order={3}>Transaksi Terbaru</Title>
+                <Text size="sm" c="dimmed">
+                  Ringkasan transaksi terakhir untuk sekolah ini
+                </Text>
+              </div>
+              <Button
+                size="xs"
+                variant="light"
+                component="a"
+                href="/school/transactions"
+                style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}
+              >
+                Lihat Selengkapnya
+              </Button>
+            </Group>
+            <Divider my="sm" />
+            <Stack gap="sm">
+              {transactions === null && (
+                <Text c="dimmed">Memuat transaksi...</Text>
+              )}
+              {transactions && transactions.length === 0 && (
+                <Text c="dimmed">Belum ada transaksi.</Text>
+              )}
+              {transactions && transactions.map((t) => (
+                <Group key={t.id} style={{ justifyContent: "space-between" }}>
+                  <Group>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <Text size="sm" fw={700}>{t.course_title}</Text>
+                      <Text size="xs" c="dimmed">{new Date(t.date).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</Text>
+                    </div>
+                  </Group>
+                  <Text size="sm" fw={700} c={t.status === "completed" || t.status === "paid" ? "green" : undefined}>
+                    {rupiah(t.amount)}
+                  </Text>
+                </Group>
+              ))}
+            </Stack>
+          </Card>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card padding="lg" radius="md" withBorder>
+            <Group justify="space-between">
+              <div>
+                <Title order={3}>Daftar Siswa</Title>
+                <Text size="sm" c="dimmed">Beberapa siswa teratas yang terdaftar di sekolah ini</Text>
+              </div>
+              <Button size="xs" variant="light" component="a" href="/school/students" style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}>
+                Kelola Siswa
+              </Button>
+            </Group>
+            <Divider my="sm" />
+            <Stack gap="sm">
+              {students === null && <Text c="dimmed">Memuat siswa...</Text>}
+              {students && students.length === 0 && <Text c="dimmed">Belum ada siswa terdaftar.</Text>}
+              {students && students.map((s) => (
+                <Group key={s.id} style={{ justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <Text size="sm" fw={700}>{s.name}</Text>
+                    <Text size="xs" c="dimmed">{s.email}</Text>
+                  </div>
+                  <Text size="xs" c="dimmed">{s.status || 'accepted'}</Text>
+                </Group>
+              ))}
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
     </Box>
   );
 }

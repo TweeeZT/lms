@@ -475,6 +475,7 @@ export default function AdminUsersPage() {
               data={[
                 { value: "admin", label: "Admin" },
                 { value: "instructor", label: "Instruktur" },
+                { value: "sekolah", label: "Sekolah" },
                 { value: "user", label: "User" },
               ]}
               value={roleFilter}
@@ -573,6 +574,8 @@ export default function AdminUsersPage() {
                             ? "violet"
                             : u.role === "instructor"
                             ? "blue"
+                            : u.role === "sekolah"
+                            ? "teal"
                             : "gray"
                         }
                       >
@@ -847,6 +850,7 @@ export default function AdminUsersPage() {
                   data={[
                     { value: "admin", label: "Admin" },
                     { value: "instructor", label: "Instruktur" },
+                    { value: "sekolah", label: "Sekolah" },
                     { value: "user", label: "User" },
                   ]}
                   value={formRole}
@@ -1029,6 +1033,7 @@ export default function AdminUsersPage() {
                   data={[
                     { value: "admin", label: "Admin" },
                     { value: "instructor", label: "Instruktur" },
+                    { value: "sekolah", label: "Sekolah" },
                     { value: "user", label: "User" },
                   ]}
                   value={formRole}

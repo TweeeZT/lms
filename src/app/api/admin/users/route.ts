@@ -97,6 +97,28 @@ async function ensureRoleRows(
         .select("id")
         .maybeSingle();
     }
+  } else if (role === "sekolah") {
+    // ensure a schools row exists for this user
+    try {
+      const { data } = await supabaseAdmin
+        .from("schools")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!data) {
+          try {
+            await supabaseAdmin
+              .from("schools")
+              .insert({ user_id: userId, school_name: null })
+              .select("user_id")
+              .maybeSingle();
+          } catch (e) {
+            console.error("[ensureRoleRows] failed to insert schools row:", e);
+          }
+      }
+    } catch (e) {
+      console.error("[ensureRoleRows] error checking schools row:", e);
+    }
   }
 }
 
@@ -193,29 +215,60 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
-    const items = (data || []).map((r) => ({
-      id: r.id,
-      name: r.full_name ?? null,
-      username: r.username ?? null,
-      email: r.email ?? null,
-      role: r.role ?? null,
-      bio: r.bio ?? null,
-      avatar_url: r.avatar ?? null,
-      phone: r.phone ?? null,
-      created_at: r.created_at ?? null,
-      updated_at: r.updated_at ?? null,
-    }));
+    // Map users to items and then check whether each user has a schools row.
+    // If a schools row exists, report role = 'sekolah' to the admin UI.
+    const rows = data || [];
+    const items: Array<any> = [];
+    for (const r of rows) {
+      let reportedRole = r.role ?? null;
+      try {
+        const { data: schoolRow } = await supabaseAdmin
+          .from("schools")
+          .select("user_id")
+          .eq("user_id", r.id)
+          .maybeSingle();
+        if (schoolRow) reportedRole = "sekolah";
+      } catch (e) {
+        // ignore and fall back to DB role
+      }
+      items.push({
+        id: r.id,
+        name: r.full_name ?? null,
+        username: r.username ?? null,
+        email: r.email ?? null,
+        role: reportedRole,
+        bio: r.bio ?? null,
+        avatar_url: r.avatar ?? null,
+        phone: r.phone ?? null,
+        created_at: r.created_at ?? null,
+        updated_at: r.updated_at ?? null,
+      });
+    }
+
+    // If caller specifically requested role=sekolah, filter to only those items
+    // which actually have a schools row.
+    let filteredItems = items;
+    if (role === "sekolah") {
+      filteredItems = items.filter((it) => it.role === "sekolah");
+    }
 
     return NextResponse.json({
       success: true,
-      items,
+      items: filteredItems,
       total: count || 0,
       page,
       limit,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    // Log and return error details for local debugging
+    const isError = err instanceof Error;
+    const msg = isError ? err.message : String(err);
+    const stack = isError ? (err as Error).stack : undefined;
+    console.error("[api/admin/users PATCH] error:", err);
+    return NextResponse.json(
+      { success: false, error: msg, stack: stack },
+      { status: 500 }
+    );
   }
 }
 
@@ -276,7 +329,7 @@ export async function POST(req: NextRequest) {
       );
     }
     let avatarVal = (avatar_url || avatar) as string | undefined;
-    if (!role || !["admin", "instructor", "user"].includes(role)) {
+    if (!role || !["admin", "instructor", "user", "sekolah"].includes(role)) {
       return NextResponse.json(
         { success: false, error: "Invalid role" },
         { status: 400 }
@@ -395,8 +448,14 @@ export async function POST(req: NextRequest) {
       : null;
     return NextResponse.json({ success: true, item });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    const isError = err instanceof Error;
+    const msg = isError ? err.message : String(err);
+    const stack = isError ? (err as Error).stack : undefined;
+    console.error("[api/admin/users PATCH] uncaught error:", err);
+    return NextResponse.json(
+      { success: false, error: msg, stack },
+      { status: 500 }
+    );
   }
 }
 
@@ -411,8 +470,10 @@ export async function PATCH(req: NextRequest) {
       { status: auth.error === "Forbidden" ? 403 : 400 }
     );
   }
+  console.debug("[api/admin/users PATCH] actorId:", actorId);
   try {
     const body = await req.json();
+    console.debug("[api/admin/users PATCH] body:", body);
     const {
       id,
       name,
@@ -481,13 +542,17 @@ export async function PATCH(req: NextRequest) {
       update.username = trimmed;
     }
     if (role) {
-      if (!["admin", "instructor", "user"].includes(role)) {
+      if (!["admin", "instructor", "user", "sekolah"].includes(role)) {
         return NextResponse.json(
           { success: false, error: "Invalid role" },
           { status: 400 }
         );
       }
-      update.role = role;
+      // Some DBs use an enum for users.role that may not include 'sekolah'.
+      // To avoid invalid enum writes, map the client-visible 'sekolah' role
+      // to a DB-safe role (keep as 'user') when updating the users table.
+      const dbRole = role === "sekolah" ? "user" : role;
+      update.role = dbRole;
     }
     if (bio !== undefined) update.bio = bio;
     if (phone !== undefined) update.phone = phone;
@@ -516,16 +581,46 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("users")
-      .update(update)
-      .eq("id", id)
-      .select(
-        "id, username, full_name, email, role, bio, avatar, phone, created_at, updated_at"
-      )
-      .maybeSingle();
-
-    if (error) throw error;
+    // Try to write the update as-is (this mirrors instructor/admin behavior).
+    // If the DB rejects the role (e.g., enum doesn't include 'sekolah'),
+    // and the requested role was 'sekolah', retry with a DB-safe value ('user').
+    let data: any = null;
+    try {
+      const res = await supabaseAdmin
+        .from("users")
+        .update(update)
+        .eq("id", id)
+        .select(
+          "id, username, full_name, email, role, bio, avatar, phone, created_at, updated_at"
+        )
+        .maybeSingle();
+      // result shape: { data, error }
+      if (res.error) throw res.error;
+      data = res.data;
+    } catch (e: any) {
+      // If the request was to set role = 'sekolah' and DB enum rejects it,
+      // retry by mapping to a DB-safe role ('user'). Otherwise rethrow.
+      const isEnumErr = e && e.message && String(e.message).includes("invalid input value for enum");
+      if (role === "sekolah" && isEnumErr) {
+        try {
+          update.role = "user"; // db-safe fallback
+          const res2 = await supabaseAdmin
+            .from("users")
+            .update(update)
+            .eq("id", id)
+            .select(
+              "id, username, full_name, email, role, bio, avatar, phone, created_at, updated_at"
+            )
+            .maybeSingle();
+          if (res2.error) throw res2.error;
+          data = res2.data;
+        } catch (e2) {
+          throw e2;
+        }
+      } else {
+        throw e;
+      }
+    }
     if (!data) {
       return NextResponse.json(
         { success: false, error: "Not found" },
@@ -535,16 +630,60 @@ export async function PATCH(req: NextRequest) {
 
     if (data) {
       // ensure role specific rows exist / updated (handle role change and instructor bank_account)
-      await ensureRoleRows(data.id, (role || data.role) as string, {
-        bank_account: bank_account ?? undefined,
-      });
+      try {
+        await ensureRoleRows(data.id, (role || data.role) as string, {
+          bank_account: bank_account ?? undefined,
+        });
+      } catch (e) {
+        // Fail gracefully: log and return a helpful error to the client
+        const emsg = e instanceof Error ? e.message : String(e);
+        return NextResponse.json(
+          { success: false, error: `Failed ensure role rows: ${emsg}` },
+          { status: 500 }
+        );
+      }
+
+      // If admin explicitly set role to 'sekolah', ensure a schools row exists.
+      // If role was changed away from 'sekolah', remove any existing schools row.
+      try {
+        if (role === "sekolah") {
+          // create schools row if not exists
+          const { data: existing } = await supabaseAdmin
+            .from("schools")
+            .select("user_id")
+            .eq("user_id", data.id)
+            .maybeSingle();
+          if (!existing) {
+            try {
+              await supabaseAdmin
+                .from("schools")
+                .insert({ user_id: data.id, school_name: null });
+            } catch (e) {
+              // ignore best-effort insert errors
+            }
+          }
+        } else {
+          // if role is not sekolah, remove possible schools row
+          try {
+            await supabaseAdmin.from("schools").delete().eq("user_id", data.id);
+          } catch (e) {
+            // ignore delete errors
+          }
+        }
+      } catch (e) {
+        // ignore schools ops errors
+      }
+
       if (role === "instructor" && bank_account !== undefined) {
         // already handled in ensureRoleRows, but safe guard
-        await supabaseAdmin
-          .from("instructors")
-          .update({ bank_account })
-          .eq("user_id", data.id);
+        try {
+          await supabaseAdmin
+            .from("instructors")
+            .update({ bank_account })
+            .eq("user_id", data.id);
+        } catch {}
       }
+
       // sync auth user email / metadata if changed or avatar new
       try {
         if (email || uploadedNewAvatar || name || full_name || username) {
@@ -557,29 +696,60 @@ export async function PATCH(req: NextRequest) {
             },
           });
         }
-      } catch {
-        // ignore auth sync errors to not block
+      } catch (e) {
+        // ignore auth sync errors, but capture message in logs if helpful
+        // (do not block main flow)
       }
     }
 
-    const item = data
-      ? {
-          id: data.id,
-          name: data.full_name ?? null,
-          email: data.email ?? null,
-          username: data.username ?? null,
-          role: data.role ?? null,
-          bio: data.bio ?? null,
-          avatar_url: data.avatar ?? null,
-          phone: data.phone ?? null,
-          created_at: data.created_at ?? null,
-          updated_at: data.updated_at ?? null,
+      // Determine what role to return to the client. If a schools row
+      // exists for this user we should report 'sekolah' to the admin UI
+      // even though the users.role DB column may contain a DB-safe value.
+      let returnedRole = data.role ?? null;
+      let schoolsPresent = false;
+      try {
+        const { data: schoolRow } = await supabaseAdmin
+          .from("schools")
+          .select("user_id")
+          .eq("user_id", data.id)
+          .maybeSingle();
+        if (schoolRow) {
+          returnedRole = "sekolah";
+          schoolsPresent = true;
         }
-      : null;
+      } catch (e) {
+        // ignore errors and fall back to DB role
+      }
+
+      const item = data
+        ? {
+            id: data.id,
+            name: data.full_name ?? null,
+            email: data.email ?? null,
+            username: data.username ?? null,
+            role: returnedRole ?? null,
+            bio: data.bio ?? null,
+            avatar_url: data.avatar ?? null,
+            phone: data.phone ?? null,
+            created_at: data.created_at ?? null,
+            updated_at: data.updated_at ?? null,
+            // debug info (non-destructive): whether admin requested sekolah and whether schools row exists
+            _requested_role: role ?? null,
+            _schools_present: schoolsPresent,
+          }
+        : null;
     return NextResponse.json({ success: true, item });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    // Log full error for local debugging
+    console.error("[api/admin/users PATCH] final catch:", err);
+    let msg: string;
+    if (err instanceof Error) msg = err.message;
+    else if (err && typeof err === "object") {
+      // try common supabase error shapes
+      // @ts-ignore
+      msg = (err.message || err.error || JSON.stringify(err));
+    } else msg = String(err);
+    return NextResponse.json({ success: false, error: msg, raw: err }, { status: 500 });
   }
 }
 

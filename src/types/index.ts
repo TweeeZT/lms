@@ -4,7 +4,7 @@ export interface User {
   email: string;
   username: string;
   fullName: string;
-  role: "admin" | "instructor" | "user";
+  role: "admin" | "instructor" | "user" | "sekolah";
   avatar?: string;
   phone?: string;
   bio?: string;
@@ -223,7 +223,7 @@ export interface SignupData {
   email: string;
   username: string;
   fullName: string;
-  role: "instructor" | "user"; // 'user' represents siswa/student
+  role: "instructor" | "user" | "sekolah"; // 'user' represents siswa/student; 'sekolah' reserved for school accounts
   phone: string;
   bio?: string;
   password: string;

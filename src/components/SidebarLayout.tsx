@@ -200,6 +200,8 @@ export function DashboardLayout({
         return "blue";
       case "user":
         return "green";
+      case "school":
+        return "green";
       default:
         return "gray";
     }

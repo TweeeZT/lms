@@ -70,10 +70,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find user by email or username
+    // Find user by email or username (including role)
     const { data: users, error: userErr } = await supabase
       .from("users")
-      .select("id, email, full_name, username")
+      .select("id, email, full_name, username, role")
       .or(`email.eq.${emailOrUsername},username.eq.${emailOrUsername}`)
       .limit(1);
 
@@ -85,6 +85,19 @@ export async function POST(req: Request) {
     }
 
     const targetUser = users[0];
+
+    // Only regular users (siswa) can be added to a school
+    // reject admins, instructors, or other school accounts
+    if (targetUser.role && targetUser.role !== "user") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Hanya akun pengguna biasa (siswa) yang bisa ditambahkan. Akun ini bukan siswa.",
+        },
+        { status: 400 }
+      );
+    }
 
     // Check if already added
     const { data: existing } = await supabase

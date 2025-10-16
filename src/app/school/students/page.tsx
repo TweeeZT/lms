@@ -45,6 +45,7 @@ export default function SchoolStudentsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [emailOrUsername, setEmailOrUsername] = useState("");
   const [adding, setAdding] = useState(false);
+  const [checkedRole, setCheckedRole] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -94,6 +95,16 @@ export default function SchoolStudentsPage() {
       return;
     }
 
+    // If we have a checked role and it's not 'user', block submit early
+    if (checkedRole && checkedRole !== "user") {
+      notifications.show({
+        color: "red",
+        title: "Tidak bisa ditambahkan",
+        message: "Akun yang dimasukkan bukan akun siswa.",
+      });
+      return;
+    }
+
     setAdding(true);
     try {
       const res = await fetch("/api/school/students", {
@@ -129,6 +140,32 @@ export default function SchoolStudentsPage() {
       });
     } finally {
       setAdding(false);
+    }
+  };
+
+  // Client-side pre-check: validate entered email/username exists and role
+  const checkEmailOrUsername = async (val: string) => {
+    if (!val.trim()) {
+      setCheckedRole(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/users/check?emailOrUsername=${encodeURIComponent(val.trim())}`);
+      const json = await res.json();
+      if (res.ok && json.success && json.found) {
+        setCheckedRole(json.user?.role || null);
+        if (json.user?.role && json.user.role !== "user") {
+          notifications.show({
+            color: "yellow",
+            title: "Perhatian",
+            message: "Akun ini bukan akun siswa dan tidak bisa ditambahkan.",
+          });
+        }
+      } else {
+        setCheckedRole(null);
+      }
+    } catch (e) {
+      setCheckedRole(null);
     }
   };
 
@@ -312,7 +349,11 @@ export default function SchoolStudentsPage() {
           label="Email atau Username"
           placeholder="Masukkan email atau username siswa"
           value={emailOrUsername}
-          onChange={(e) => setEmailOrUsername(e.currentTarget.value)}
+          onChange={(e) => {
+            setEmailOrUsername(e.currentTarget.value);
+            setCheckedRole(null);
+          }}
+          onBlur={(e) => checkEmailOrUsername(e.currentTarget.value)}
           mb="md"
         />
         <Group justify="flex-end">

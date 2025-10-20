@@ -83,6 +83,27 @@ export async function GET(req: NextRequest) {
         | { full_name: string | null }[]
         | null;
     };
+    // Align total_modules with actual published modules count (like detail pages)
+    const courseIds = (data || []).map((c: RawCourse) => c.id);
+    let modulesCountByCourse: Record<string, number> = {};
+    if (courseIds.length > 0) {
+      const { data: modRows } = await supabaseAdmin
+        .from("modules")
+        .select("course_id")
+        .in("course_id", courseIds)
+        .or("is_published.eq.true,is_published.is.null");
+      if (Array.isArray(modRows)) {
+        modulesCountByCourse = (modRows as any[]).reduce(
+          (acc: Record<string, number>, r: any) => {
+            const cid = r.course_id as string;
+            acc[cid] = (acc[cid] || 0) + 1;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
     const items = (data || []).map((c: RawCourse) => {
       let instructor_name: string | null = null;
       if (c.users) {
@@ -90,7 +111,12 @@ export async function GET(req: NextRequest) {
           instructor_name = c.users[0]?.full_name || null;
         else instructor_name = c.users.full_name || null;
       }
-      return { ...c, instructor_name };
+      return {
+        ...c,
+        instructor_name,
+        total_modules:
+          modulesCountByCourse[c.id] ?? (c.total_modules ?? 0),
+      };
     });
 
     return NextResponse.json({

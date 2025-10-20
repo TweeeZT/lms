@@ -58,9 +58,36 @@ export async function GET(req: Request) {
     const { data, error, count } = await query.range(from, to);
     if (error) throw error;
 
+    // Align total_modules with actual published modules count
+    const courseIds = (data || []).map((c) => c.id).filter(Boolean);
+    let modulesCountByCourse: Record<string, number> = {};
+    if (courseIds.length > 0) {
+      const { data: modRows } = await supabase
+        .from("modules")
+        .select("course_id")
+        .in("course_id", courseIds)
+        .or("is_published.eq.true,is_published.is.null");
+      if (Array.isArray(modRows)) {
+        modulesCountByCourse = (modRows as any[]).reduce(
+          (acc: Record<string, number>, r: any) => {
+            const cid = r.course_id as string;
+            acc[cid] = (acc[cid] || 0) + 1;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
+    const items = (data || []).map((c) => ({
+      ...c,
+      total_modules:
+        modulesCountByCourse[c.id] ?? (c as any).total_modules ?? 0,
+    }));
+
     return NextResponse.json({
       success: true,
-      items: data || [],
+      items,
       total: count || 0,
       page,
       limit,

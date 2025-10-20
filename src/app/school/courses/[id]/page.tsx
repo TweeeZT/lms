@@ -340,7 +340,7 @@ export default function CourseOverviewPage() {
         <Button
           variant="subtle"
           size="md"
-          onClick={() => router.push("/user/courses")}
+          onClick={() => router.push("/school/courses")}
           leftSection={
             <IconChevronRight
               size={20}

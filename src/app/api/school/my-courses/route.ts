@@ -63,6 +63,30 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
+    // Build a map of published modules count per course to align with detail page
+    const courseIds = (data || [])
+      .map((row: any) => row.courses?.id)
+      .filter((id: string | undefined): id is string => Boolean(id));
+
+    let modulesCountByCourse: Record<string, number> = {};
+    if (courseIds.length > 0) {
+      const { data: modRows, error: modErr } = await supabase
+        .from("modules")
+        .select("course_id")
+        .in("course_id", courseIds)
+        .or("is_published.eq.true,is_published.is.null");
+      if (!modErr && Array.isArray(modRows)) {
+        modulesCountByCourse = (modRows as any[]).reduce(
+          (acc: Record<string, number>, r: any) => {
+            const cid = r.course_id as string;
+            acc[cid] = (acc[cid] || 0) + 1;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
     // Transform data
     const items = (data || []).map((row: any) => ({
       enrollmentId: row.id,
@@ -84,7 +108,9 @@ export async function GET(req: NextRequest) {
             price: row.courses.price,
             durationMin: row.courses.duration_min,
             level: row.courses.level,
-            totalModules: row.courses.total_modules || 0,
+            // Use published modules count to match detail page module list
+            totalModules:
+              modulesCountByCourse[row.courses.id] ?? row.courses.total_modules ?? 0,
             enrolledCount: row.courses.enrolled_count,
             rating: row.courses.rating,
             points: row.courses.points,

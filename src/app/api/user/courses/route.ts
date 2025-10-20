@@ -68,6 +68,10 @@ export async function GET(req: Request) {
     progress?: ProgressJoined | ProgressJoined[];
   };
 
+  // For consistency with detail pages, compute totalModules as the number of published modules
+  // Build a cache by courseId to avoid repeated lookups
+  let publishedModulesCountByCourse: Record<string, number> = {};
+
   // Helper to map enrollment rows
   const mapEnrollmentRows = (rows: unknown[]) =>
     rows.map((r) => {
@@ -86,7 +90,11 @@ export async function GET(req: Request) {
       const completedCount = Array.isArray(p?.completed_modules)
         ? p.completed_modules.length
         : 0;
-      const totalModules = Number(c?.total_modules || 0);
+      const totalModules = c?.id
+        ? Number(
+            publishedModulesCountByCourse[c.id] ?? (c?.total_modules || 0)
+          )
+        : 0;
       const progressPct = totalModules
         ? Math.min(100, Math.round((completedCount / totalModules) * 100))
         : 0;
@@ -130,6 +138,32 @@ export async function GET(req: Request) {
     });
 
   if (!enrollmentsError && (data?.length || 0) > 0) {
+    // Prefetch published modules count for all course ids in this page
+    const courseIds = (data as unknown[])
+      .map((r) => {
+        const row = r as EnrollmentJoinedRow;
+        const cRaw = row.course as JoinedCourse | JoinedCourse[] | null | undefined;
+        const c = Array.isArray(cRaw) ? cRaw[0] : cRaw;
+        return c?.id;
+      })
+      .filter((id): id is string => Boolean(id));
+    if (courseIds.length > 0) {
+      const { data: mods } = await supabaseAdmin
+        .from("modules")
+        .select("course_id")
+        .in("course_id", courseIds)
+        .or("is_published.eq.true,is_published.is.null");
+      if (Array.isArray(mods)) {
+        publishedModulesCountByCourse = (mods as any[]).reduce(
+          (acc: Record<string, number>, row: any) => {
+            const cid = row.course_id as string;
+            acc[cid] = (acc[cid] || 0) + 1;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
     // Happy path: have enrollments
     const items = mapEnrollmentRows(data as unknown[]);
     return NextResponse.json({
@@ -168,6 +202,33 @@ export async function GET(req: Request) {
     created_at?: string | null;
     course?: JoinedCourse | JoinedCourse[] | null;
   };
+  // Prefetch published modules count for fallback as well
+  const fallbackCourseIds = (upRows || [])
+    .map((rowUnknown: unknown) => {
+      const row = rowUnknown as UserProgressJoinedRow;
+      const cRaw = row.course as JoinedCourse | JoinedCourse[] | null | undefined;
+      const c = Array.isArray(cRaw) ? cRaw[0] : cRaw;
+      return c?.id;
+    })
+    .filter((id): id is string => Boolean(id));
+  if (fallbackCourseIds.length > 0) {
+    const { data: mods } = await supabaseAdmin
+      .from("modules")
+      .select("course_id")
+      .in("course_id", fallbackCourseIds)
+      .or("is_published.eq.true,is_published.is.null");
+    if (Array.isArray(mods)) {
+      publishedModulesCountByCourse = (mods as any[]).reduce(
+        (acc: Record<string, number>, row: any) => {
+          const cid = row.course_id as string;
+          acc[cid] = (acc[cid] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+    }
+  }
+
   const items = (upRows || []).map((rowUnknown: unknown) => {
     const row = rowUnknown as UserProgressJoinedRow;
     // Normalize shape to enrollment-like
@@ -186,7 +247,11 @@ export async function GET(req: Request) {
       current_module_id: row.current_module_id ?? null,
     };
     const completedCount = (p.completed_modules as unknown[]).length;
-    const totalModules = Number(c?.total_modules || 0);
+    const totalModules = c?.id
+      ? Number(
+          publishedModulesCountByCourse[c.id] ?? (c?.total_modules || 0)
+        )
+      : 0;
     const progressPct = totalModules
       ? Math.min(100, Math.round((completedCount / totalModules) * 100))
       : 0;

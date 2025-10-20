@@ -293,20 +293,16 @@ export default function UserCoursesPage() {
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
               {paginatedItems.map((row) => {
                 const course = row.course!;
-                const progress = Math.max(
+                const totalModules = course.totalModules || 0;
+                const completedCount = Math.max(
                   0,
-                  Math.min(100, row.progress.percentage || 0)
+                  Math.min(totalModules, row.progress.completedCount || 0)
                 );
-                const isCompleted = progress >= 100;
-                const currentModule = isCompleted
-                  ? course.totalModules
-                  : Math.max(
-                      0,
-                      Math.min(
-                        course.totalModules,
-                        Math.round((progress / 100) * course.totalModules)
-                      )
-                    );
+                const isCompleted = totalModules > 0 && completedCount === totalModules;
+                const progress = totalModules > 0
+                  ? Math.round((completedCount / totalModules) * 100)
+                  : 0;
+                const currentModule = completedCount;
 
                 return (
                   <Card

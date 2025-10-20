@@ -571,10 +571,10 @@ export default function UserProfilePage() {
           variant="white"
           color="dark"
           component="a"
-          href="/user/dashboard"
+          href={`/${user?.role || "user"}/dashboard`}
           size="md"
           radius="xl"
-          style={{ fontWeight: 500 }}
+          style={{ fontWeight: 500, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
         >
           Kembali ke Dashboard
         </Button>
@@ -662,7 +662,7 @@ export default function UserProfilePage() {
             <Grid gutter="lg">
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <TextInput
-                  label="Nama Lengkap"
+                  label={user?.role === "school" ? "Nama Sekolah" : "Nama Lengkap"}
                   leftSection={<IconUser size={16} />}
                   value={fullName}
                   onChange={(e) => setFullName(e.currentTarget.value)}

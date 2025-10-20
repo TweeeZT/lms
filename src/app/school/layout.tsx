@@ -1,6 +1,6 @@
 "use client";
 import { useAuth } from "@/hooks/useAuth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/SidebarLayout";
 import {
@@ -18,6 +18,7 @@ export default function SchoolLayout({
 }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "school")) {
@@ -32,7 +33,11 @@ export default function SchoolLayout({
   }
 
   return (
-    <DashboardLayout user={user} onLogout={logout}>
+    <DashboardLayout
+      user={user}
+      onLogout={logout}
+      hideNavbar={Boolean(pathname?.startsWith("/school/profile"))}
+    >
       {children}
     </DashboardLayout>
   );

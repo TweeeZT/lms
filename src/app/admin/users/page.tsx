@@ -475,7 +475,7 @@ export default function AdminUsersPage() {
               data={[
                 { value: "admin", label: "Admin" },
                 { value: "instructor", label: "Instruktur" },
-                { value: "sekolah", label: "Sekolah" },
+                { value: "school", label: "Sekolah" },
                 { value: "user", label: "User" },
               ]}
               value={roleFilter}
@@ -574,10 +574,11 @@ export default function AdminUsersPage() {
                             ? "violet"
                             : u.role === "instructor"
                             ? "blue"
-                            : u.role === "sekolah"
+                            : u.role === "school"
                             ? "teal"
                             : "gray"
                         }
+                        variant="filled"
                       >
                         {u.role}
                       </Badge>
@@ -850,7 +851,7 @@ export default function AdminUsersPage() {
                   data={[
                     { value: "admin", label: "Admin" },
                     { value: "instructor", label: "Instruktur" },
-                    { value: "sekolah", label: "Sekolah" },
+                    { value: "school", label: "Sekolah" },
                     { value: "user", label: "User" },
                   ]}
                   value={formRole}
@@ -1033,7 +1034,7 @@ export default function AdminUsersPage() {
                   data={[
                     { value: "admin", label: "Admin" },
                     { value: "instructor", label: "Instruktur" },
-                    { value: "sekolah", label: "Sekolah" },
+                    { value: "school", label: "Sekolah" },
                     { value: "user", label: "User" },
                   ]}
                   value={formRole}

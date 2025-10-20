@@ -97,7 +97,7 @@ async function ensureRoleRows(
         .select("id")
         .maybeSingle();
     }
-  } else if (role === "sekolah") {
+  } else if (role === "school") {
     // ensure a schools row exists for this user
     try {
       const { data } = await supabaseAdmin
@@ -227,7 +227,7 @@ export async function GET(req: NextRequest) {
           .select("user_id")
           .eq("user_id", r.id)
           .maybeSingle();
-        if (schoolRow) reportedRole = "sekolah";
+        if (schoolRow) reportedRole = "school";
       } catch (e) {
         // ignore and fall back to DB role
       }
@@ -248,8 +248,8 @@ export async function GET(req: NextRequest) {
     // If caller specifically requested role=sekolah, filter to only those items
     // which actually have a schools row.
     let filteredItems = items;
-    if (role === "sekolah") {
-      filteredItems = items.filter((it) => it.role === "sekolah");
+    if (role === "school") {
+      filteredItems = items.filter((it) => it.role === "school");
     }
 
     return NextResponse.json({
@@ -316,6 +316,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const emailLower = email.toLowerCase().trim();
     if (!username || typeof username !== "string" || !username.trim()) {
       return NextResponse.json(
         { success: false, error: "Username required" },
@@ -329,7 +330,7 @@ export async function POST(req: NextRequest) {
       );
     }
     let avatarVal = (avatar_url || avatar) as string | undefined;
-    if (!role || !["admin", "instructor", "user", "sekolah"].includes(role)) {
+    if (!role || !["admin", "instructor", "user", "school"].includes(role)) {
       return NextResponse.json(
         { success: false, error: "Invalid role" },
         { status: 400 }
@@ -346,7 +347,7 @@ export async function POST(req: NextRequest) {
     const { data: existingEmail } = await supabaseAdmin
       .from("users")
       .select("id")
-      .eq("email", email)
+      .ilike("email", emailLower)
       .maybeSingle();
     if (existingEmail) {
       return NextResponse.json(
@@ -370,16 +371,27 @@ export async function POST(req: NextRequest) {
     // create auth user first
     const { data: authCreate, error: authErr } =
       await serviceClient.auth.admin.createUser({
-        email,
+        email: emailLower,
         password,
         email_confirm: true,
         user_metadata: { full_name: finalName, username },
       });
     if (authErr || !authCreate?.user) {
+      const msg = authErr?.message || "Failed create auth user";
+      // Normalize the common Supabase message to a 409 to surface duplicate clearly
+      if (
+        typeof msg === "string" &&
+        msg.toLowerCase().includes("already been registered")
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Email already exists" },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         {
           success: false,
-          error: authErr?.message || "Failed create auth user",
+          error: msg,
         },
         { status: 500 }
       );
@@ -411,7 +423,7 @@ export async function POST(req: NextRequest) {
       .insert({
         id: newId,
         full_name: finalName,
-        email,
+        email: emailLower,
         username: username.trim(),
         role,
         bio: bio || null,
@@ -498,7 +510,8 @@ export async function PATCH(req: NextRequest) {
     const finalName = (full_name || name) as string | undefined;
     if (finalName) update.full_name = finalName;
     if (email) {
-      if (!EMAIL_RE.test(email)) {
+      const emailLower = String(email).toLowerCase().trim();
+      if (!EMAIL_RE.test(emailLower)) {
         return NextResponse.json(
           { success: false, error: "Invalid email" },
           { status: 400 }
@@ -508,7 +521,7 @@ export async function PATCH(req: NextRequest) {
       const { data: dup } = await supabaseAdmin
         .from("users")
         .select("id")
-        .eq("email", email)
+        .ilike("email", emailLower)
         .neq("id", id)
         .maybeSingle();
       if (dup) {
@@ -517,7 +530,7 @@ export async function PATCH(req: NextRequest) {
           { status: 409 }
         );
       }
-      update.email = email;
+      update.email = emailLower;
     }
     if (username) {
       const trimmed = String(username).trim();
@@ -542,17 +555,14 @@ export async function PATCH(req: NextRequest) {
       update.username = trimmed;
     }
     if (role) {
-      if (!["admin", "instructor", "user", "sekolah"].includes(role)) {
+      if (!["admin", "instructor", "user", "school"].includes(role)) {
         return NextResponse.json(
           { success: false, error: "Invalid role" },
           { status: 400 }
         );
       }
-      // Some DBs use an enum for users.role that may not include 'sekolah'.
-      // To avoid invalid enum writes, map the client-visible 'sekolah' role
-      // to a DB-safe role (keep as 'user') when updating the users table.
-      const dbRole = role === "sekolah" ? "user" : role;
-      update.role = dbRole;
+      // Store the role exactly as requested; your Supabase enum includes 'school'.
+      update.role = role;
     }
     if (bio !== undefined) update.bio = bio;
     if (phone !== undefined) update.phone = phone;
@@ -601,7 +611,7 @@ export async function PATCH(req: NextRequest) {
       // If the request was to set role = 'sekolah' and DB enum rejects it,
       // retry by mapping to a DB-safe role ('user'). Otherwise rethrow.
       const isEnumErr = e && e.message && String(e.message).includes("invalid input value for enum");
-      if (role === "sekolah" && isEnumErr) {
+      if (role === "school" && isEnumErr) {
         try {
           update.role = "user"; // db-safe fallback
           const res2 = await supabaseAdmin
@@ -646,7 +656,7 @@ export async function PATCH(req: NextRequest) {
       // If admin explicitly set role to 'sekolah', ensure a schools row exists.
       // If role was changed away from 'sekolah', remove any existing schools row.
       try {
-        if (role === "sekolah") {
+        if (role === "school") {
           // create schools row if not exists
           const { data: existing } = await supabaseAdmin
             .from("schools")
@@ -714,7 +724,7 @@ export async function PATCH(req: NextRequest) {
           .eq("user_id", data.id)
           .maybeSingle();
         if (schoolRow) {
-          returnedRole = "sekolah";
+          returnedRole = "school";
           schoolsPresent = true;
         }
       } catch (e) {

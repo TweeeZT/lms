@@ -24,29 +24,35 @@ export async function GET(req: Request) {
       .eq("school_user_id", schoolUserId)
       .eq("status", "accepted");
 
-    // Active courses (courses yang di-enroll oleh siswa sekolah ini)
-    // first fetch student user IDs, then query user_progress for those users
-    const { data: studentUsersData } = await supabase
-      .from("school_students")
-      .select("user_id")
-      .eq("school_user_id", schoolUserId)
-      .eq("status", "accepted");
-
-    const studentUserIds = (studentUsersData || []).map((s) => s.user_id);
-
-    const { data: enrollments } = await supabase
-      .from("user_progress")
+    // Active courses: courses that the school has purchased/enrolled in
+    // Use school_progress table scoped by the school user
+    const { data: schoolEnrollments } = await supabase
+      .from("school_progress")
       .select("course_id")
-      .in("user_id", studentUserIds);
+      .eq("user_id", schoolUserId);
 
-    const uniqueCourses = new Set(enrollments?.map((e) => e.course_id) || []);
-    const activeCourses = uniqueCourses.size;
+    const uniqueSchoolCourses = new Set(
+      (schoolEnrollments || []).map((e: any) => e.course_id)
+    );
+    const activeCourses = uniqueSchoolCourses.size;
 
     // Total enrollments
     const { data: progressData } = await supabase
       .from("user_progress")
       .select("progress_percentage")
-      .in("user_id", studentUserIds);
+      .in(
+        "user_id",
+        // fetch accepted student user IDs for this school for progress metrics
+        (
+          (
+            await supabase
+              .from("school_students")
+              .select("user_id")
+              .eq("school_user_id", schoolUserId)
+              .eq("status", "accepted")
+          ).data || []
+        ).map((s: any) => s.user_id)
+      );
 
     const totalEnrollments = progressData?.length || 0;
     const completionRate =

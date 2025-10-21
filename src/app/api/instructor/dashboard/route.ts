@@ -74,13 +74,15 @@ export async function GET(req: Request) {
       .order("date", { ascending: false })
       .limit(12);
 
-    // 5) Recent purchases (payments) for this instructor's courses
-    type PaymentRow = {
+    // 5) Recent purchases from transactions table (completed/paid)
+    type TransactionRow = {
       id: string;
       amount: number;
-      created_at: string;
+      date: string;
       course_id: string;
-      user_id: string;
+      course_title?: string | null;
+      user_id?: string | null;
+      user_name?: string | null;
       status?: string | null;
     };
     let purchases: Array<{
@@ -95,55 +97,44 @@ export async function GET(req: Request) {
     }> = [];
     if (courses.length) {
       const courseIds = courses.map((c) => c.id);
-      const paymentsQ = await supabase
-        .from("payments")
-        .select("id, amount, created_at, course_id, user_id, status")
+      const trxQ = await supabase
+        .from("transactions")
+        .select(
+          "id, amount, date, course_id, course_title, user_id, user_name, status"
+        )
         .in("course_id", courseIds)
-        .order("created_at", { ascending: false })
+        .in("status", ["completed", "paid"]) // accept completed/paid
+        .order("date", { ascending: false })
         .limit(10);
 
-      const paymentRows = (paymentsQ.data || []) as PaymentRow[];
-      if (paymentRows.length) {
-        const userIds = Array.from(new Set(paymentRows.map((p) => p.user_id)));
-        const [usersQ, coursesBriefQ] = await Promise.all([
-          supabase
-            .from("users")
-            .select("id, full_name, email")
-            .in("id", userIds),
-          supabase
-            .from("courses")
-            .select("id, title")
-            .in("id", Array.from(new Set(paymentRows.map((p) => p.course_id)))),
-        ]);
-
-        type UserBrief = {
-          id: string;
-          full_name: string;
-          email: string | null;
-        };
-        const userMap = new Map<string, UserBrief>();
-        (usersQ.data || []).forEach((u: UserBrief) =>
-          userMap.set(u.id, {
-            id: u.id,
-            full_name: u.full_name,
-            email: u.email,
-          })
-        );
-        type CourseBrief = { id: string; title: string };
-        const courseMap = new Map<string, CourseBrief>();
-        (coursesBriefQ.data || []).forEach((c: CourseBrief) =>
-          courseMap.set(c.id, { id: c.id, title: c.title })
+      const trxRows = (trxQ.data || []) as TransactionRow[];
+      if (trxRows.length) {
+        const userIds = Array.from(
+          new Set(trxRows.map((p) => p.user_id).filter(Boolean))
+        ) as string[];
+        const { data: usersBrief } = await supabase
+          .from("users")
+          .select("id, full_name, email")
+          .in("id", userIds);
+        const userMap = new Map<
+          string,
+          { full_name: string; email: string | null }
+        >();
+        (usersBrief || []).forEach((u) =>
+          userMap.set(u.id, { full_name: u.full_name, email: u.email })
         );
 
-        purchases = paymentRows.map((p) => ({
+        purchases = trxRows.map((p) => ({
           id: p.id,
-          amount: p.amount,
-          date: p.created_at,
+          amount: Number(p.amount || 0),
+          date: p.date,
           courseId: p.course_id,
-          courseTitle: courseMap.get(p.course_id)?.title || "",
-          userId: p.user_id,
-          userName: userMap.get(p.user_id)?.full_name || "",
-          userEmail: userMap.get(p.user_id)?.email || null,
+          courseTitle: p.course_title || "",
+          userId: p.user_id || "",
+          userName:
+            p.user_name ||
+            (p.user_id ? userMap.get(p.user_id)?.full_name || "" : ""),
+          userEmail: p.user_id ? userMap.get(p.user_id)?.email || null : null,
         }));
       }
     }

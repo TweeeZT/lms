@@ -206,26 +206,32 @@ export default function InstructorDashboard() {
     }).format(n);
   };
 
-  const formatDate = (d: string | Date) => {
-    const dt = typeof d === "string" ? new Date(d) : d;
-    const day = dt.getDate().toString().padStart(2, "0");
-    const monthNames = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "Mei",
-      "Jun",
-      "Jul",
-      "Agt",
-      "Sep",
-      "Okt",
-      "Nov",
-      "Des",
-    ];
-    const month = monthNames[dt.getMonth()];
-    const year = dt.getFullYear();
-    return `${day} ${month} ${year}`;
+  const formatDate = (d: string | Date | null | undefined) => {
+    if (!d) return "-";
+    try {
+      const dt = typeof d === "string" ? new Date(d) : d;
+      if (isNaN(dt.getTime())) return "-";
+      const day = dt.getDate().toString().padStart(2, "0");
+      const monthNames = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "Mei",
+        "Jun",
+        "Jul",
+        "Agt",
+        "Sep",
+        "Okt",
+        "Nov",
+        "Des",
+      ];
+      const month = monthNames[dt.getMonth()];
+      const year = dt.getFullYear();
+      return `${day} ${month} ${year}`;
+    } catch {
+      return "-";
+    }
   };
 
   const formatMonth = (monthStr: string) => {
@@ -607,7 +613,7 @@ export default function InstructorDashboard() {
                         variant="light"
                         color={c.isPublished ? "teal" : "gray"}
                       >
-                        {c.isPublished ? "Published" : "Draft"}
+                        {c.isPublished ? "Tayang" : "Draf"}
                       </Badge>
                     </Group>
                   ))}
@@ -675,32 +681,37 @@ export default function InstructorDashboard() {
                   Pembelian Terbaru
                 </Title>
                 <Stack gap={12} style={{ fontSize: 13 }}>
-                  {recentPurchases.slice(0, 3).map((p) => (
-                    <Group key={p.id} justify="space-between" wrap="nowrap">
-                      <div style={{ minWidth: 0 }}>
-                        <Text size="sm" fw={600} lineClamp={1}>
-                          {p.userName}
-                        </Text>
-                        <Text size="xs" c="dimmed" lineClamp={1}>
-                          {p.courseTitle}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {p.date.toLocaleString("id-ID", {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                        </Text>
-                      </div>
-                      <Text
-                        size="sm"
-                        fw={700}
-                        c="green"
-                        style={{ whiteSpace: "nowrap" }}
-                      >
-                        {formatCurrency(p.amount)}
-                      </Text>
-                    </Group>
-                  ))}
+                  {recentPurchases.length === 0 ? (
+                    <Text size="sm" c="dimmed" ta="center" py="md">
+                      Belum ada transaksi
+                    </Text>
+                  ) : (
+                    <>
+                      {recentPurchases.slice(0, 3).map((p) => (
+                        <Group key={p.id} justify="space-between" wrap="nowrap">
+                          <div style={{ minWidth: 0 }}>
+                            <Text size="sm" fw={600} lineClamp={1}>
+                              {p.userName}
+                            </Text>
+                            <Text size="xs" c="dimmed" lineClamp={1}>
+                              {p.courseTitle}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {formatDate(p.date)}
+                            </Text>
+                          </div>
+                          <Text
+                            size="sm"
+                            fw={700}
+                            c="green"
+                            style={{ whiteSpace: "nowrap" }}
+                          >
+                            {formatCurrency(p.amount)}
+                          </Text>
+                        </Group>
+                      ))}
+                    </>
+                  )}
                 </Stack>
                 <Button
                   component={Link}

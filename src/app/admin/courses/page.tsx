@@ -589,8 +589,8 @@ export default function AdminCoursesPage() {
               }
               data={[
                 { value: "all", label: "Semua" },
-                { value: "published", label: "Published" },
-                { value: "draft", label: "Draft" },
+                { value: "published", label: "Tayang" },
+                { value: "draft", label: "Draf" },
               ]}
               style={{ width: 150 }}
             />
@@ -685,7 +685,7 @@ export default function AdminCoursesPage() {
                           variant="light"
                           color={course.is_published ? "teal" : "gray"}
                         >
-                          {course.is_published ? "Published" : "Draft"}
+                          {course.is_published ? "Tayang" : "Draf"}
                         </Badge>
                       </Group>
                       <Text size="xs" c="dimmed">
@@ -912,9 +912,9 @@ export default function AdminCoursesPage() {
           <Select
             label="Level"
             data={[
-              { value: "beginner", label: "Beginner" },
-              { value: "intermediate", label: "Intermediate" },
-              { value: "advanced", label: "Advanced" },
+              { value: "beginner", label: "Pemula" },
+              { value: "intermediate", label: "Menengah" },
+              { value: "advanced", label: "Lanjutan" },
             ]}
             value={form.level}
             onChange={(v) =>
@@ -932,12 +932,13 @@ export default function AdminCoursesPage() {
             data={[
               { value: "scratch", label: "Scratch" },
               { value: "roblox", label: "Roblox" },
+              { value: "robotics", label: "Robotik" },
             ]}
             value={form.category}
             onChange={(v) =>
               setForm({
                 ...form,
-                category: (v as "scratch" | "roblox") || "scratch",
+                category: (v as "scratch" | "roblox" | "robotics") || "scratch",
               })
             }
             withAsterisk
@@ -982,7 +983,7 @@ export default function AdminCoursesPage() {
           />
           <Group justify="space-between" wrap="nowrap">
             <Switch
-              label="Published"
+              label="Tayang"
               checked={form.isPublished}
               onChange={(e) =>
                 setForm({ ...form, isPublished: e.currentTarget.checked })

@@ -544,8 +544,8 @@ export default function InstructorCoursesPage() {
               }
               data={[
                 { value: "all", label: "Semua" },
-                { value: "published", label: "Published" },
-                { value: "draft", label: "Draft" },
+                { value: "published", label: "Tayang" },
+                { value: "draft", label: "Draf" },
               ]}
               style={{ width: 180 }}
             />
@@ -631,7 +631,7 @@ export default function InstructorCoursesPage() {
                           variant="light"
                           color={course.is_published ?? false ? "teal" : "gray"}
                         >
-                          {course.is_published ?? false ? "Published" : "Draft"}
+                          {course.is_published ?? false ? "Tayang" : "Draf"}
                         </Badge>
                       </Group>
                       <Group gap={8}>
@@ -850,9 +850,9 @@ export default function InstructorCoursesPage() {
           <Select
             label="Level"
             data={[
-              { value: "beginner", label: "Beginner" },
-              { value: "intermediate", label: "Intermediate" },
-              { value: "advanced", label: "Advanced" },
+              { value: "beginner", label: "Pemula" },
+              { value: "intermediate", label: "Menengah" },
+              { value: "advanced", label: "Lanjutan" },
             ]}
             value={form.level}
             onChange={(v) =>
@@ -920,7 +920,7 @@ export default function InstructorCoursesPage() {
           />
           <Group justify="space-between" wrap="nowrap">
             <Switch
-              label="Published"
+              label="Tayang"
               checked={form.isPublished}
               onChange={(e) =>
                 setForm({ ...form, isPublished: e.currentTarget.checked })

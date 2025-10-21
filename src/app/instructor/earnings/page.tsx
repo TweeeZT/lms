@@ -175,37 +175,40 @@ export default function InstructorEarningsPage() {
       currency: "IDR",
       maximumFractionDigits: 0,
     }).format(amount || 0);
-  const formatDate = (d: string | Date) => {
+  const formatDate = (d: string | Date | null | undefined) => {
     if (!d) return "-";
 
-    // pastikan format tanggal bisa dibaca dengan benar
-    const date =
-      typeof d === "string"
-        ? new Date(d.replace(/-/g, "/")) // ubah tanda agar aman di semua browser
-        : new Date(d);
+    try {
+      // Parse robust date format (ISO atau locale)
+      const date =
+        typeof d === "string"
+          ? new Date(d.replace(/-/g, "/")) // ubah tanda agar aman di semua browser
+          : new Date(d);
 
-    if (isNaN(date.getTime())) return "-";
+      if (isNaN(date.getTime())) return "-";
 
-    // Ambil hari, bulan, tahun manual
-    const day = date.getDate().toString().padStart(2, "0");
-    const monthNames = [
-      "Januari",
-      "Februari",
-      "Maret",
-      "April",
-      "Mei",
-      "Juni",
-      "Juli",
-      "Agustus",
-      "September",
-      "Oktober",
-      "November",
-      "Desember",
-    ];
-    const month = monthNames[date.getMonth()];
-    const year = date.getFullYear();
-
-    return `${day} ${month} ${year}`;
+      // Manual format indo "DD MMM YYYY"
+      const day = date.getDate().toString().padStart(2, "0");
+      const monthNames = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "Mei",
+        "Jun",
+        "Jul",
+        "Agt",
+        "Sep",
+        "Okt",
+        "Nov",
+        "Des",
+      ];
+      const month = monthNames[date.getMonth()];
+      const year = date.getFullYear();
+      return `${day} ${month} ${year}`;
+    } catch {
+      return "-";
+    }
   };
 
   const fetchData = async (page = 1, limit = tx.limit || 10) => {

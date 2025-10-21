@@ -28,6 +28,11 @@ import {
 } from "@tabler/icons-react";
 import { useAuth } from "../../../hooks/useAuth";
 import PrimeLoader from "../../../components/PrimeLoader";
+import {
+  getCategoryLabel,
+  getCategoryColor,
+  getLevelLabel,
+} from "../../../lib/labels";
 
 export default function UserExplorePage() {
   const { user } = useAuth();
@@ -127,6 +132,7 @@ export default function UserExplorePage() {
                   { value: "all", label: "Semua Kategori" },
                   { value: "scratch", label: "Scratch" },
                   { value: "roblox", label: "Roblox" },
+                  { value: "robotics", label: "Robotik" },
                 ]}
                 value={categoryFilter}
                 onChange={setCategoryFilter}
@@ -180,7 +186,11 @@ export default function UserExplorePage() {
                         fontWeight: 700,
                       }}
                     >
-                      {course.category === "scratch" ? "🎨" : "🎮"}
+                      {course.category === "scratch"
+                        ? "🎨"
+                        : course.category === "roblox"
+                        ? "🎮"
+                        : "🤖"}
                     </div>
                   )}
                 </Card.Section>
@@ -189,9 +199,9 @@ export default function UserExplorePage() {
                   <Group justify="space-between">
                     <Badge
                       variant="light"
-                      color={course.category === "scratch" ? "orange" : "cyan"}
+                      color={getCategoryColor(course.category)}
                     >
-                      {course.category}
+                      {getCategoryLabel(course.category)}
                     </Badge>
                     <Badge
                       variant="light"
@@ -203,11 +213,7 @@ export default function UserExplorePage() {
                           : "red"
                       }
                     >
-                      {course.level === "beginner"
-                        ? "Pemula"
-                        : course.level === "intermediate"
-                        ? "Menengah"
-                        : "Lanjutan"}
+                      {getLevelLabel(course.level)}
                     </Badge>
                   </Group>
 

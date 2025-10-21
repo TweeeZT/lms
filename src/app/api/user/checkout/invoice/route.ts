@@ -134,7 +134,8 @@ export async function POST(req: NextRequest) {
           course_id: courseId,
           course_title: course.title,
           amount: amount,
-          method: "BCA", // placeholder, will be updated by webhook with actual payment channel
+          // method unknown until payment; leave null and let webhook/confirm update from Xendit
+          method: null,
           status: "pending",
           instructors_id: course.instructor_id || null,
         });

@@ -44,7 +44,7 @@ type ApiCourse = {
   title: string;
   description: string;
   thumbnail?: string | null;
-  category: "scratch" | "roblox" | string;
+  category: "scratch" | "roblox" | "robotics" | string;
   price?: number | null;
   durationMin?: number | null;
   level: "beginner" | "intermediate" | "advanced" | string;
@@ -296,10 +296,12 @@ export default function UserCoursesPage() {
                   0,
                   Math.min(totalModules, row.progress.completedCount || 0)
                 );
-                const isCompleted = totalModules > 0 && completedCount === totalModules;
-                const progress = totalModules > 0
-                  ? Math.round((completedCount / totalModules) * 100)
-                  : 0;
+                const isCompleted =
+                  totalModules > 0 && completedCount === totalModules;
+                const progress =
+                  totalModules > 0
+                    ? Math.round((completedCount / totalModules) * 100)
+                    : 0;
                 const currentModule = completedCount;
 
                 return (

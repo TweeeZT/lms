@@ -35,14 +35,15 @@ export default function ForgotPasswordPage() {
       });
       const json = await res.json();
       if (!res.ok || !json.exists) {
-        // Non-disclosing message
-        setSent(true);
+        setError(
+          "Email belum terdaftar. Silakan cek kembali atau daftar akun baru."
+        );
         return;
       }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo:
           typeof window !== "undefined"
-            ? `${window.location.origin}/login`
+            ? `${window.location.origin}/reset-password`
             : undefined,
       });
       if (error) throw error;
@@ -91,7 +92,7 @@ export default function ForgotPasswordPage() {
           )}
           {sent && (
             <Alert color="green" mb="md" variant="light">
-              Jika email terdaftar, link reset telah dikirim.
+              Link reset password telah dikirim. Silakan cek email Anda.
             </Alert>
           )}
           <form onSubmit={onSubmit}>

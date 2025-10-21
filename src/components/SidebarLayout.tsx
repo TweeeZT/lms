@@ -136,7 +136,7 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
       return [
         ...baseItems,
         {
-          label: "Siswa",
+          label: "Kelola Siswa",
           href: "/school/students",
           icon: "IconUsers",
         },

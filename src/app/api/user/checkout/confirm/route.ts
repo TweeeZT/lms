@@ -113,10 +113,18 @@ export async function GET(req: NextRequest) {
               } catch (e) {
                 console.error("confirm insert transaction failed", e);
               }
-            } else if (tx.status !== currentStatus) {
+            } else {
+              // Update status and also the method if Xendit returns a channel
+              const patch: Record<string, any> = { status: currentStatus };
+              const m =
+                data.payment_channel ||
+                data.bank_code ||
+                data.payment_method ||
+                null;
+              if (m) patch.method = m;
               await supabaseAdmin
                 .from("transactions")
-                .update({ status: currentStatus })
+                .update(patch)
                 .eq("id", invoiceId);
             }
           }

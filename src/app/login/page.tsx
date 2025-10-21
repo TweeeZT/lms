@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Paper,
   TextInput,
@@ -62,8 +62,10 @@ export default function LoginPage() {
 
 export function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const { login, loading } = useAuth();
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
   const [providerLoading, setProviderLoading] = useState<
     "google" | "github" | null
   >(null);
@@ -285,6 +287,34 @@ export function LoginForm() {
     };
   }, []);
 
+  // Map notice query to a friendly alert
+  useEffect(() => {
+    const n = params?.get("notice");
+    if (!n) return;
+    switch (n) {
+      case "reset-expired":
+        setNoticeMsg(
+          "Link reset password sudah kadaluarsa. Silakan minta link baru."
+        );
+        break;
+      case "reset-invalid":
+        setNoticeMsg(
+          "Link reset password tidak valid. Silakan minta link baru."
+        );
+        break;
+      case "reset-required":
+        setNoticeMsg(
+          "Akses halaman reset dibatasi. Gunakan link reset password dari email."
+        );
+        break;
+      case "reset-success":
+        setNoticeMsg("Password berhasil diperbarui. Silakan login kembali.");
+        break;
+      default:
+        break;
+    }
+  }, [params]);
+
   return (
     <Paper
       withBorder
@@ -302,6 +332,17 @@ export function LoginForm() {
           Daftar di sini
         </Anchor>
       </Text>
+
+      {noticeMsg && (
+        <Alert
+          icon={<IconAlertCircle size="1rem" />}
+          color="blue"
+          mb="md"
+          variant="light"
+        >
+          {noticeMsg}
+        </Alert>
+      )}
 
       {loginError && (
         <Alert

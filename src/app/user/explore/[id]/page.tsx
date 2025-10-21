@@ -33,6 +33,11 @@ import {
   IconCalendar,
 } from "@tabler/icons-react";
 import Image from "next/image";
+import {
+  getCategoryLabel,
+  getCategoryColor,
+  getLevelLabel,
+} from "../../../../lib/labels";
 
 // Small utility helpers
 const formatPrice = (v: number | null) =>
@@ -208,7 +213,11 @@ export default function ExploreCourseDetailPage() {
                       fontSize: "4rem",
                     }}
                   >
-                    {course.category === "scratch" ? "🎨" : "🎮"}
+                    {course.category === "scratch"
+                      ? "🎨"
+                      : course.category === "roblox"
+                      ? "🎮"
+                      : "🤖"}
                   </Box>
                 )}
               </Box>
@@ -218,14 +227,14 @@ export default function ExploreCourseDetailPage() {
                 <div>
                   <Group gap="xs" mb="xs">
                     <Badge
-                      color={course.category === "scratch" ? "orange" : "cyan"}
+                      color={getCategoryColor(course.category)}
                       variant="filled"
                     >
-                      {course.category}
+                      {getCategoryLabel(course.category)}
                     </Badge>
                     {course.level && (
                       <Badge color={levelColor(course.level)} variant="light">
-                        {course.level}
+                        {getLevelLabel(course.level)}
                       </Badge>
                     )}
                   </Group>
@@ -570,7 +579,7 @@ export default function ExploreCourseDetailPage() {
                                   {lm.description}
                                 </Text>
                               )}
-                              {formattedDate && (
+                              {/* {formattedDate && (
                                 <Group gap="xs" mb={4}>
                                   <IconCalendar size={14} color="gray" />
                                   <Text size="xs" c="dimmed">
@@ -585,7 +594,7 @@ export default function ExploreCourseDetailPage() {
                                     {formattedTime} ({duration} menit)
                                   </Text>
                                 </Group>
-                              )}
+                              )} */}
                             </div>
                           </Group>
                           <Badge size="sm" variant="filled" color="teal">

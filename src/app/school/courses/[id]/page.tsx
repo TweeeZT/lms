@@ -43,7 +43,7 @@ import {
 } from "@tabler/icons-react";
 import { useAuth } from "../../../../hooks/useAuth";
 import Image from "next/image";
-import PrimeLoader from "../../../../components/PrimeLoader";
+import { getCategoryLabel, getLevelLabel } from "../../../../lib/labels";
 
 // Types
 type ModuleListItem = {
@@ -193,7 +193,7 @@ export default function CourseOverviewPage() {
 
   // Handle module click
   const handleModuleClick = (moduleId: string) => {
-    router.push(`/user/courses/${courseId}/modules/${moduleId}`);
+    router.push(`/school/courses/${courseId}/modules/${moduleId}`);
   };
 
   // Handle rating submit
@@ -387,12 +387,10 @@ export default function CourseOverviewPage() {
               </Text>
               <Group gap="md">
                 <Badge size="lg" color="yellow" variant="filled">
-                  {MODULE_LABELS[
-                    course?.category as keyof typeof MODULE_LABELS
-                  ] || course?.category}
+                  {getCategoryLabel(course?.category)}
                 </Badge>
                 <Badge size="lg" color="white" variant="outline">
-                  {course?.level}
+                  {getLevelLabel(course?.level)}
                 </Badge>
                 <Group gap={4}>
                   <IconStar size={16} color="gold" fill="gold" />

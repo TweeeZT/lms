@@ -192,16 +192,52 @@ export async function POST(req: NextRequest) {
         console.error("[school/checkout/confirm] Transaction error:", txError);
       }
     } else {
-      // Update existing transaction to completed. Prefer invoiceId when available.
-      const query = supabase
-        .from("transactions")
-        .update({ status: "completed" });
+      // Paid flow: update transaction to completed and set method from Xendit if possible
+      let methodFromXendit: string | null = null;
+      if (invoiceId && process.env.XENDIT_SECRET_KEY) {
+        try {
+          const invRes = await fetch(
+            `https://api.xendit.co/v2/invoices/${invoiceId}`,
+            {
+              headers: {
+                Authorization:
+                  "Basic " +
+                  Buffer.from(process.env.XENDIT_SECRET_KEY + ":").toString(
+                    "base64"
+                  ),
+              },
+              cache: "no-store",
+            }
+          );
+          if (invRes.ok) {
+            const data = (await invRes.json()) as {
+              payment_channel?: string;
+              bank_code?: string;
+              payment_method?: string;
+            };
+            methodFromXendit =
+              data.payment_channel ||
+              data.bank_code ||
+              data.payment_method ||
+              null;
+          }
+        } catch {}
+      }
+
+      const patch: Record<string, any> = { status: "completed" };
+      if (methodFromXendit) patch.method = methodFromXendit;
+
       let txUpdateError: any = null;
       if (invoiceId) {
-        const { error } = await query.eq("id", invoiceId);
+        const { error } = await supabase
+          .from("transactions")
+          .update(patch)
+          .eq("id", invoiceId);
         txUpdateError = error;
       } else {
-        const { error } = await query
+        const { error } = await supabase
+          .from("transactions")
+          .update(patch)
           .eq("user_id", schoolUserId)
           .eq("course_id", courseId)
           .eq("status", "pending");

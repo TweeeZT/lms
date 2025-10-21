@@ -1,5 +1,6 @@
 "use client";
 import { useAuth } from "@/hooks/useAuth";
+import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
 import {
   Box,
@@ -151,7 +152,9 @@ export default function SchoolStudentsPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/users/check?emailOrUsername=${encodeURIComponent(val.trim())}`);
+      const res = await fetch(
+        `/api/users/check?emailOrUsername=${encodeURIComponent(val.trim())}`
+      );
       const json = await res.json();
       if (res.ok && json.success && json.found) {
         setCheckedRole(json.user?.role || null);
@@ -242,19 +245,6 @@ export default function SchoolStudentsPage() {
             onChange={(e) => setSearch(e.currentTarget.value)}
             style={{ flex: 1 }}
           />
-          <Select
-            placeholder="Status"
-            data={[
-              { value: "", label: "Semua" },
-              { value: "accepted", label: "Diterima" },
-              { value: "pending", label: "Pending" },
-              { value: "rejected", label: "Ditolak" },
-            ]}
-            value={statusFilter}
-            onChange={(val) => setStatusFilter(val || "")}
-            style={{ width: 160 }}
-            clearable
-          />
         </Group>
       </Paper>
 
@@ -278,60 +268,67 @@ export default function SchoolStudentsPage() {
       {!loading && !error && (
         <>
           <Paper withBorder radius="md" style={{ overflow: "hidden" }}>
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Nama</Table.Th>
-                  <Table.Th>Email</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th>Tanggal Ditambahkan</Table.Th>
-                  <Table.Th>Aksi</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {students.length === 0 && (
+            <div style={{ width: "100%", overflowX: "auto" }}>
+              <Table striped highlightOnHover miw={800}>
+                <Table.Thead>
                   <Table.Tr>
-                    <Table.Td
-                      colSpan={5}
-                      style={{ textAlign: "center", padding: 40 }}
-                    >
-                      <Text c="dimmed">Belum ada siswa</Text>
-                    </Table.Td>
+                    <Table.Th>Nama</Table.Th>
+                    <Table.Th>Email</Table.Th>
+
+                    <Table.Th>Tanggal Ditambahkan</Table.Th>
+                    <Table.Th>Aksi</Table.Th>
                   </Table.Tr>
-                )}
-                {students.map((s) => (
-                  <Table.Tr key={s.id}>
-                    <Table.Td>
-                      <Group gap="xs" align="center">
-                        {/* show avatar when available, otherwise use IconUser initials */}
-                        {s.avatar ? (
-                          <img src={s.avatar} alt={s.name} style={{ width: 28, height: 28, borderRadius: 999 }} />
-                        ) : (
-                          <IconUser size={18} />
-                        )}
-                        <Text>{s.name}</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>{s.email}</Table.Td>
-                    <Table.Td>{statusBadge(s.status)}</Table.Td>
-                    <Table.Td>
-                      {new Date(s.invited_at).toLocaleDateString("id-ID")}
-                    </Table.Td>
-                    <Table.Td>
-                      <Button
-                        size="xs"
-                        color="red"
-                        variant="light"
-                        leftSection={<IconTrash size={14} />}
-                        onClick={() => setDeleteId(s.id)}
+                </Table.Thead>
+                <Table.Tbody>
+                  {students.length === 0 && (
+                    <Table.Tr>
+                      <Table.Td
+                        colSpan={5}
+                        style={{ textAlign: "center", padding: 40 }}
                       >
-                        Hapus
-                      </Button>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+                        <Text c="dimmed">Belum ada siswa</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
+                  {students.map((s) => (
+                    <Table.Tr key={s.id}>
+                      <Table.Td>
+                        <Group gap="xs" align="center">
+                          {/* show avatar when available, otherwise use IconUser initials */}
+                          {s.avatar ? (
+                            <Image
+                              src={s.avatar}
+                              alt={s.name}
+                              width={28}
+                              height={28}
+                              style={{ borderRadius: 999, objectFit: "cover" }}
+                            />
+                          ) : (
+                            <IconUser size={18} />
+                          )}
+                          <Text>{s.name}</Text>
+                        </Group>
+                      </Table.Td>
+                      <Table.Td>{s.email}</Table.Td>
+                      <Table.Td>
+                        {new Date(s.invited_at).toLocaleDateString("id-ID")}
+                      </Table.Td>
+                      <Table.Td>
+                        <Button
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          leftSection={<IconTrash size={14} />}
+                          onClick={() => setDeleteId(s.id)}
+                        >
+                          Hapus
+                        </Button>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </div>
           </Paper>
 
           {totalPages > 1 && (

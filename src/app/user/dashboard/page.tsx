@@ -1,10 +1,11 @@
 "use client";
 
+import React from 'react';
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import dayjs from "dayjs";
 import "dayjs/locale/id";
-dayjs.locale("id");
-import Link from "next/link";
+
 import {
   Container,
   Title,
@@ -24,8 +25,9 @@ import {
   ActionIcon,
   ScrollArea,
   Divider,
-  Progress as MantineProgress,
   Paper,
+  Progress as MantineProgress,
+  Box,
 } from "@mantine/core";
 import {
   IconBook,
@@ -39,18 +41,20 @@ import {
   IconClock,
   IconSum,
 } from "@tabler/icons-react";
+import { Calendar, DateInput, DatesProvider } from "@mantine/dates";
 import { useAuth } from "../../../hooks/useAuth";
 
-// StatCard component (kept minimal)
-function StatCard({
-  label,
-  value,
-  Icon,
-}: {
+// Set locale dan custom weekday labels
+dayjs.locale("id");
+const weekdayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+interface StatCardProps {
   label: string;
   value: React.ReactNode;
   Icon: React.ComponentType<{ size?: number; color?: string }>;
-}) {
+}
+
+function StatCard({ label, value, Icon }: StatCardProps) {
   return (
     <Card
       withBorder
@@ -297,11 +301,12 @@ export default function UserDashboard() {
       const json = await res.json();
       if (!res.ok || !json.success)
         throw new Error(json.error || "Gagal memuat jadwal");
-      // Mapping agar field start diisi dari startDate (API)
+      // Mapping agar field start diisi dari startDate (API),
+      // dan end diisi dari endDate (atau end, atau fallback ke start jika null)
       const mapped = (json.events || []).map((ev: any) => ({
         ...ev,
         start: ev.startDate || ev.start,
-        end: ev.endDate || ev.end,
+        end: ev.endDate || ev.end || ev.start,
       }));
       setScheduleEvents(mapped);
       return mapped;
@@ -341,10 +346,8 @@ export default function UserDashboard() {
       const json = await res.json();
       if (!res.ok || !json.success)
         throw new Error(json.error || "Gagal menambah jadwal");
-      // Optimistic append (API returns inserted row(s))
-      const inserted: ScheduleEvent | undefined =
-        json.event || json.events?.[0];
-      if (inserted) setScheduleEvents((prev) => [...prev, inserted]);
+      // Setelah tambah, langsung refresh data jadwal dari server
+      await fetchEvents();
       setAddOpen(false);
       resetForm();
     } catch (e: unknown) {
@@ -353,6 +356,8 @@ export default function UserDashboard() {
   };
 
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDateEvents, setSelectedDateEvents] = useState<ScheduleEvent[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState<ScheduleEvent["category"]>("belajar");
@@ -393,12 +398,11 @@ export default function UserDashboard() {
       if (!res.ok || !json.success) throw new Error(json.error || "Gagal update jadwal");
       setEditOpen(false);
       // Fetch ulang data jadwal agar selalu up-to-date
-      fetchEvents().then((mapped) => {
-        if (mapped && selectedEvent) {
-          const updated = mapped.find((ev: ScheduleEvent) => ev.id === selectedEvent.id);
-          if (updated) setSelectedEvent(updated);
-        }
-      });
+      const mapped = await fetchEvents();
+      if (mapped && selectedEvent) {
+        const updated = mapped.find((ev: ScheduleEvent) => ev.id === selectedEvent.id);
+        if (updated) setSelectedEvent(updated);
+      }
     } catch (e) {
       // error tetap tidak ditampilkan sebagai notif
     }
@@ -424,12 +428,13 @@ export default function UserDashboard() {
   };
 
   return (
-    <Container size="xl">
-      <Stack gap="xl">
-        <div>
-          <Title order={1} mb="md">
-            Dashboard Belajar
-          </Title>
+    <DatesProvider settings={{ locale: 'id', firstDayOfWeek: 0, weekendDays: [0] }}>
+      <Container size="xl">
+        <Stack gap="xl">
+          <div>
+            <Title order={1} mb="md">
+              Dashboard Belajar
+            </Title>
           <Text size="lg" c="dimmed">
             {data?.user?.fullName
               ? `Selamat datang kembali, ${data.user.fullName}!`
@@ -599,109 +604,198 @@ export default function UserDashboard() {
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, lg: 4 }}>
-            <Card padding="lg" radius="md" style={{ height: "100%" }}>
-              <Group justify="space-between" mb={4} align="center">
-                <Group gap={6}>
-                  <IconCalendarPlus size={18} />
-                  <Title order={4}>Jadwal Belajar</Title>
-                </Group>
-                <Group gap={4}>
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() =>
-                      setCalendarMonth((m) => m.subtract(1, "month"))
-                    }
-                    aria-label="prev"
-                  >
-                    <IconChevronLeft size={16} />
-                  </ActionIcon>
-                  <Text size="sm" fw={600}>
-                    {calendarMonth.locale("id").format("MMMM YYYY")}
-                  </Text>
-                  <ActionIcon
-                    size="sm"
-                    variant="subtle"
-                    onClick={() => setCalendarMonth((m) => m.add(1, "month"))}
-                    aria-label="next"
-                  >
-                    <IconChevronRight size={16} />
-                  </ActionIcon>
-                  <Button
-                    size="xs"
-                    variant="light"
-                    onClick={() => setAddOpen(true)}
-                  >
-                    Tambah
-                  </Button>
-                </Group>
-              </Group>
-              <Divider my={8} />
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7,1fr)",
-                  gap: 4,
-                  fontSize: 11,
-                }}
-              >
-                {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((d) => (
-                  <div key={d} style={{ textAlign: "center", fontWeight: 600 }}>
-                    {d}
-                  </div>
-                ))}
-                {calendarCells.map((cell, i) => {
-                  const dateStr = cell.date
-                    ? cell.date.format("YYYY-MM-DD")
-                    : "";
-                  const evs = dateStr ? eventsByDay[dateStr] || [] : [];
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        minHeight: 30,
-                        border: "1px solid var(--border-color,#e3e6ea)",
-                        borderRadius: 6,
-                        padding: 4,
-                        display: "flex",
-                        flexDirection: "column",
-                        background:
-                          cell.date && cell.date.isSame(dayjs(), "day")
-                            ? "rgba(30,55,105,0.08)"
-                            : "#fff",
-                      }}
+            <Card p={0} radius="md" style={{ height: '100%' }}>
+              <Stack gap={0}>
+                <Box px="md" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+                  <Group justify="space-between" align="center">
+                    <Group gap={6} align="center">
+                      <IconCalendarPlus size={16} style={{ color: 'var(--mantine-color-blue-6)' }} />
+                      <Text fw={600} size="sm">Jadwal Belajar</Text>
+                    </Group>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="blue"
+                      leftSection={<IconCalendarPlus size={14} />}
+                      onClick={() => setAddOpen(true)}
+                      px="xs"
                     >
-                      <div
+                      Tambah
+                    </Button>
+                  </Group>
+                </Box>
+                <Box px="md" py="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+                  <Group justify="center" align="center">
+                    <ActionIcon
+                      size="sm"
+                      variant="subtle"
+                      onClick={() => setCalendarMonth((m) => m.subtract(1, "month"))}
+                    >
+                      <IconChevronLeft size={16} />
+                    </ActionIcon>
+                    <Text size="sm" fw={500} style={{ width: '80px', textAlign: 'center' }}>
+                      {calendarMonth.locale("id").format("MMM YYYY")}
+                    </Text>
+                    <ActionIcon
+                      size="sm"
+                      variant="subtle"
+                      onClick={() => setCalendarMonth((m) => m.add(1, "month"))}
+                    >
+                      <IconChevronRight size={16} />
+                    </ActionIcon>
+                  </Group>
+                </Box>
+              </Stack>
+              <Divider />
+              <Box p="md">
+                <Calendar
+                  defaultDate={calendarMonth.toDate()}
+                  onDateChange={(date) => setCalendarMonth(dayjs(date))}
+                  getDayProps={(date) => ({
+                    style: { height: '32px' }
+                  })}
+                  size="xs"
+                  firstDayOfWeek={1}
+                  renderDay={(date) => {
+                    const d = dayjs(date);
+                    const dateStr = d.format("YYYY-MM-DD");
+                    const evs = eventsByDay[dateStr] || [];
+                    const isToday = d.isSame(dayjs(), 'day');
+                    
+                    return (
+                      <Box 
+                        p={0}
                         style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          marginBottom: 2,
+                          cursor: evs.length > 0 ? 'pointer' : 'default',
+                          height: '32px',
+                          backgroundColor: isToday ? 'var(--mantine-color-blue-0)' : undefined,
+                          transition: 'background-color 0.2s',
+                          '&:hover': evs.length > 0 ? {
+                            backgroundColor: 'var(--mantine-color-gray-0)'
+                          } : undefined,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        onClick={() => {
+                          if (evs.length > 0) {
+                            setSelectedDate(d.toDate());
+                            setSelectedDateEvents(evs);
+                          }
                         }}
                       >
-                        {cell.date ? cell.date.date() : ""}
-                      </div>
-                      <ScrollArea style={{ flex: 1 }} type="never">
-                        <Stack gap={2}>
-                          {evs.map((ev) => (
-                            <Badge
-                              key={ev.id}
-                              size="xs"
-                              radius="sm"
-                              color={categoryColor[ev.category]}
-                              variant="filled"
-                              style={{ cursor: "pointer" }}
-                              title={ev.title}
-                              onClick={() => setSelectedEvent(ev)}
-                            >
-                              {ev.title}
-                            </Badge>
-                          ))}
+                        <Stack gap={2} align="center" justify="center" style={{ height: '100%', padding: '4px 0' }}>
+                          <Text 
+                            size="xs"
+                            fw={500}
+                            style={{
+                              color: isToday ? 'var(--mantine-color-blue-7)' : undefined,
+                            }}
+                          >
+                            {d.date()}
+                          </Text>
+                          {evs.length > 0 && (
+                            <Group gap={3} justify="center">
+                              {Object.entries(
+                                evs.reduce((acc: Record<string, number>, ev: ScheduleEvent) => {
+                                  acc[ev.category] = (acc[ev.category] || 0) + 1;
+                                  return acc;
+                                }, {} as Record<string, number>)
+                              ).slice(0, 3).map(([category, count]: [string, number]) => (
+                                <Box 
+                                  key={category}
+                                  style={{ 
+                                    width: 5, 
+                                    height: 5, 
+                                    borderRadius: '50%',
+                                    backgroundColor: `var(--mantine-color-${categoryColor[category as ScheduleEvent["category"]]}-6)`,
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                  }} 
+                                  title={`${count} jadwal ${category}`}
+                                />
+                              ))}
+                            </Group>
+                          )}
                         </Stack>
-                      </ScrollArea>
-                    </div>
-                  );
-                })}
-              </div>
+                      </Box>
+                    );
+                  }}
+                  weekdayFormat={(date) => weekdayLabels[new Date(date).getDay()]}
+                  styles={(theme) => ({
+                    weekday: {
+                      fontSize: 11,
+                      padding: '8px 0',
+                      fontWeight: 600,
+                      color: theme.colors.gray[6],
+                      textAlign: 'center',
+                      backgroundColor: theme.colors.gray[0],
+                      borderBottom: `1px solid ${theme.colors.gray[2]}`
+                    },
+                    monthCell: {
+                      border: `1px solid ${theme.colors.gray[2]}`,
+                      borderRadius: 0,
+                      padding: 0,
+                      maxWidth: '100%'
+                    },
+                    calendarHeader: {
+                      display: 'none'
+                    },
+                    monthThead: {
+                      marginTop: 0
+                    },
+                    cell: {
+                      padding: 0,
+                      borderRadius: 0,
+                      minHeight: '32px !important',
+                      height: '32px !important',
+                      '&[data-weekend]': {
+                        color: theme.colors.red[6]
+                      },
+                      '&[data-outside]': {
+                        color: theme.colors.gray[5]
+                      }
+                    },
+                    month: {
+                      borderRadius: 0,
+                      backgroundColor: 'white',
+                      width: '100%'
+                    }
+                  })}
+                  classNames={{
+                    day: "mantine-calendar-day-cell",
+                  }}
+                />
+                <style>{`
+                  .mantine-calendar-day-cell {
+                    min-height: 60px;
+                    padding: 0;
+                  }
+                  .mantine-Calendar-root {
+                    width: 100%;
+                  }
+                  .mantine-Calendar-weekday {
+                    font-size: 11px;
+                    padding: 6px 0;
+                    font-weight: 600;
+                    color: var(--mantine-color-gray-6);
+                    background-color: var(--mantine-color-gray-0);
+                    border-bottom: 1px solid var(--mantine-color-gray-2);
+                  }
+                  .mantine-Calendar-month {
+                    border: 1px solid var(--mantine-color-gray-2);
+                  }
+                  .mantine-Calendar-day[data-weekend] {
+                    color: var(--mantine-color-red-6);
+                  }
+                  .mantine-Calendar-day[data-outside] {
+                    color: var(--mantine-color-gray-5);
+                  }
+                  .mantine-Calendar-day[data-selected] {
+                    background-color: var(--mantine-color-blue-0);
+                  }
+                `}</style>
+              </Box>
             </Card>
           </Grid.Col>
         </Grid>
@@ -826,17 +920,36 @@ export default function UserDashboard() {
             placeholder="Catatan tambahan"
           />
           <Group grow>
-            <TextInput
-              type="date"
+            <DateInput
               label="Mulai"
-              value={evStart}
-              onChange={(e) => setEvStart(e.currentTarget.value)}
+              value={evStart ? new Date(evStart) : null}
+              onChange={(date) => setEvStart(date ? dayjs(date).format("YYYY-MM-DD") : "")}
+              placeholder="Pilih tanggal mulai"
+              clearable
+              weekdayFormat="ddd"
+              firstDayOfWeek={1}
+              locale="id"
+              styles={(theme) => ({
+                weekday: {
+                  fontSize: '0.875rem'
+                }
+              })}
             />
-            <TextInput
-              type="date"
+            <DateInput
               label="Selesai (opsional)"
-              value={evEnd}
-              onChange={(e) => setEvEnd(e.currentTarget.value)}
+              value={evEnd ? new Date(evEnd) : null}
+              onChange={(date) => setEvEnd(date ? dayjs(date).format("YYYY-MM-DD") : "")}
+              placeholder="Pilih tanggal selesai"
+              clearable
+              minDate={evStart ? new Date(evStart) : undefined}
+              weekdayFormat="ddd"
+              firstDayOfWeek={1}
+              locale="id"
+              styles={(theme) => ({
+                weekday: {
+                  fontSize: '0.875rem'
+                }
+              })}
             />
           </Group>
           <Button onClick={addEvent} disabled={!evTitle}>
@@ -876,6 +989,59 @@ export default function UserDashboard() {
         )}
       </Modal>
 
+      {/* Modal Daftar Jadwal per Tanggal */}
+      <Modal
+        opened={!!selectedDate}
+        onClose={() => {
+          setSelectedDate(null);
+          setSelectedDateEvents([]);
+        }}
+        title={selectedDate ? `Jadwal: ${dayjs(selectedDate).locale("id").format("DD MMMM YYYY")}` : ""}
+        centered
+        size="sm"
+      >
+        <Stack gap="md">
+          {selectedDateEvents.length > 0 ? (
+            selectedDateEvents.map((ev) => (
+              <Paper key={ev.id} p="sm" withBorder>
+                <Stack gap="xs">
+                  <Group justify="space-between">
+                    <Badge 
+                      color={categoryColor[ev.category]}
+                      variant="light"
+                      size="sm"
+                    >
+                      {ev.category}
+                    </Badge>
+                    <ActionIcon 
+                      size="sm" 
+                      variant="subtle"
+                      onClick={() => {
+                        setSelectedEvent(ev);
+                        setSelectedDate(null);
+                        setSelectedDateEvents([]);
+                      }}
+                    >
+                      <IconListDetails size={16} />
+                    </ActionIcon>
+                  </Group>
+                  <Text size="sm" fw={500}>{ev.title}</Text>
+                  {ev.description && (
+                    <Text size="xs" c="dimmed" lineClamp={2}>
+                      {ev.description}
+                    </Text>
+                  )}
+                </Stack>
+              </Paper>
+            ))
+          ) : (
+            <Text c="dimmed" size="sm" ta="center">
+              Tidak ada jadwal pada tanggal ini
+            </Text>
+          )}
+        </Stack>
+      </Modal>
+
       {/* Modal Edit Jadwal */}
       <Modal
         opened={!!editOpen}
@@ -905,17 +1071,36 @@ export default function UserDashboard() {
               placeholder="Catatan tambahan"
             />
             <Group grow>
-              <TextInput
-                type="date"
+              <DateInput
                 label="Mulai"
-                value={editStart}
-                onChange={(e) => setEditStart(e.currentTarget.value)}
+                value={editStart ? new Date(editStart) : null}
+                onChange={(date) => setEditStart(date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                placeholder="Pilih tanggal mulai"
+                clearable
+                weekdayFormat="ddd"
+                firstDayOfWeek={1}
+                locale="id"
+                styles={(theme) => ({
+                  weekday: {
+                    fontSize: '0.875rem'
+                  }
+                })}
               />
-              <TextInput
-                type="date"
+              <DateInput
                 label="Selesai (opsional)"
-                value={editEnd}
-                onChange={(e) => setEditEnd(e.currentTarget.value)}
+                value={editEnd ? new Date(editEnd) : null}
+                onChange={(date) => setEditEnd(date ? dayjs(date).format("YYYY-MM-DD") : "")}
+                placeholder="Pilih tanggal selesai"
+                clearable
+                minDate={editStart ? new Date(editStart) : undefined}
+                weekdayFormat="ddd"
+                firstDayOfWeek={1}
+                locale="id"
+                styles={(theme) => ({
+                  weekday: {
+                    fontSize: '0.875rem'
+                  }
+                })}
               />
             </Group>
             <Group justify="flex-end">
@@ -959,6 +1144,7 @@ export default function UserDashboard() {
           {eventsError}
         </Alert>
       )}
-    </Container>
+      </Container>
+    </DatesProvider>
   );
 }

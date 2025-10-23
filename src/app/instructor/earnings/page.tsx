@@ -18,6 +18,7 @@ import {
   Divider,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
+import "dayjs/locale/id";
 import {
   IconWallet,
   IconArrowsSort,

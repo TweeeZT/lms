@@ -318,6 +318,8 @@ export default function AdminCourseDetailPage() {
                       color={
                         (course.category || "scratch") === "scratch"
                           ? "orange"
+                          : (course.category || "robotics") === "robotics"
+                          ? "red"
                           : "cyan"
                       }
                     >

@@ -642,14 +642,6 @@ export default function AdminEditModulePage({
               onChange={(e) => setDescription(e.currentTarget.value)}
               minRows={3}
             />
-            <NumberInput
-              label="Urutan"
-              value={orderIndex}
-              onChange={(val) =>
-                setOrderIndex(typeof val === "number" ? val : undefined)
-              }
-              min={0}
-            />
             <Radio.Group
               name="publish"
               label="Status"

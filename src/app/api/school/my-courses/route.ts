@@ -88,6 +88,37 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const extractInstructor = (courseSrc: any) => {
+      const candidate =
+        courseSrc?.instructor ??
+        courseSrc?.users ??
+        courseSrc?.user ??
+        courseSrc?.instructor_user ??
+        null;
+
+      if (!candidate) return null;
+
+      const mapUser = (u: any) => ({
+        id: (u?.id ?? u?.user_id ?? null) as string | null,
+        fullName: (u?.full_name ??
+          u?.fullName ??
+          u?.name ??
+          u?.display_name ??
+          "") as string,
+        avatar: (u?.avatar ?? u?.avatar_url ?? null) as string | null,
+      });
+
+      if (Array.isArray(candidate) && candidate.length > 0) {
+        return mapUser(candidate[0]);
+      }
+
+      if (typeof candidate === "object") {
+        return mapUser(candidate);
+      }
+
+      return null;
+    };
+
     // Transform data
     const items = (data || []).map((row: any) => ({
       enrollmentId: row.id,
@@ -102,17 +133,7 @@ export async function GET(req: NextRequest) {
       course: row.courses
         ? (() => {
             const courseSrc = row.courses;
-            // normalize instructor from joined users (supabase returns array for relation)
-            const usersJoin = courseSrc.users;
-            let instructor = null;
-            if (Array.isArray(usersJoin) && usersJoin.length > 0) {
-              const u = usersJoin[0];
-              instructor = {
-                id: u?.id ?? null,
-                fullName: u?.full_name ?? null,
-                avatar: u?.avatar ?? null,
-              };
-            }
+            const instructor = extractInstructor(courseSrc);
 
             return {
               id: courseSrc.id,
@@ -121,13 +142,21 @@ export async function GET(req: NextRequest) {
               thumbnail: courseSrc.thumbnail,
               category: courseSrc.category,
               price: courseSrc.price != null ? Number(courseSrc.price) : null,
-              durationMin: courseSrc.duration_min != null ? Number(courseSrc.duration_min) : 0,
+              durationMin:
+                courseSrc.duration_min != null
+                  ? Number(courseSrc.duration_min)
+                  : 0,
               level: courseSrc.level,
               // Use published modules count (computed from modules table)
               totalModules: modulesCountByCourse[courseSrc.id] ?? 0,
-              enrolledCount: courseSrc.enrolled_count != null ? Number(courseSrc.enrolled_count) : 0,
-              rating: courseSrc.rating != null ? Number(courseSrc.rating) : null,
-              points: courseSrc.points != null ? Number(courseSrc.points) : null,
+              enrolledCount:
+                courseSrc.enrolled_count != null
+                  ? Number(courseSrc.enrolled_count)
+                  : 0,
+              rating:
+                courseSrc.rating != null ? Number(courseSrc.rating) : null,
+              points:
+                courseSrc.points != null ? Number(courseSrc.points) : null,
               instructor,
             };
           })()

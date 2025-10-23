@@ -44,6 +44,14 @@ const formatPrice = (v: number | null) =>
   `Rp ${(v || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 const levelColor = (level?: string | null) =>
   level === "beginner" ? "green" : level === "intermediate" ? "yellow" : "red";
+const formatDuration = (durationMin: number | null) => {
+  if (!durationMin || durationMin <= 0) return "-";
+  const hours = Math.floor(durationMin / 60);
+  const mins = durationMin % 60;
+  if (hours === 0) return `${mins} menit`;
+  if (mins === 0) return `${hours} jam`;
+  return `${hours} jam ${mins} menit`;
+};
 
 interface PublicModule {
   id: string;
@@ -258,7 +266,9 @@ export default function ExploreCourseDetailPage() {
                     </Group>
                     <Group gap={4}>
                       <IconClock size={16} />
-                      <Text size="sm">{course.durationMin ?? 0} mnt</Text>
+                      <Text size="sm">
+                        {formatDuration(course.durationMin)}
+                      </Text>
                     </Group>
                     <Group gap={4}>
                       <IconSchool size={16} />

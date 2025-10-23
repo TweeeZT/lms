@@ -34,6 +34,7 @@ import {
   IconCalendar,
 } from "@tabler/icons-react";
 import { DatePickerInput } from "@mantine/dates";
+import "dayjs/locale/id";
 import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../../hooks/useAuth";
 
@@ -207,17 +208,18 @@ export default function AdminEarningsPage() {
     const dt = typeof d === "string" ? new Date(d) : d;
     const day = dt.getDate().toString().padStart(2, "0");
     const monthNames = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
       "Mei",
-      "Jun",
-      "Agt",
-      "Sep",
-      "Okt",
-      "Nov",
-      "Des",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
     ];
     const dayNames = [
       "Minggu",
@@ -231,8 +233,7 @@ export default function AdminEarningsPage() {
     const month = monthNames[dt.getMonth()];
     const year = dt.getFullYear();
     const dayName = dayNames[dt.getDay()];
-    // Format: Nama Hari, tanggal bulan tahun (e.g., Kamis, 16 Okt 2025)
-    return `${dayName} ${day} ${month} ${year}`;
+    return `${dayName}, ${day} ${month} ${year}`;
   };
 
   const fetchData = useCallback(
@@ -871,6 +872,8 @@ export default function AdminEarningsPage() {
                 onChange={(val) => setStartDate(val as Date | null)}
                 clearable
                 leftSection={<IconCalendar size={16} />}
+                locale="id"
+                valueFormat="DD MMMM YYYY"
               />
               <DatePickerInput
                 placeholder="Tanggal Akhir"
@@ -878,6 +881,8 @@ export default function AdminEarningsPage() {
                 onChange={(val) => setEndDate(val as Date | null)}
                 clearable
                 leftSection={<IconCalendar size={16} />}
+                locale="id"
+                valueFormat="DD MMMM YYYY"
               />
             </Group>
             {(startDate || endDate || search) && (

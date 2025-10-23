@@ -35,9 +35,17 @@ export async function GET(
       { status: 500 }
     );
 
-  // Progress
+  // Check user role (school or regular user)
+  const { data: userRoleData } = await supabaseAdmin
+    .from("users")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  const isSchool = userRoleData?.role === "school";
+
+  // Progress - check appropriate table based on role
   const { data: upRows } = await supabaseAdmin
-    .from("user_progress")
+    .from(isSchool ? "school_progress" : "user_progress")
     .select("id, completed_modules, current_module_id")
     .eq("user_id", userId)
     .eq("course_id", courseId)

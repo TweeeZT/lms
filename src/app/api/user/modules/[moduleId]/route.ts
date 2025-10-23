@@ -35,6 +35,17 @@ export async function GET(
     .eq("module_id", moduleId)
     .maybeSingle();
 
+  // For overview modules, also fetch from module_summary
+  let summaryText: string | null = null;
+  if (mod.module_kind === "overview") {
+    const { data: summary } = await supabaseAdmin
+      .from("module_summary")
+      .select("text_content")
+      .eq("module_id", moduleId)
+      .maybeSingle();
+    summaryText = summary?.text_content || null;
+  }
+
   // Quiz (optional) with questions
   const { data: quiz } = await supabaseAdmin
     .from("module_quizzes")
@@ -286,6 +297,11 @@ export async function GET(
             filePath: content.file_path,
             text: content.text_content,
           }
+        : mod.module_kind === "overview" && summaryText
+        ? {
+            type: "text",
+            text: summaryText,
+          }
         : null,
       quiz: quiz
         ? {
@@ -366,13 +382,23 @@ export async function POST(
 
   // Helper to load / init progress row
   const loadProgress = async () => {
+    // First, check user role to determine which table to use
+    const { data: userRow } = await supabaseAdmin
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const isSchool = userRow?.role === "school";
+    const tableName = isSchool ? "school_progress" : "user_progress";
+
     const { data: prog, error: progErr } = await supabaseAdmin
-      .from("user_progress")
+      .from(tableName)
       .select("id, completed_modules, current_module_id")
       .eq("user_id", userId)
       .eq("course_id", courseId)
       .maybeSingle();
-    if (progErr) return { error: progErr } as const;
+    if (progErr) return { error: progErr, isSchool } as const;
     const completed = Array.isArray(prog?.completed_modules)
       ? (prog!.completed_modules as string[])
       : (() => {
@@ -384,7 +410,7 @@ export async function POST(
             return [] as string[];
           }
         })();
-    return { prog, completed } as const;
+    return { prog, completed, isSchool } as const;
   };
 
   // Action: complete (generic / auto) - only for non-quiz, non-assignment content (plain materi text/link/file/video/pdf)
@@ -410,7 +436,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    const { prog, completed, error } = await loadProgress();
+    const { prog, completed, error, isSchool } = await loadProgress();
     if (error)
       return NextResponse.json(
         { success: false, error: error.message },
@@ -450,68 +476,72 @@ export async function POST(
 
       const coursePoints = course?.points || 100; // Default to 100 points
 
-      // Award points to student
-      try {
-        const { data: student, error: studentErr } = await supabaseAdmin
-          .from("students")
-          .select("points")
-          .eq("user_id", userId)
-          .maybeSingle();
+      // Award points to student (only for non-school users)
+      if (!isSchool) {
+        try {
+          const { data: student, error: studentErr } = await supabaseAdmin
+            .from("students")
+            .select("points")
+            .eq("user_id", userId)
+            .maybeSingle();
 
-        if (studentErr && studentErr.code !== "PGRST116") {
-          // Log error but don't fail the completion
-          console.error("Error fetching student:", studentErr);
-        } else {
-          const currentPoints = student?.points || 0;
-          const newPoints = currentPoints + coursePoints;
-
-          if (student) {
-            // Update existing student record
-            await supabaseAdmin
-              .from("students")
-              .update({ points: newPoints })
-              .eq("user_id", userId);
+          if (studentErr && studentErr.code !== "PGRST116") {
+            // Log error but don't fail the completion
+            console.error("Error fetching student:", studentErr);
           } else {
-            // Create new student record
-            await supabaseAdmin.from("students").insert({
-              user_id: userId,
-              points: coursePoints,
-              xp: 0,
-            });
+            const currentPoints = student?.points || 0;
+            const newPoints = currentPoints + coursePoints;
+
+            if (student) {
+              // Update existing student record
+              await supabaseAdmin
+                .from("students")
+                .update({ points: newPoints })
+                .eq("user_id", userId);
+            } else {
+              // Create new student record
+              await supabaseAdmin.from("students").insert({
+                user_id: userId,
+                points: coursePoints,
+                xp: 0,
+              });
+            }
+
+            pointsAwarded = coursePoints;
           }
-
-          pointsAwarded = coursePoints;
+        } catch (pointsErr) {
+          console.error("Error awarding points:", pointsErr);
+          // Don't fail the completion if points fail
         }
-      } catch (pointsErr) {
-        console.error("Error awarding points:", pointsErr);
-        // Don't fail the completion if points fail
-      }
 
-      // Check and generate certificate if not exists
-      try {
-        const { data: existingCert, error: certCheckErr } = await supabaseAdmin
-          .from("certificates")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("course_id", courseId)
-          .maybeSingle();
+        // Check and generate certificate if not exists
+        try {
+          const { data: existingCert, error: certCheckErr } =
+            await supabaseAdmin
+              .from("certificates")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("course_id", courseId)
+              .maybeSingle();
 
-        if (certCheckErr && certCheckErr.code !== "PGRST116") {
-          console.error("Error checking certificate:", certCheckErr);
-        } else if (!existingCert) {
-          // No certificate exists, mark that it should be generated
-          certificateGenerated = true; // Flag for frontend to show certificate is available
+          if (certCheckErr && certCheckErr.code !== "PGRST116") {
+            console.error("Error checking certificate:", certCheckErr);
+          } else if (!existingCert) {
+            // No certificate exists, mark that it should be generated
+            certificateGenerated = true; // Flag for frontend to show certificate is available
+          }
+        } catch (certErr) {
+          console.error("Error in certificate generation process:", certErr);
+          // Don't fail course completion if certificate process fails
         }
-      } catch (certErr) {
-        console.error("Error in certificate generation process:", certErr);
-        // Don't fail course completion if certificate process fails
       }
     }
 
-    // Insert or update (avoid relying on upsert + onConflict uniqueness)
+    // Insert or update - use correct table based on user role
+    const tableName = isSchool ? "school_progress" : "user_progress";
     if (prog?.id) {
       const { error: updErr } = await supabaseAdmin
-        .from("user_progress")
+        .from(tableName)
         .update({
           completed_modules: updated,
           progress_percentage: progressPct,
@@ -526,17 +556,15 @@ export async function POST(
           { status: 500 }
         );
     } else {
-      const newId = `up-${randomUUID()}`;
-      const { error: insErr } = await supabaseAdmin
-        .from("user_progress")
-        .insert({
-          id: newId,
-          user_id: userId,
-          course_id: courseId,
-          completed_modules: updated,
-          current_module_id: moduleId, // Set current module to the one just completed
-          progress_percentage: progressPct,
-        });
+      const newId = `${isSchool ? "sp" : "up"}-${randomUUID()}`;
+      const { error: insErr } = await supabaseAdmin.from(tableName).insert({
+        id: newId,
+        user_id: userId,
+        course_id: courseId,
+        completed_modules: updated,
+        current_module_id: moduleId, // Set current module to the one just completed
+        progress_percentage: progressPct,
+      });
       if (insErr)
         return NextResponse.json(
           { success: false, error: insErr.message },

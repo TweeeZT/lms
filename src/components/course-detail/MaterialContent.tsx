@@ -55,6 +55,7 @@ export default function MaterialContent({
   if (content.type === "link" && content.url) {
     const url = content.url;
     const isYoutube = url.includes("youtube.com") || url.includes("youtu.be");
+    const isGoogleDrive = url.includes("drive.google.com");
 
     if (isYoutube) {
       let embedUrl = url;
@@ -104,7 +105,53 @@ export default function MaterialContent({
       );
     }
 
-    // Non-YouTube: iframe + external link
+    // Google Drive PDF/Document
+    if (isGoogleDrive) {
+      let embedUrl = url;
+
+      // Convert Google Drive share link to embed preview
+      if (url.includes("/file/d/")) {
+        const fileId = url.split("/file/d/")[1]?.split("/")[0];
+        embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+      } else if (url.includes("id=")) {
+        const fileId = url.split("id=")[1]?.split("&")[0];
+        embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+      }
+
+      return (
+        <Card withBorder p="lg" radius="md">
+          <Group gap="xs" mb="md">
+            <IconFileText size={20} color="var(--primary-color)" />
+            <Text fw={600} size="lg">
+              Materi Dokumen
+            </Text>
+          </Group>
+          <div
+            style={{
+              width: "100%",
+              height: 700,
+              border: "1px solid var(--border-color)",
+              borderRadius: 8,
+              overflow: "hidden",
+            }}
+          >
+            <iframe
+              src={embedUrl}
+              title="Google Drive Document"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: 0,
+              }}
+              onLoad={markCompleteAuto}
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            />
+          </div>
+        </Card>
+      );
+    }
+
+    // Non-YouTube, Non-Google Drive: iframe + external link
     return (
       <Card withBorder p="lg" radius="md">
         <Group gap="xs" mb="md">
@@ -132,24 +179,14 @@ export default function MaterialContent({
               border: 0,
             }}
             onLoad={markCompleteAuto}
+            sandbox="allow-same-origin allow-scripts allow-forms"
           />
         </div>
-        <Button
-          component="a"
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="light"
-          leftSection={<IconExternalLink size={16} />}
-          fullWidth
-        >
-          Buka di Tab Baru
-        </Button>
       </Card>
     );
   }
 
-  // PDF/File Content
+  // PDF/File Content - Disable download
   if (content.type === "file" && content.filePath) {
     return (
       <Card withBorder p="lg" radius="md">
@@ -166,7 +203,6 @@ export default function MaterialContent({
             border: "1px solid var(--border-color)",
             borderRadius: 8,
             overflow: "hidden",
-            marginBottom: 16,
           }}
         >
           <iframe
@@ -178,25 +214,14 @@ export default function MaterialContent({
               border: 0,
             }}
             onLoad={markCompleteAuto}
+            sandbox="allow-same-origin allow-scripts"
           />
         </div>
-        <Button
-          component="a"
-          href={content.filePath}
-          target="_blank"
-          rel="noopener noreferrer"
-          download
-          variant="light"
-          leftSection={<IconFileText size={16} />}
-          fullWidth
-        >
-          Download File
-        </Button>
       </Card>
     );
   }
 
-  // PDF/Video/Image specific types
+  // PDF/Video/Image specific types - Disable download
   if (
     (content.type === "pdf" ||
       content.type === "video" ||
@@ -222,7 +247,6 @@ export default function MaterialContent({
             border: "1px solid var(--border-color)",
             borderRadius: 8,
             overflow: "hidden",
-            marginBottom: 16,
           }}
         >
           {content.type === "image" ? (
@@ -244,20 +268,10 @@ export default function MaterialContent({
                 border: 0,
               }}
               onLoad={markCompleteAuto}
+              sandbox="allow-same-origin allow-scripts"
             />
           )}
         </div>
-        <Button
-          component="a"
-          href={content.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="light"
-          leftSection={<IconExternalLink size={16} />}
-          fullWidth
-        >
-          Buka di Tab Baru
-        </Button>
       </Card>
     );
   }

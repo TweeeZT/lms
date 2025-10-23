@@ -125,6 +125,7 @@ const MODULE_ICONS = {
   quiz: IconListCheck,
   tugas: IconClipboard,
   live: IconVideo,
+  overview: IconFileText,
 };
 
 const MODULE_COLORS = {
@@ -132,6 +133,7 @@ const MODULE_COLORS = {
   quiz: "grape",
   tugas: "orange",
   live: "red",
+  overview: "cyan",
 };
 
 const MODULE_LABELS = {
@@ -139,6 +141,7 @@ const MODULE_LABELS = {
   quiz: "Quiz",
   tugas: "Tugas",
   live: "Live Session",
+  overview: "Overview",
 };
 
 export default function ModuleDetailPage() {
@@ -151,6 +154,7 @@ export default function ModuleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<ModuleDetailType | null>(null);
+  const [showCompleteButton, setShowCompleteButton] = useState(false);
   // Removed module order locking; modules can be completed independently
 
   // Load module detail
@@ -178,6 +182,24 @@ export default function ModuleDetailPage() {
 
     loadDetail();
   }, [user, moduleId]);
+
+  // Scroll detection for showing complete button
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop =
+        window.pageYOffset || document.documentElement.scrollTop;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+
+      // Show button when scrolled near bottom (90%)
+      if (scrollTop + clientHeight >= scrollHeight * 0.9) {
+        setShowCompleteButton(true);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Locking disabled: progression no longer enforced
 
@@ -602,15 +624,49 @@ export default function ModuleDetailPage() {
             <>
               <MaterialContent
                 content={moduleData.content}
-                onAutoComplete={handleMaterialComplete}
+                onAutoComplete={() => {}} // Disabled auto-complete
               />
-              {!isCompleted && (
+              {!isCompleted && showCompleteButton && (
                 <>
                   <Divider my="lg" />
                   <Button
                     color="green"
                     leftSection={<IconCircleCheck size={18} />}
                     onClick={handleMaterialComplete}
+                    fullWidth
+                    size="lg"
+                  >
+                    Tandai Selesai
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+
+          {/* OVERVIEW - Auto complete on first view */}
+          {moduleData.kind === "overview" && moduleData.content && (
+            <>
+              <Stack gap="lg">
+                <div
+                  className="overview-content"
+                  dangerouslySetInnerHTML={{
+                    __html: moduleData.content.text || "",
+                  }}
+                  style={{
+                    fontSize: 16,
+                    lineHeight: 1.8,
+                  }}
+                />
+              </Stack>
+              {!isCompleted && showCompleteButton && (
+                <>
+                  <Divider my="lg" />
+                  <Button
+                    color="cyan"
+                    leftSection={<IconCircleCheck size={18} />}
+                    onClick={handleMaterialComplete}
+                    fullWidth
+                    size="lg"
                   >
                     Tandai Selesai
                   </Button>

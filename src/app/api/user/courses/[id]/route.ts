@@ -31,7 +31,6 @@ export async function GET(
         level,
         price,
         duration_min,
-        total_modules,
         enrolled_count,
         rating,
         instructor_id,
@@ -55,6 +54,13 @@ export async function GET(
       );
     }
 
+    // Count published modules for this course
+    const { count: modulesCount } = await supabase
+      .from("modules")
+      .select("id", { count: "exact", head: true })
+      .eq("course_id", courseId)
+      .or("is_published.eq.true,is_published.is.null");
+
     // Get instructor info
     const { data: instructor } = await supabase
       .from("users")
@@ -62,9 +68,17 @@ export async function GET(
       .eq("id", course.instructor_id)
       .single();
 
+    // Check user role to determine which progress table to use
+    const { data: userRoleData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    const isSchool = userRoleData?.role === "school";
+
     // Check if user is enrolled
     const { data: enrollment } = await supabase
-      .from("user_progress")
+      .from(isSchool ? "school_progress" : "user_progress")
       .select("id, completed_modules, current_module_id")
       .eq("user_id", userId)
       .eq("course_id", courseId)
@@ -80,7 +94,7 @@ export async function GET(
       level: course.level,
       price: course.price,
       durationMin: course.duration_min,
-      totalModules: course.total_modules || 0,
+      totalModules: modulesCount || 0,
       enrolledCount: course.enrolled_count || 0,
       rating: course.rating ? parseFloat(course.rating) : 0,
       instructorId: course.instructor_id,

@@ -74,6 +74,7 @@ const MODULE_ICONS = {
   quiz: IconListCheck,
   tugas: IconClipboard,
   live: IconVideo,
+  overview: IconBook,
 };
 
 const MODULE_COLORS = {
@@ -81,6 +82,7 @@ const MODULE_COLORS = {
   quiz: "grape",
   tugas: "orange",
   live: "red",
+  overview: "cyan",
 };
 
 const MODULE_LABELS = {
@@ -88,6 +90,7 @@ const MODULE_LABELS = {
   quiz: "Quiz",
   tugas: "Tugas",
   live: "Live Session",
+  overview: "Overview",
 };
 
 export default function CourseOverviewPage() {
@@ -186,6 +189,7 @@ export default function CourseOverviewPage() {
   const courseCompleted = totalCount > 0 && completedCount === totalCount;
 
   // Group modules by type
+  const overviewModules = modules.filter((m) => m.kind === "overview");
   const materiModules = modules.filter((m) => m.kind === "materi");
   const quizModules = modules.filter((m) => m.kind === "quiz");
   const tugasModules = modules.filter((m) => m.kind === "tugas");
@@ -233,7 +237,7 @@ export default function CourseOverviewPage() {
     if (!user || !courseId) return;
     setDownloadingCert(true);
     try {
-      const res = await fetch(`/api/user/certificates/generate`, {
+      const res = await fetch(`/api/user/certificates`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, courseId }),
@@ -493,6 +497,94 @@ export default function CourseOverviewPage() {
 
         {/* Modules Section */}
         <Stack gap="xl">
+          {/* Overview Modules */}
+          {overviewModules.length > 0 && (
+            <div>
+              <Group mb="md">
+                <IconBook size={24} color="var(--mantine-color-cyan-6)" />
+                <Title order={3}>Overview Kursus</Title>
+                <Badge color="cyan" variant="light">
+                  {overviewModules.filter((m) => m.isCompleted).length}/
+                  {overviewModules.length}
+                </Badge>
+              </Group>
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+                {overviewModules.map((module) => {
+                  const Icon = MODULE_ICONS.overview;
+                  return (
+                    <Card
+                      key={module.id}
+                      withBorder
+                      p="lg"
+                      radius="md"
+                      style={{
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        backgroundColor: module.isCompleted
+                          ? "var(--mantine-color-cyan-0)"
+                          : undefined,
+                        borderColor: module.isCompleted
+                          ? "var(--mantine-color-cyan-5)"
+                          : undefined,
+                        borderWidth: module.isCompleted ? 2 : 1,
+                      }}
+                      onClick={() => handleModuleClick(module.id)}
+                      className="card-hover"
+                    >
+                      <Stack gap="sm">
+                        <Group justify="space-between">
+                          <Badge
+                            color={
+                              module.isCompleted
+                                ? "cyan"
+                                : MODULE_COLORS.overview
+                            }
+                            variant={module.isCompleted ? "filled" : "light"}
+                          >
+                            {MODULE_LABELS.overview}
+                          </Badge>
+                          {module.isCompleted && (
+                            <IconCircleCheck
+                              size={24}
+                              color="var(--mantine-color-cyan-7)"
+                            />
+                          )}
+                        </Group>
+                        <Group gap="sm" align="flex-start">
+                          <Icon
+                            size={20}
+                            color={
+                              module.isCompleted
+                                ? "var(--mantine-color-cyan-7)"
+                                : MODULE_COLORS.overview
+                            }
+                          />
+                          <Text fw={600} size="sm" style={{ flex: 1 }}>
+                            {module.title}
+                          </Text>
+                        </Group>
+                        {module.description && (
+                          <Text size="xs" c="dimmed" lineClamp={2}>
+                            {module.description}
+                          </Text>
+                        )}
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color={module.isCompleted ? "cyan" : "cyan"}
+                          fullWidth
+                          rightSection={<IconChevronRight size={16} />}
+                        >
+                          {module.isCompleted ? "Buka Lagi" : "Mulai Belajar"}
+                        </Button>
+                      </Stack>
+                    </Card>
+                  );
+                })}
+              </SimpleGrid>
+            </div>
+          )}
+
           {/* Materi Modules */}
           {materiModules.length > 0 && (
             <div>

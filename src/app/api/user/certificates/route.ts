@@ -7,10 +7,11 @@ import { sendCertificateEmail } from "../../../../lib/mailer";
 
 export const runtime = "nodejs";
 
-// POST /api/user/certificates - Generate certificate
+// POST /api/user/certificates - Generate certificate OR submit rating
 export async function POST(request: NextRequest) {
   try {
-    const { userId, courseId } = await request.json();
+    const body = await request.json();
+    const { userId, courseId, rating } = body;
 
     if (!userId || !courseId) {
       return NextResponse.json(
@@ -19,9 +20,93 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If rating is provided, handle rating submission
+    if (rating !== undefined && rating !== null) {
+      // Validate rating (1-5)
+      if (rating < 1 || rating > 5) {
+        return NextResponse.json(
+          { success: false, error: "Rating must be between 1 and 5" },
+          { status: 400 }
+        );
+      }
+
+      // Check if rating already exists
+      const { data: existingRating } = await supabaseAdmin
+        .from("course_ratings")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+
+      if (existingRating) {
+        // Update existing rating
+        const { error: updateError } = await supabaseAdmin
+          .from("course_ratings")
+          .update({
+            rating: rating,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingRating.id);
+
+        if (updateError) {
+          return NextResponse.json(
+            { success: false, error: "Failed to update rating" },
+            { status: 500 }
+          );
+        }
+      } else {
+        // Insert new rating
+        const { error: insertError } = await supabaseAdmin
+          .from("course_ratings")
+          .insert({
+            user_id: userId,
+            course_id: courseId,
+            rating: rating,
+          });
+
+        if (insertError) {
+          return NextResponse.json(
+            { success: false, error: "Failed to save rating" },
+            { status: 500 }
+          );
+        }
+      }
+
+      // Update course average rating
+      const { data: ratings } = await supabaseAdmin
+        .from("course_ratings")
+        .select("rating")
+        .eq("course_id", courseId);
+
+      if (ratings && ratings.length > 0) {
+        const avgRating =
+          ratings.reduce((sum, r) => sum + (r.rating || 0), 0) / ratings.length;
+
+        await supabaseAdmin
+          .from("courses")
+          .update({ rating: avgRating })
+          .eq("id", courseId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Rating saved successfully",
+        rating: rating,
+      });
+    }
+
+    // Otherwise, handle certificate generation
+    // Check user role to determine which progress table to use
+    const { data: userRoleData } = await supabaseAdmin
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .single();
+    const isSchool = userRoleData?.role === "school";
+
     // Check if user completed the course (100% progress)
     const { data: progress, error: progressError } = await supabaseAdmin
-      .from("user_progress")
+      .from(isSchool ? "school_progress" : "user_progress")
       .select("progress_percentage, completed_modules")
       .eq("user_id", userId)
       .eq("course_id", courseId)
@@ -286,10 +371,19 @@ export async function GET(req: NextRequest) {
         );
       }
 
+      // Get user rating for this course
+      const { data: ratingData } = await supabaseAdmin
+        .from("course_ratings")
+        .select("rating")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+
       if (!certificate) {
         return NextResponse.json({
           success: true,
           certificate: null,
+          rating: ratingData?.rating || null,
           message: "No certificate found",
         });
       }
@@ -338,6 +432,8 @@ export async function GET(req: NextRequest) {
           url: certificate.certificate_url,
           issuedDate: certificate.issued_date,
         },
+        rating: ratingData?.rating || null,
+        certificateUrl: certificate.certificate_url, // for backwards compatibility
       });
     }
 
@@ -380,8 +476,16 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       // Fallback: derive certificates from completed courses
+      // Check user role
+      const { data: userRoleData } = await supabaseAdmin
+        .from("users")
+        .select("role")
+        .eq("id", userId)
+        .single();
+      const isSchool = userRoleData?.role === "school";
+
       const { data: progData, error: pErr } = await supabaseAdmin
-        .from("user_progress")
+        .from(isSchool ? "school_progress" : "user_progress")
         .select("course_id, completed_modules, progress_percentage")
         .eq("user_id", userId)
         .eq("progress_percentage", 100);

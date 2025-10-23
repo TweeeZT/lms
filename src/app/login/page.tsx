@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Paper,
@@ -54,7 +54,9 @@ export default function LoginPage() {
 
       {/* Right login form */}
       <div className="flex-1 max-w-md w-full mx-auto">
-        <LoginForm />
+        <Suspense fallback={<div></div>}>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );

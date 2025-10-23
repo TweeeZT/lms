@@ -13,6 +13,7 @@ import {
   SegmentedControl,
   TextInput,
   Image,
+  SimpleGrid,
   Select,
   Pagination,
   Skeleton,
@@ -227,17 +228,24 @@ export default function UserDiscussionsPage() {
                   }
                 >
                   <Group align="flex-start" gap="md" wrap="nowrap">
-                    <Avatar
-                      radius="xl"
-                      size="md"
-                      src={post.user?.avatar || undefined}
-                      style={{ flexShrink: 0, marginTop: 2 }}
+                    <Link
+                      href={`/profile/${post.user?.id}?from=/school/discussions`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ textDecoration: "none" }}
                     >
-                      {(post.user?.full_name || "U")
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </Avatar>
+                      <Avatar
+                        radius="xl"
+                        size="md"
+                        src={post.user?.avatar || undefined}
+                        style={{ flexShrink: 0, marginTop: 2, cursor: "pointer" }}
+                        title={post.user?.full_name || "Profil"}
+                      >
+                        {(post.user?.full_name || "U")
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </Avatar>
+                    </Link>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Group gap="xs" mb={8}>
                         <Text fw={600} size="sm" c="dark">
@@ -272,51 +280,47 @@ export default function UserDiscussionsPage() {
                         </Text>
                       </div>
 
-                      {/* Tampilkan 3 gambar pertama */}
+                      {/* Tampilkan 1 media pertama + 1 tile overlay "+N" */}
                       {post.media && post.media.length > 0 && (
-                        <div style={{ marginBottom: 15 }}>
-                          <Group gap="xs" wrap="nowrap">
-                            {post.media.slice(0, 3).map((m, idx) => {
+                        <div style={{ marginBottom: 12 }}>
+                          <SimpleGrid cols={post.media.length > 1 ? 2 : 1} spacing={6}>
+                            {post.media.slice(0, Math.min(2, post.media.length)).map((m, idx) => {
                               const isVid = m.m_type === "video";
-                              // Untuk video tanpa thumbnail, gunakan placeholder
                               const src = isVid
                                 ? m.thumbnail ||
-                                  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect fill='%231e3769' width='120' height='120'/%3E%3C/svg%3E"
+                                  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%231e3769' width='200' height='200'/%3E%3C/svg%3E"
                                 : m.url;
-                              const remaining = post.media.length - 3;
-                              const isLast = idx === 2 && remaining > 0;
-
+                              const remaining = Math.max(0, post.media.length - 1);
+                              const isOverlayTile = idx === 1 && post.media.length > 2; // overlay only if total > 2
                               return (
                                 <div
                                   key={m.id}
                                   style={{
                                     position: "relative",
-                                    width: 120,
-                                    height: 120,
+                                    width: "100%",
+                                    aspectRatio: "1 / 1",
                                     borderRadius: 8,
                                     overflow: "hidden",
                                     border: "1px solid #e9ecef",
-                                    flexShrink: 0,
                                     cursor: "pointer",
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (isVid) {
-                                      setPlayVideo(m.url);
-                                    } else {
-                                      setZoomImage(m.url);
+                                    if (isOverlayTile) {
+                                      window.location.href = `/school/discussions/${post.id}`;
+                                      return;
                                     }
+                                    if (isVid) setPlayVideo(m.url);
+                                    else setZoomImage(m.url);
                                   }}
                                 >
                                   <Image
                                     src={src}
                                     alt={`Media ${idx + 1}`}
-                                    height={120}
-                                    width={120}
                                     fit="cover"
-                                    style={{ objectFit: "cover" }}
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
                                   />
-                                  {isVid && (
+                                  {isVid && !isOverlayTile && (
                                     <div
                                       style={{
                                         position: "absolute",
@@ -342,7 +346,7 @@ export default function UserDiscussionsPage() {
                                       </div>
                                     </div>
                                   )}
-                                  {isLast && (
+                                  {isOverlayTile && (
                                     <div
                                       style={{
                                         position: "absolute",
@@ -361,7 +365,7 @@ export default function UserDiscussionsPage() {
                                 </div>
                               );
                             })}
-                          </Group>
+                          </SimpleGrid>
                         </div>
                       )}
                       <Group gap="lg">

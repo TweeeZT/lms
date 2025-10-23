@@ -179,16 +179,28 @@ export default function InstructorEarningsPage() {
     if (!d) return "-";
 
     try {
-      // Parse robust date format (ISO atau locale)
-      const date =
-        typeof d === "string"
-          ? new Date(d.replace(/-/g, "/")) // ubah tanda agar aman di semua browser
-          : new Date(d);
+      let dt: Date | null = null;
+      if (d instanceof Date) {
+        dt = d;
+      } else if (typeof d === "string") {
+        // Robust parser for various formats: 'YYYY-MM-DD', 'YYYY-MM-DDTHH:mm:ssZ', 'YYYY-MM-DD HH:mm:ss+ZZ', etc.
+        const m = d.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+        if (m) {
+          const y = Number(m[1]);
+          const mo = Number(m[2]) - 1;
+          const da = Number(m[3]);
+          dt = new Date(y, mo, da);
+        } else {
+          const normalized = d.includes(" ") ? d.replace(" ", "T") : d;
+          const tmp = new Date(normalized);
+          dt = isNaN(tmp.getTime()) ? null : tmp;
+        }
+      }
 
-      if (isNaN(date.getTime())) return "-";
+      if (!dt || isNaN(dt.getTime())) return "-";
 
-      // Manual format indo "DD MMM YYYY"
-      const day = date.getDate().toString().padStart(2, "0");
+      // Manual format indo "NamaHari, DD MMM YYYY"
+      const day = dt.getDate().toString().padStart(2, "0");
       const monthNames = [
         "Jan",
         "Feb",
@@ -203,9 +215,19 @@ export default function InstructorEarningsPage() {
         "Nov",
         "Des",
       ];
-      const month = monthNames[date.getMonth()];
-      const year = date.getFullYear();
-      return `${day} ${month} ${year}`;
+      const dayNames = [
+        "Minggu",
+        "Senin",
+        "Selasa",
+        "Rabu",
+        "Kamis",
+        "Jumat",
+        "Sabtu",
+      ];
+      const month = monthNames[dt.getMonth()];
+      const year = dt.getFullYear();
+      const dayName = dayNames[dt.getDay()];
+      return `${dayName} ${day} ${month} ${year}`;
     } catch {
       return "-";
     }

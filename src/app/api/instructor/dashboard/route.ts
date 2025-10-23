@@ -74,7 +74,7 @@ export async function GET(req: Request) {
       .order("date", { ascending: false })
       .limit(12);
 
-    // 5) Recent purchases from transactions table (completed/paid)
+  // 5) Recent purchases from transactions table (completed/paid)
     type TransactionRow = {
       id: string;
       amount: number;
@@ -95,19 +95,33 @@ export async function GET(req: Request) {
       userName: string;
       userEmail?: string | null;
     }> = [];
-    if (courses.length) {
-      const courseIds = courses.map((c) => c.id);
-      const trxQ = await supabase
+    {
+      // Try direct filter by instructors_id first
+      const trxByInstructor = await supabase
         .from("transactions")
         .select(
           "id, amount, date, course_id, course_title, user_id, user_name, status"
         )
-        .in("course_id", courseIds)
-        .in("status", ["completed", "paid"]) // accept completed/paid
+        .eq("instructors_id", instructorId)
         .order("date", { ascending: false })
         .limit(10);
 
-      const trxRows = (trxQ.data || []) as TransactionRow[];
+      let trxRows = (trxByInstructor.data || []) as TransactionRow[];
+
+      // Fallback: use course_id mapping if direct filter returns empty
+      if (!trxRows.length && courses.length) {
+        const courseIds = courses.map((c) => c.id);
+        const trxByCourses = await supabase
+          .from("transactions")
+          .select(
+            "id, amount, date, course_id, course_title, user_id, user_name, status"
+          )
+          .in("course_id", courseIds)
+          .order("date", { ascending: false })
+          .limit(10);
+        trxRows = (trxByCourses.data || []) as TransactionRow[];
+      }
+
       if (trxRows.length) {
         const userIds = Array.from(
           new Set(trxRows.map((p) => p.user_id).filter(Boolean))
@@ -147,18 +161,40 @@ export async function GET(req: Request) {
 
     // Calculate totalEarnings from transactions table
     let totalEarnings = 0;
-    if (courses.length) {
-      const courseIds = courses.map((c) => c.id);
-      const { data: transactionsData } = await supabase
+    {
+      // Primary: by instructors_id
+      const { data: trxByInstructor } = await supabase
         .from("transactions")
         .select("amount, status")
-        .eq("instructors_id", instructorId)
-        .in("status", ["paid", "completed"]);
+        .eq("instructors_id", instructorId);
 
-      totalEarnings = (transactionsData || []).reduce(
-        (sum, t) => sum + (Number(t.amount) || 0),
-        0
-      );
+      let rows = trxByInstructor || [];
+
+      // Fallback: by course_id if above empty
+      if (!rows.length && courses.length) {
+        const courseIds = courses.map((c) => c.id);
+        const { data: trxByCourses } = await supabase
+          .from("transactions")
+          .select("amount, status, course_id")
+          .in("course_id", courseIds);
+        rows = trxByCourses || [];
+      }
+
+      const successStatuses = new Set([
+        "paid",
+        "completed",
+        "success",
+        "berhasil",
+        "settled",
+        "succeeded",
+      ]);
+      totalEarnings = (rows || []).reduce((sum, t) => {
+        const s = String((t as any).status || "").toLowerCase();
+        if (successStatuses.has(s)) {
+          return sum + (Number((t as any).amount) || 0);
+        }
+        return sum;
+      }, 0);
     }
 
     const avgRating = courses.length

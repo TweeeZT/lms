@@ -213,16 +213,26 @@ export default function AdminEarningsPage() {
       "Apr",
       "Mei",
       "Jun",
-      "Jul",
       "Agt",
       "Sep",
       "Okt",
       "Nov",
       "Des",
     ];
+    const dayNames = [
+      "Minggu",
+      "Senin",
+      "Selasa",
+      "Rabu",
+      "Kamis",
+      "Jumat",
+      "Sabtu",
+    ];
     const month = monthNames[dt.getMonth()];
     const year = dt.getFullYear();
-    return `${day} ${month} ${year}`;
+    const dayName = dayNames[dt.getDay()];
+    // Format: Nama Hari, tanggal bulan tahun (e.g., Kamis, 16 Okt 2025)
+    return `${dayName} ${day} ${month} ${year}`;
   };
 
   const fetchData = useCallback(

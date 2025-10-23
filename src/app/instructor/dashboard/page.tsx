@@ -226,9 +226,19 @@ export default function InstructorDashboard() {
         "Nov",
         "Des",
       ];
+      const dayNames = [
+        "Minggu",
+        "Senin",
+        "Selasa",
+        "Rabu",
+        "Kamis",
+        "Jumat",
+        "Sabtu",
+      ];
       const month = monthNames[dt.getMonth()];
       const year = dt.getFullYear();
-      return `${day} ${month} ${year}`;
+      const dayName = dayNames[dt.getDay()];
+      return `${dayName}, ${day} ${month} ${year}`;
     } catch {
       return "-";
     }

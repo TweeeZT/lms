@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Get courses from school_progress
+    // Get courses from school_progress and include instructor user via join (instructor_id -> users)
     let query = supabase
       .from("school_progress")
       .select(
@@ -39,10 +39,11 @@ export async function GET(req: NextRequest) {
           price,
           duration_min,
           level,
-          total_modules,
           enrolled_count,
           rating,
-          points
+          points,
+          instructor_id,
+          users:instructor_id ( id, full_name, avatar )
         )
       `,
         { count: "exact" }
@@ -99,22 +100,37 @@ export async function GET(req: NextRequest) {
         currentModuleId: row.current_module_id,
       },
       course: row.courses
-        ? {
-            id: row.courses.id,
-            title: row.courses.title,
-            description: row.courses.description,
-            thumbnail: row.courses.thumbnail,
-            category: row.courses.category,
-            price: row.courses.price,
-            durationMin: row.courses.duration_min,
-            level: row.courses.level,
-            // Use published modules count to match detail page module list
-            totalModules:
-              modulesCountByCourse[row.courses.id] ?? row.courses.total_modules ?? 0,
-            enrolledCount: row.courses.enrolled_count,
-            rating: row.courses.rating,
-            points: row.courses.points,
-          }
+        ? (() => {
+            const courseSrc = row.courses;
+            // normalize instructor from joined users (supabase returns array for relation)
+            const usersJoin = courseSrc.users;
+            let instructor = null;
+            if (Array.isArray(usersJoin) && usersJoin.length > 0) {
+              const u = usersJoin[0];
+              instructor = {
+                id: u?.id ?? null,
+                fullName: u?.full_name ?? null,
+                avatar: u?.avatar ?? null,
+              };
+            }
+
+            return {
+              id: courseSrc.id,
+              title: courseSrc.title,
+              description: courseSrc.description,
+              thumbnail: courseSrc.thumbnail,
+              category: courseSrc.category,
+              price: courseSrc.price != null ? Number(courseSrc.price) : null,
+              durationMin: courseSrc.duration_min != null ? Number(courseSrc.duration_min) : 0,
+              level: courseSrc.level,
+              // Use published modules count (computed from modules table)
+              totalModules: modulesCountByCourse[courseSrc.id] ?? 0,
+              enrolledCount: courseSrc.enrolled_count != null ? Number(courseSrc.enrolled_count) : 0,
+              rating: courseSrc.rating != null ? Number(courseSrc.rating) : null,
+              points: courseSrc.points != null ? Number(courseSrc.points) : null,
+              instructor,
+            };
+          })()
         : null,
     }));
 

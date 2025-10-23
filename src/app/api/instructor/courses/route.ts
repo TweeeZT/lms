@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from("courses")
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, points, created_at, updated_at",
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at",
         { count: "exact" }
       )
       .eq("instructor_id", instructorId)
@@ -81,8 +81,7 @@ export async function GET(req: Request) {
 
     const items = (data || []).map((c) => ({
       ...c,
-      total_modules:
-        modulesCountByCourse[c.id] ?? (c as any).total_modules ?? 0,
+      total_modules: modulesCountByCourse[c.id] ?? 0,
     }));
 
     return NextResponse.json({
@@ -125,7 +124,7 @@ export async function POST(req: Request) {
     const category = String(form.get("category") || "").trim();
     const level = String(form.get("level") || "").trim();
     const price = Number(form.get("price") || 0);
-    const total_modules = Number(form.get("total_modules") || 0);
+    // total_modules removed: derive from modules table instead of accepting from client
     const duration_min = Number(form.get("duration_min") || 0);
     const points = Number(form.get("points") || 0);
     const is_published = String(form.get("is_published") || "false") === "true";
@@ -144,8 +143,6 @@ export async function POST(req: Request) {
     if (!description) missing.push("deskripsi");
     if (!category) missing.push("kategori");
     if (!level) missing.push("level");
-    if (!Number.isFinite(total_modules) || total_modules <= 0)
-      missing.push("total modul (> 0)");
     if (!Number.isFinite(duration_min) || duration_min <= 0)
       missing.push("durasi (menit > 0)");
     if (!file || !(file instanceof Blob)) missing.push("thumbnail (file)");
@@ -210,7 +207,6 @@ export async function POST(req: Request) {
       price: Number(price ?? 0),
       duration_min: Number(duration_min),
       level,
-      total_modules: Number(total_modules),
       enrolled_count: 0,
       rating: 0,
       is_published: Boolean(is_published ?? false),
@@ -221,7 +217,7 @@ export async function POST(req: Request) {
       .from("courses")
       .insert(insertPayload)
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, points, created_at, updated_at"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at"
       )
       .single();
     if (error) {

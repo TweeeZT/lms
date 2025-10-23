@@ -52,7 +52,8 @@ export default function UserExplorePage() {
     price: number | null;
     durationMin: number | null;
     level: "beginner" | "intermediate" | "advanced";
-    totalModules: number;
+    // optional: computed by backend; frontend should tolerate absence
+    totalModules?: number | null;
     enrolledCount: number | null;
     rating: number | null;
     instructor?: {
@@ -69,18 +70,61 @@ export default function UserExplorePage() {
     try {
       const params = new URLSearchParams({
         q: searchQuery.trim(),
-        category: categoryFilter || "all",
-        level: levelFilter || "all",
+        // send empty string when "all" selected so backend won't filter
+        category: categoryFilter === "all" ? "" : categoryFilter || "",
+        level: levelFilter === "all" ? "" : levelFilter || "",
         sort: sort || "latest",
         page: String(page),
         limit: String(limit),
         userId: user?.id || "",
       });
-      const res = await fetch(`/api/user/courses/explore?${params.toString()}`);
+      // route implemented at /api/school/explore
+      const res = await fetch(`/api/school/explore?${params.toString()}`);
       const json = await res.json();
       if (res.ok && json.success) {
-        setItems(json.items);
-        setTotal(json.total || 0);
+        // accept both shapes: { items: [] } or { courses: [] }
+        const raw = json.items || json.courses || [];
+        const normalized = (raw as any[]).map((c) => {
+          // robust instructor normalization (supports: users array, instructor object, different name keys)
+          const getInstructor = (src: any) => {
+            // look in multiple possible locations that APIs might return
+            const cand =
+              src?.instructor ?? src?.users ?? src?.user ?? src?.instructor_user ?? null;
+            if (!cand) return null;
+            // array (joined relation) -> take first
+            if (Array.isArray(cand) && cand.length > 0) {
+              const u = cand[0];
+              return {
+                id: u?.id ?? u?.user_id ?? null,
+                fullName:
+                  u?.full_name ?? u?.fullName ?? u?.name ?? u?.display_name ?? "",
+                avatar: u?.avatar ?? u?.avatar_url ?? null,
+              };
+            }
+            // single object
+            return {
+              id: cand?.id ?? cand?.user_id ?? null,
+              fullName:
+                cand?.full_name ?? cand?.fullName ?? cand?.name ?? cand?.display_name ?? "",
+              avatar: cand?.avatar ?? cand?.avatar_url ?? null,
+            };
+          };
+          const instructor = getInstructor(c);
+          return {
+            ...c,
+            // support both snake_case from DB or camelCase already mapped
+            enrolledCount: Number(c.enrolled_count ?? c.enrolledCount ?? 0),
+            durationMin: Number(c.duration_min ?? c.durationMin ?? 0),
+            price: Number(c.price ?? 0),
+            rating:
+              c.rating !== undefined && c.rating !== null
+                ? Number(c.rating)
+                : (c.rating ?? null),
+            instructor,
+          };
+        });
+        setItems(normalized);
+        setTotal(json.total ?? json.count ?? 0);
       }
     } finally {
       setLoading(false);

@@ -48,7 +48,7 @@ type ApiCourse = {
   price?: number | null;
   durationMin?: number | null;
   level: "beginner" | "intermediate" | "advanced" | string;
-  totalModules: number;
+  totalModules?: number; // changed: optional
   enrolledCount?: number | null;
   rating?: number | null;
   instructor?: { id: string; fullName: string; avatar?: string | null } | null;
@@ -153,11 +153,46 @@ export default function UserCoursesPage() {
         );
         const json = await res.json();
         if (res.ok && json.success) {
-          const rows = (json.items as ApiEnrollmentItem[]).filter(
-            (r) => !!r.course
-          );
+          const rawRows = (json.items as ApiEnrollmentItem[]).filter((r) => !!r.course);
+          // normalize course fields and instructor inside each enrollment row
+          const rows = rawRows.map((r) => {
+            const c = r.course!;
+              const getInstructor = (src: any) => {
+                const cand =
+                  src?.instructor ?? src?.users ?? src?.user ?? src?.instructor_user ?? null;
+                if (!cand) return null;
+                if (Array.isArray(cand) && cand.length > 0) {
+                  const u = cand[0];
+                  return {
+                    id: u?.id ?? u?.user_id ?? null,
+                    fullName:
+                      u?.full_name ?? u?.fullName ?? u?.name ?? u?.display_name ?? "",
+                    avatar: u?.avatar ?? u?.avatar_url ?? null,
+                  };
+                }
+                return {
+                  id: cand?.id ?? cand?.user_id ?? null,
+                  fullName:
+                    cand?.full_name ?? cand?.fullName ?? cand?.name ?? cand?.display_name ?? "",
+                  avatar: cand?.avatar ?? cand?.avatar_url ?? null,
+                };
+              };
+              const instructor = getInstructor(c);
+            return {
+              ...r,
+              course: {
+                ...c,
+                instructor,
+                durationMin: Number((c as any).duration_min ?? c.durationMin ?? 0),
+                enrolledCount: Number((c as any).enrolled_count ?? c.enrolledCount ?? 0),
+                totalModules: Number((c as any).total_modules ?? c.totalModules ?? 0) || undefined,
+                price: Number((c as any).price ?? 0),
+                rating: (c as any).rating != null ? Number((c as any).rating) : (c as any).rating ?? null,
+              },
+            } as ApiEnrollmentItem;
+          });
           setItems(rows);
-        }
+         }
 
         // Fetch student stats (points, coins, tier)
         const statsRes = await fetch(`/api/user/stats?userId=${user.id}`);
@@ -183,6 +218,26 @@ export default function UserCoursesPage() {
     const tier = studentStats.tier; // Dari students atau level mapping
     return { total, totalPoints, totalCoins, tier };
   }, [items, studentStats]);
+
+  // Helper: robustly read instructor name from various API shapes
+  const getInstructorName = (course: any): string => {
+    if (!course) return "-";
+    // prefer normalized instructor object
+    const instr = course.instructor ?? (course as any).instructor;
+    if (instr) {
+      return (
+        instr.fullName ?? instr.full_name ?? instr.name ?? instr.display_name ?? "-"
+      );
+    }
+    // supabase joined relation might be returned as `users: [...]`
+    const users = (course as any).users ?? (course as any).users_join ?? null;
+    if (Array.isArray(users) && users.length > 0) {
+      const u = users[0];
+      return u?.full_name ?? u?.fullName ?? u?.name ?? u?.display_name ?? "-";
+    }
+    // fallback to instructor_id if present (can't resolve name here)
+    return (course as any).instructor_id ? "-" : "-";
+  };
 
   // Pagination
   const totalPages = Math.ceil(items.length / limit);
@@ -293,15 +348,17 @@ export default function UserCoursesPage() {
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
               {paginatedItems.map((row) => {
                 const course = row.course!;
-                const totalModules = course.totalModules || 0;
-                const completedCount = Math.max(
-                  0,
-                  Math.min(totalModules, row.progress.completedCount || 0)
-                );
-                const isCompleted = totalModules > 0 && completedCount === totalModules;
-                const progress = totalModules > 0
-                  ? Math.round((completedCount / totalModules) * 100)
-                  : 0;
+                const completedCount = row.progress?.completedCount ?? 0;
+                const totalModules = course.totalModules ?? null; // backend-provided fallback
+                const isCompleted =
+                  (typeof row.progress?.percentage === "number" && row.progress.percentage >= 100) ||
+                  (totalModules !== null && completedCount >= totalModules);
+                const progress =
+                  typeof row.progress?.percentage === "number"
+                    ? row.progress.percentage
+                    : totalModules && totalModules > 0
+                    ? Math.round((completedCount / totalModules) * 100)
+                    : 0;
                 const currentModule = completedCount;
 
                 return (
@@ -405,14 +462,14 @@ export default function UserCoursesPage() {
                           •
                         </Text>
                         <Text size="sm" c="dimmed">
-                          {course.instructor?.fullName || "-"}
+                          {getInstructorName(course)}
                         </Text>
                       </Group>
 
                       <div>
                         <Group justify="space-between" mb="xs">
                           <Text size="sm">
-                            Progress ({currentModule}/{course.totalModules}{" "}
+                            Progress ({currentModule}/{course.totalModules ?? "-"}{" "}
                             modul)
                           </Text>
                           <Text size="sm" fw={600}>

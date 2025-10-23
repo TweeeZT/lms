@@ -64,7 +64,7 @@ type CourseData = {
   instructorName?: string;
   category: string;
   level: string;
-  totalModules: number;
+  totalModules?: number; // changed: optional (frontend won't break if absent)
   enrolledCount: number;
   rating?: number;
 };

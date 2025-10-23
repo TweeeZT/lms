@@ -20,7 +20,8 @@ export async function GET(
   const { data: course, error: cErr } = await supabaseAdmin
     .from("courses")
     .select(
-      "id,title,description,thumbnail,category,price,duration_min,level,total_modules,enrolled_count,rating,is_published,created_at,updated_at,instructor_id, users:instructor_id ( id, full_name, avatar )"
+      // removed total_modules (column deleted); compute from modules below
+      "id,title,description,thumbnail,category,price,duration_min,level,enrolled_count,rating,is_published,created_at,updated_at,instructor_id, users:instructor_id ( id, full_name, avatar )"
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -50,6 +51,9 @@ export async function GET(
       { status: 500 }
     );
   }
+
+  // compute total modules from the fetched (published) modules
+  const totalModulesCount = (modules || []).length;
 
   // Normalize joined instructor user which could be array or object
   const instrCandidate: unknown = (course as unknown as { users?: unknown })
@@ -87,7 +91,8 @@ export async function GET(
       price: course.price,
       durationMin: course.duration_min,
       level: course.level,
-      totalModules: course.total_modules,
+      // use computed count instead of removed DB column
+      totalModules: totalModulesCount,
       enrolledCount: course.enrolled_count,
       rating: Number(course.rating || 0),
       userRating,

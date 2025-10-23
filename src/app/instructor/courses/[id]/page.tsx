@@ -41,7 +41,6 @@ interface Course {
   price: number | null;
   duration_min?: number | null;
   level: string | null;
-  total_modules?: number | null;
   enrolled_count?: number | null;
   rating?: number | null;
   is_published?: boolean | null;

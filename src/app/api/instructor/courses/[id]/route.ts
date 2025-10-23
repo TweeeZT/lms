@@ -23,7 +23,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("courses")
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, points, created_at, updated_at"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at"
       )
       .eq("id", id)
       .maybeSingle();
@@ -34,7 +34,22 @@ export async function GET(
         { status: 403 }
       );
     }
-    return NextResponse.json({ success: true, item: data });
+
+    // Calculate total_modules from modules table (only published modules)
+    try {
+      const { data: modRows, count: modsCount, error: modErr } = await supabase
+        .from("modules")
+        .select("id", { count: "exact" })
+        .eq("course_id", id)
+        .or("is_published.eq.true,is_published.is.null");
+      // ignore modErr but prefer count when provided
+      const total_modules =
+        typeof modsCount === "number" ? modsCount : (modRows?.length ?? 0);
+      // attach computed value to response item
+      return NextResponse.json({ success: true, item: { ...data, total_modules } });
+    } catch {
+      return NextResponse.json({ success: true, item: { ...data, total_modules: 0 } });
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat kursus";
     return NextResponse.json(
@@ -72,7 +87,7 @@ export async function PATCH(
       const category = String(form.get("category") || "").trim();
       const level = String(form.get("level") || "").trim();
       const price = form.get("price");
-      const total_modules = form.get("total_modules");
+      // do not accept total_modules from client
       const duration_min = form.get("duration_min");
       const points = form.get("points");
       const is_published = form.get("is_published");
@@ -85,8 +100,6 @@ export async function PATCH(
       if (category) allowed["category"] = category;
       if (level) allowed["level"] = level;
       if (price !== null) allowed["price"] = Number(price);
-      if (total_modules !== null)
-        allowed["total_modules"] = Number(total_modules);
       if (duration_min !== null) allowed["duration_min"] = Number(duration_min);
       if (points !== null) allowed["points"] = Number(points);
       if (is_published !== null)
@@ -201,7 +214,7 @@ export async function PATCH(
       .update(allowed)
       .eq("id", id)
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, points, created_at, updated_at"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at"
       )
       .single();
     if (error) {

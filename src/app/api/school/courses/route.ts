@@ -33,6 +33,33 @@ export async function GET(req: Request) {
     const { data: courses, error: coursesErr } = await query;
     if (coursesErr) throw coursesErr;
 
+    // compute published modules count per course (since total_modules column removed)
+    const courseIds = (courses || []).map((c: any) => c.id).filter(Boolean);
+    let modulesCountByCourse: Record<string, number> = {};
+    if (courseIds.length > 0) {
+      const { data: modRows, error: modErr } = await supabase
+        .from("modules")
+        .select("course_id")
+        .in("course_id", courseIds)
+        .or("is_published.eq.true,is_published.is.null");
+      if (!modErr && Array.isArray(modRows)) {
+        modulesCountByCourse = (modRows as any[]).reduce(
+          (acc: Record<string, number>, r: any) => {
+            const cid = r.course_id as string;
+            acc[cid] = (acc[cid] || 0) + 1;
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
+    // attach totalModules to course objects
+    const coursesWithModules = (courses || []).map((c: any) => ({
+      ...c,
+      totalModules: modulesCountByCourse[c.id] ?? 0,
+    }));
+
     // Get courses already purchased by this school (check user_progress for all school students)
     const { data: students } = await supabase
       .from("school_students")
@@ -55,7 +82,7 @@ export async function GET(req: Request) {
     }
 
     // Filter out already purchased courses
-    const availableCourses = courses?.filter(
+    const availableCourses = coursesWithModules.filter(
       (course) => !purchasedCourseIds.includes(course.id)
     );
 

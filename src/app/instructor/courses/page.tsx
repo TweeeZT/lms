@@ -66,7 +66,6 @@ export default function InstructorCoursesPage() {
   const [form, setForm] = useState({
     title: "",
     price: 0,
-    totalModules: 0,
     isPublished: true,
     level: "beginner" as "beginner" | "intermediate" | "advanced",
     thumbnail: "",
@@ -113,7 +112,6 @@ export default function InstructorCoursesPage() {
     setForm({
       title: "",
       price: 0,
-      totalModules: 0,
       isPublished: true,
       level: "beginner",
       thumbnail: "",
@@ -142,7 +140,6 @@ export default function InstructorCoursesPage() {
     setForm({
       title: c.title,
       price: c.price || 0,
-      totalModules: c.total_modules || 0,
       isPublished: c.is_published ?? true,
       level:
         (c.level as "beginner" | "intermediate" | "advanced") || "beginner",
@@ -271,8 +268,7 @@ export default function InstructorCoursesPage() {
     const baseErrors: typeof errors = {};
     if (!form.title.trim()) baseErrors.title = "Judul wajib";
     if (!form.description.trim()) baseErrors.description = "Deskripsi wajib";
-    if (form.totalModules <= 0)
-      baseErrors.totalModules = "Total modul harus > 0";
+    // no local validation for total modules anymore
     const needsThumb = !editingId
       ? !selectedFile
       : !(selectedFile || form.thumbnail?.trim());
@@ -287,7 +283,6 @@ export default function InstructorCoursesPage() {
           const fd = new FormData();
           fd.append("title", form.title);
           fd.append("price", String(form.price ?? 0));
-          fd.append("total_modules", String(form.totalModules));
           fd.append("is_published", String(!!form.isPublished));
           fd.append("level", form.level);
           fd.append("description", form.description);
@@ -315,7 +310,6 @@ export default function InstructorCoursesPage() {
               body: JSON.stringify({
                 title: form.title,
                 price: form.price,
-                total_modules: form.totalModules,
                 is_published: form.isPublished,
                 level: form.level,
                 thumbnail: form.thumbnail,
@@ -342,7 +336,6 @@ export default function InstructorCoursesPage() {
         fd.append("instructorId", user.id);
         fd.append("title", form.title);
         fd.append("price", String(form.price ?? 0));
-        fd.append("total_modules", String(form.totalModules));
         fd.append("is_published", String(!!form.isPublished));
         fd.append("level", form.level);
         fd.append("description", form.description);
@@ -892,15 +885,7 @@ export default function InstructorCoursesPage() {
             withAsterisk
             disabled={saving}
           />
-          <NumberInput
-            label="Total Modul"
-            value={form.totalModules}
-            onChange={(v) => setForm({ ...form, totalModules: Number(v || 0) })}
-            min={0}
-            error={errors.totalModules}
-            withAsterisk
-            disabled={saving}
-          />
+          {/* Total Modul input removed — module count is computed from modules table */}
           <NumberInput
             label="Durasi (menit)"
             value={form.durationMin}

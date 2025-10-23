@@ -114,6 +114,12 @@ export default function UserProfilePage() {
   const [scratchProjects, setScratchProjects] = useState<any[]>([]);
   const [scratchProjectsLoading, setScratchProjectsLoading] = useState(false);
 
+  // Achievements state
+  const [achievements, setAchievements] = useState<
+    { achievement_key: string; coins_earned: number; earned_at: string }[]
+  >([]);
+  const [achievementsLoading, setAchievementsLoading] = useState(false);
+  const [coins, setCoins] = useState(0);
 
   // keep initial snapshot for reset
   const initialRef = useRef<{
@@ -459,7 +465,9 @@ export default function UserProfilePage() {
           setScratchProjectsLoading(true);
           try {
             const sp = await fetch(
-              `/api/scratch/projects?username=${encodeURIComponent(user.username)}&userId=${user.id}`
+              `/api/scratch/projects?username=${encodeURIComponent(
+                user.username
+              )}&userId=${user.id}`
             );
             const spj = await sp.json();
             if (sp.ok && spj.success) {
@@ -472,6 +480,33 @@ export default function UserProfilePage() {
           } finally {
             setScratchProjectsLoading(false);
           }
+        }
+
+        // Load achievements and coins
+        setAchievementsLoading(true);
+        try {
+          const [achievRes, statsRes] = await Promise.all([
+            fetch(`/api/user/achievements?userId=${user.id}`),
+            fetch(`/api/user/stats?userId=${user.id}`),
+          ]);
+
+          if (achievRes.ok) {
+            const achievJson = await achievRes.json();
+            if (achievJson.success) {
+              setAchievements(achievJson.achievements || []);
+            }
+          }
+
+          if (statsRes.ok) {
+            const statsJson = await statsRes.json();
+            if (statsJson.success) {
+              setCoins(statsJson.coins || 0);
+            }
+          }
+        } catch {
+          // ignore error
+        } finally {
+          setAchievementsLoading(false);
         }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Gagal memuat profil");
@@ -591,59 +626,90 @@ export default function UserProfilePage() {
         }}
       >
         {error && !loading && <Text c="red">{error}</Text>}
-        <Group>
-          <Avatar
-            size={110}
-            radius="xl"
-            src={user.avatar}
-            style={{ border: "4px solid var(--primary-color)" }}
+        <Stack gap="md">
+          {/* Mobile & Tablet: Stack vertically */}
+          <Group
+            justify="space-between"
+            align="flex-start"
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: "1rem",
+            }}
           >
-            {user.fullName
-              .split(" ")
-              .map((n) => n[0])
-              .join("")
-              .toUpperCase()}
-          </Avatar>
-          <div style={{ flex: 1 }}>
-            <Title order={2} c="white" mb={6}>
-              {fullName || user.fullName}
-            </Title>
-            <Group gap="md" mb="sm">
-              <Badge
+            {/* Avatar and Info Container */}
+            <Group align="flex-start" style={{ flex: 1, minWidth: "250px" }}>
+              <Avatar
+                size={110}
+                radius="xl"
+                src={user.avatar}
+                style={{
+                  border: "4px solid var(--primary-color)",
+                  flexShrink: 0,
+                }}
+              >
+                {user.fullName
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()}
+              </Avatar>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Title
+                  order={2}
+                  c="white"
+                  mb={6}
+                  style={{ wordBreak: "break-word" }}
+                >
+                  {fullName || user.fullName}
+                </Title>
+                <Stack gap="xs">
+                  <Badge
+                    bg="var(--secondary-color)"
+                    variant="filled"
+                    radius="xl"
+                    c="var(--primary-color)"
+                    style={{ width: "fit-content" }}
+                  >
+                    Tier{" "}
+                    {getTier(currentXP, points, coursesCompleted).toUpperCase()}
+                  </Badge>
+                  <Badge
+                    color="var(--secondary-color)"
+                    variant="light"
+                    radius="xl"
+                    style={{ width: "fit-content" }}
+                  >
+                    Skor {avgScore}
+                  </Badge>
+                </Stack>
+              </div>
+            </Group>
+
+            {/* Avatar Button */}
+            <div style={{ flexShrink: 0 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={onAvatarFile}
+              />
+              <Button
                 bg="var(--secondary-color)"
                 variant="filled"
                 radius="xl"
                 c="var(--primary-color)"
+                onClick={onSelectAvatar}
+                fullWidth
+                style={{ minWidth: "150px" }}
               >
-                Tier{" "}
-                {getTier(currentXP, points, coursesCompleted).toUpperCase()}
-              </Badge>
-              <Badge color="var(--secondary-color)" variant="light" radius="xl">
-                Skor {avgScore}
-              </Badge>
-            </Group>
-          </div>
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={onAvatarFile}
-            />
-            <Button
-              bg="var(--secondary-color)"
-              variant="filled"
-              radius="xl"
-              c="var(--primary-color)"
-              onClick={onSelectAvatar}
-            >
-              Ganti Avatar
-            </Button>
-          </div>
-        </Group>
+                Ganti Avatar
+              </Button>
+            </div>
+          </Group>
+        </Stack>
       </Card>
-
 
       {/* Content */}
       <Card
@@ -662,7 +728,9 @@ export default function UserProfilePage() {
             <Grid gutter="lg">
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <TextInput
-                  label={user?.role === "school" ? "Nama Sekolah" : "Nama Lengkap"}
+                  label={
+                    user?.role === "school" ? "Nama Sekolah" : "Nama Lengkap"
+                  }
                   leftSection={<IconUser size={16} />}
                   value={fullName}
                   onChange={(e) => setFullName(e.currentTarget.value)}
@@ -732,7 +800,6 @@ export default function UserProfilePage() {
                 Simpan Perubahan
               </Button>
             </Group>
-
           </Stack>
         )}
 
@@ -742,13 +809,30 @@ export default function UserProfilePage() {
             <Group justify="space-between" align="center">
               <div>
                 <Title order={3} c="var(--primary-color)">
-                  Pencapaian
+                  Pencapaian & Koin
                 </Title>
                 <Text c="dimmed">
-                  Target spesial untuk jadi Hero Pembelajar
+                  Kumpulkan koin dengan menyelesaikan pencapaian
                 </Text>
               </div>
+              <Card withBorder radius="xl" p="md" bg="var(--secondary-color)">
+                <Group gap="xs">
+                  <Text size="xl" fw={700} c="var(--primary-color)">
+                    {coins.toLocaleString("id-ID")}
+                  </Text>
+                  <Text size="sm" c="var(--primary-color)">
+                    Koin
+                  </Text>
+                </Group>
+              </Card>
             </Group>
+
+            {/* Achievements Grid */}
+            <AchievementsGrid
+              achievements={achievements}
+              loading={achievementsLoading}
+              stats={{ xp: currentXP, points, coursesCompleted }}
+            />
 
             <TierCarouselCard
               stats={{ xp: currentXP, points, coursesCompleted }}
@@ -1026,7 +1110,9 @@ export default function UserProfilePage() {
                       setScratchProjectsLoading(true);
                       try {
                         const sp = await fetch(
-                          `/api/scratch/projects?username=${encodeURIComponent(user.username)}&userId=${user.id}`
+                          `/api/scratch/projects?username=${encodeURIComponent(
+                            user.username
+                          )}&userId=${user.id}`
                         );
                         const spj = await sp.json();
                         if (sp.ok && spj.success) {
@@ -1045,7 +1131,9 @@ export default function UserProfilePage() {
                 </Tooltip>
                 <Button
                   leftSection={<IconExternalLink size={16} />}
-                  onClick={() => window.open("https://scratch.mit.edu/", "_blank")}
+                  onClick={() =>
+                    window.open("https://scratch.mit.edu/", "_blank")
+                  }
                 >
                   Buka Scratch
                 </Button>
@@ -1055,11 +1143,14 @@ export default function UserProfilePage() {
             {/* Info Box */}
             <Card withBorder radius="md" p="sm" bg="blue.0">
               <Group align="flex-start" gap="sm">
-                <IconInfoCircle size={20} color="var(--mantine-color-blue-filled)" />
+                <IconInfoCircle
+                  size={20}
+                  color="var(--mantine-color-blue-filled)"
+                />
                 <Text size="sm" c="blue.8">
-                  Pastikan proyek Scratch Anda sudah diset <b>Publik</b> agar dapat
-                  tampil di daftar proyek. Proyek yang masih <i>Private</i> tidak akan
-                  muncul di sini.
+                  Pastikan proyek Scratch Anda sudah diset <b>Publik</b> agar
+                  dapat tampil di daftar proyek. Proyek yang masih{" "}
+                  <i>Private</i> tidak akan muncul di sini.
                 </Text>
               </Group>
             </Card>
@@ -1072,13 +1163,16 @@ export default function UserProfilePage() {
             ) : !user?.username ? (
               <Card withBorder p="md">
                 <Text>
-                  Username akun Anda akan digunakan sebagai username Scratch. Pastikan
-                  username Anda sama dengan akun Scratch.
+                  Username akun Anda akan digunakan sebagai username Scratch.
+                  Pastikan username Anda sama dengan akun Scratch.
                 </Text>
               </Card>
             ) : (
               <ScrollArea h="calc(100vh - 400px)">
-                <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
+                <SimpleGrid
+                  cols={{ base: 1, sm: 2, md: 3, lg: 4 }}
+                  spacing="md"
+                >
                   {scratchProjects.length > 0 ? (
                     scratchProjects.map((p: any) => {
                       const desc =
@@ -1088,7 +1182,13 @@ export default function UserProfilePage() {
                         "";
 
                       return (
-                        <Card key={p.id} withBorder shadow="sm" radius="md" p="md">
+                        <Card
+                          key={p.id}
+                          withBorder
+                          shadow="sm"
+                          radius="md"
+                          p="md"
+                        >
                           <Stack gap={8}>
                             <Image
                               src={
@@ -1370,93 +1470,123 @@ function Leaderboard() {
         position: "relative",
       }}
     >
-      <Group justify="space-between" mb="xs">
-        <Title order={4} c="var(--primary-color)">
-          Leaderboard Siswa
-        </Title>
-        <Button size="xs" variant="light" onClick={() => setShowAll((v) => !v)}>
-          {showAll ? "Tampilkan Top 5" : "Lihat Semua"}
-        </Button>
-      </Group>
-      <Text size="sm" c="dimmed" mb="md">
-        Urutan berdasarkan rata-rata tiga kategori
-      </Text>
-
-      {/* Podium */}
-      {top3.length > 0 && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 16,
-            alignItems: "end",
-            marginBottom: 16,
-          }}
-        >
-          {/* Rank 2 - left, lower */}
-          {top3[1] ? (
-            <PodiumItem
-              rank={2}
-              item={top3.find((i) => i.rank === 2) || top3[1]}
-              height={120}
-              align="end"
-            />
-          ) : (
-            <div />
-          )}
-          {/* Rank 1 - center, higher */}
-          <PodiumItem
-            rank={1}
-            item={top3.find((i) => i.rank === 1) || top3[0]}
-            height={160}
-            highlight
-          />
-
-          {/* Rank 3 - right, lower */}
-          {top3[2] ? (
-            <PodiumItem
-              rank={3}
-              item={top3.find((i) => i.rank === 3) || top3[2]}
-              height={110}
-              align="start"
-            />
-          ) : (
-            <div />
-          )}
-        </div>
-      )}
-
-      {/* Rest of list */}
-      <Stack gap="sm">
-        {rest.map((it) => (
-          <Group
-            key={it.userId}
-            justify="space-between"
-            style={{
-              border: "1px solid var(--border-color)",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fff",
-            }}
+      <Stack gap="md">
+        <Group justify="space-between" mb="xs" wrap="wrap">
+          <div>
+            <Title order={4} c="var(--primary-color)">
+              Leaderboard Siswa
+            </Title>
+            <Text size="sm" c="dimmed">
+              Urutan berdasarkan rata-rata tiga kategori
+            </Text>
+          </div>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={() => setShowAll((v) => !v)}
           >
-            <Group>
-              <Badge radius="xl" variant="light">
-                {it.rank}
-              </Badge>
-              <Avatar src={it.avatar || undefined} radius="xl" />
-              <div>
-                <Text fw={600}>{it.fullName || it.username}</Text>
-                <Text size="xs" c="dimmed">
-                  {it.tier} • Skor {Math.floor(it.score)}
-                </Text>
-              </div>
-            </Group>
-          </Group>
-        ))}
-        {items.length === 0 && (
-          <Text c="white">Belum ada data leaderboard</Text>
+            {showAll ? "Tampilkan Top 5" : "Lihat Semua"}
+          </Button>
+        </Group>
+
+        {/* Podium */}
+        {top3.length > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 12,
+              alignItems: "end",
+              marginBottom: 16,
+            }}
+            className="podium-grid"
+          >
+            {/* Rank 2 - left, lower */}
+            {top3[1] ? (
+              <PodiumItem
+                rank={2}
+                item={top3.find((i) => i.rank === 2) || top3[1]}
+                height={120}
+                align="end"
+              />
+            ) : (
+              <div />
+            )}
+            {/* Rank 1 - center, higher */}
+            <PodiumItem
+              rank={1}
+              item={top3.find((i) => i.rank === 1) || top3[0]}
+              height={160}
+              highlight
+            />
+
+            {/* Rank 3 - right, lower */}
+            {top3[2] ? (
+              <PodiumItem
+                rank={3}
+                item={top3.find((i) => i.rank === 3) || top3[2]}
+                height={110}
+                align="start"
+              />
+            ) : (
+              <div />
+            )}
+          </div>
         )}
+
+        {/* Rest of list */}
+        <Stack gap="sm">
+          {rest.map((it) => (
+            <Group
+              key={it.userId}
+              justify="space-between"
+              wrap="wrap"
+              style={{
+                border: "1px solid var(--border-color)",
+                borderRadius: 12,
+                padding: 12,
+                background: "#fff",
+                gap: 8,
+              }}
+            >
+              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
+                  {it.rank}
+                </Badge>
+                <Avatar
+                  src={it.avatar || undefined}
+                  radius="xl"
+                  size="md"
+                  style={{ flexShrink: 0 }}
+                />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Text
+                    fw={600}
+                    lineClamp={1}
+                    style={{ wordBreak: "break-word" }}
+                  >
+                    {it.fullName || it.username}
+                  </Text>
+                  <Text size="xs" c="dimmed" lineClamp={1}>
+                    {it.tier} • Skor {Math.floor(it.score)}
+                  </Text>
+                </div>
+              </Group>
+            </Group>
+          ))}
+          {items.length === 0 && (
+            <Text c="white">Belum ada data leaderboard</Text>
+          )}
+        </Stack>
       </Stack>
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .podium-grid {
+            gap: 8px !important;
+          }
+        }
+      `}</style>
     </Card>
   );
 }
@@ -1492,6 +1622,7 @@ function PodiumItem({
   return (
     <div
       style={{ display: "flex", flexDirection: "column", alignItems: "center" }}
+      className="podium-item"
     >
       <div style={{ position: "relative", marginBottom: 8 }}>
         {rank === 1 && (
@@ -1504,6 +1635,7 @@ function PodiumItem({
               left: "50%",
               transform: "translateX(-50%)",
             }}
+            className="crown-icon"
           />
         )}
         <Avatar
@@ -1514,12 +1646,14 @@ function PodiumItem({
             border: "3px solid var(--border-color)",
             background: "#fff",
           }}
+          className="podium-avatar"
         />
       </div>
       <div
         style={{
           height,
           width: "80%",
+          minWidth: 60,
           borderRadius: 10,
           background: bg,
           color,
@@ -1531,25 +1665,728 @@ function PodiumItem({
             : "0 4px 12px rgba(0,0,0,.08)",
         }}
         aria-label={`Peringkat ${rank}`}
+        className="podium-base"
       >
         <Group gap={6} align="center">
-          <IconTrophy size={16} color={color} />
+          <IconTrophy size={16} color={color} className="trophy-icon" />
           <Text size="xl" fw={700}>
             {rank}
           </Text>
         </Group>
       </div>
-      <Text mt={8} fw={600} size="sm" ta="center">
+      <Text
+        mt={8}
+        fw={600}
+        size="sm"
+        ta="center"
+        lineClamp={1}
+        style={{ width: "100%", wordBreak: "break-word" }}
+      >
         {item.fullName || item.username}
       </Text>
-      <Text size="xs" c="dimmed">
+      <Text size="xs" c="dimmed" lineClamp={1}>
         {item.tier} • Skor {Math.floor(item.score || 0)}
       </Text>
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .podium-item .podium-avatar {
+            width: 48px !important;
+            height: 48px !important;
+          }
+          .podium-item .crown-icon {
+            width: 20px !important;
+            height: 20px !important;
+            top: -18px !important;
+          }
+          .podium-item .trophy-icon {
+            width: 12px !important;
+            height: 12px !important;
+          }
+          .podium-base {
+            min-height: 80px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
 
 // (replaced with TierCarouselCard)
+
+// Achievement definitions matching the API
+const ACHIEVEMENTS_CONFIG = [
+  {
+    key: "first_step",
+    name: "Langkah Pertama",
+    desc: "Selesaikan kursus pertama",
+    coins: 10,
+    image: "1.png",
+    category: "course",
+  },
+  {
+    key: "knowledge_seeker",
+    name: "Pencari Ilmu",
+    desc: "Selesaikan 3 kursus",
+    coins: 25,
+    image: "2.png",
+    category: "course",
+  },
+  {
+    key: "dedicated_learner",
+    name: "Pembelajar Tekun",
+    desc: "Selesaikan 5 kursus",
+    coins: 50,
+    image: "3.png",
+    category: "course",
+  },
+  {
+    key: "quiz_master",
+    name: "Master Kuis",
+    desc: "Selesaikan 10 kuis dengan skor >80%",
+    coins: 30,
+    image: "4.png",
+    category: "quiz",
+  },
+  {
+    key: "perfect_score",
+    name: "Nilai Sempurna",
+    desc: "Dapatkan skor 100% di kuis pertama kali",
+    coins: 50,
+    image: "5.png",
+    category: "quiz",
+  },
+  {
+    key: "assignment_pro",
+    name: "Pro Tugas",
+    desc: "Kumpulkan 5 tugas",
+    coins: 40,
+    image: "6.png",
+    category: "assignment",
+  },
+  {
+    key: "discussion_star",
+    name: "Bintang Diskusi",
+    desc: "Buat 10 postingan diskusi",
+    coins: 20,
+    image: "7.png",
+    category: "discussion",
+  },
+  {
+    key: "helper",
+    name: "Penolong",
+    desc: "Beri 20 komentar di diskusi",
+    coins: 30,
+    image: "8.png",
+    category: "discussion",
+  },
+  {
+    key: "early_bird",
+    name: "Rajin Login",
+    desc: "Login 5 hari berturut-turut",
+    coins: 15,
+    image: "9.png",
+    category: "activity",
+  },
+  {
+    key: "consistent",
+    name: "Konsisten",
+    desc: "Login 15 hari berturut-turut",
+    coins: 40,
+    image: "10.png",
+    category: "activity",
+  },
+  {
+    key: "code_creator",
+    name: "Pembuat Kode",
+    desc: "Buat 5 proyek Scratch/Blockly",
+    coins: 35,
+    image: "11.png",
+    category: "project",
+  },
+  {
+    key: "rating_giver",
+    name: "Pemberi Rating",
+    desc: "Beri rating pada 5 kursus",
+    coins: 10,
+    image: "12.png",
+    category: "rating",
+  },
+  {
+    key: "marathon",
+    name: "Marathon",
+    desc: "Selesaikan 10 kursus",
+    coins: 100,
+    image: "13.png",
+    category: "course",
+  },
+  {
+    key: "explorer_tier",
+    name: "Tier Explorer",
+    desc: "Capai tier Explorer",
+    coins: 150,
+    image: "14.png",
+    category: "tier",
+  },
+  {
+    key: "master_tier",
+    name: "Tier Master",
+    desc: "Capai tier Master",
+    coins: 500,
+    image: "15.png",
+    category: "tier",
+  },
+];
+
+function AchievementsGrid({
+  achievements,
+  loading,
+  stats,
+}: {
+  achievements: {
+    achievement_key: string;
+    coins_earned: number;
+    earned_at: string;
+  }[];
+  loading: boolean;
+  stats: { xp: number; points: number; coursesCompleted: number };
+}) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 5;
+  const earnedKeys = new Set(achievements.map((a) => a.achievement_key));
+
+  const totalPages = Math.ceil(ACHIEVEMENTS_CONFIG.length / itemsPerPage);
+  const startIdx = currentPage * itemsPerPage;
+  const currentItems = ACHIEVEMENTS_CONFIG.slice(
+    startIdx,
+    startIdx + itemsPerPage
+  );
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "course":
+        return "#3b82f6"; // blue
+      case "quiz":
+        return "#8b5cf6"; // purple
+      case "assignment":
+        return "#f59e0b"; // amber
+      case "discussion":
+        return "#10b981"; // green
+      case "activity":
+        return "#ef4444"; // red
+      case "project":
+        return "#06b6d4"; // cyan
+      case "rating":
+        return "#ec4899"; // pink
+      case "tier":
+        return "#d97706"; // orange
+      default:
+        return "#6b7280"; // gray
+    }
+  };
+
+  if (loading) {
+    return (
+      <Group justify="center" py="xl">
+        <Loader size="lg" />
+      </Group>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <Group justify="space-between" mb="md">
+        <Text fw={600} size="lg">
+          Semua Pencapaian ({achievements.length} / {ACHIEVEMENTS_CONFIG.length}
+          )
+        </Text>
+        <Group gap="xs">
+          <Text size="sm" c="dimmed">
+            {currentPage + 1} / {totalPages}
+          </Text>
+        </Group>
+      </Group>
+
+      {/* Navigation Arrows */}
+      {currentPage > 0 && (
+        <ActionIcon
+          size="xl"
+          variant="filled"
+          color="var(--primary-color)"
+          radius="xl"
+          style={{
+            position: "absolute",
+            left: -20,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          }}
+          onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+        >
+          <IconChevronLeft size={24} />
+        </ActionIcon>
+      )}
+
+      {currentPage < totalPages - 1 && (
+        <ActionIcon
+          size="xl"
+          variant="filled"
+          color="var(--primary-color)"
+          radius="xl"
+          style={{
+            position: "absolute",
+            right: -20,
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 10,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          }}
+          onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+        >
+          <IconChevronRight size={24} />
+        </ActionIcon>
+      )}
+
+      {/* Grid: 3 top, 2 bottom */}
+      <div style={{ minHeight: 400 }}>
+        {/* Top Row - 3 items */}
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg" mb="lg">
+          {currentItems.slice(0, 3).map((config) => {
+            const isUnlocked = earnedKeys.has(config.key);
+            const earned = achievements.find(
+              (a) => a.achievement_key === config.key
+            );
+
+            return (
+              <Card
+                key={config.key}
+                withBorder
+                radius="lg"
+                p="lg"
+                style={{
+                  background: isUnlocked
+                    ? "linear-gradient(135deg, #fff 0%, #f8fafc 100%)"
+                    : "#f1f5f9",
+                  border: isUnlocked
+                    ? `2px solid ${getCategoryColor(config.category)}`
+                    : "2px solid #cbd5e1",
+                  position: "relative",
+                  overflow: "hidden",
+                  transition: "all 0.3s ease",
+                  cursor: "pointer",
+                }}
+                className="achievement-card"
+              >
+                {/* Background pattern for unlocked */}
+                {isUnlocked && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: -20,
+                      right: -20,
+                      width: 100,
+                      height: 100,
+                      borderRadius: "50%",
+                      background: `${getCategoryColor(config.category)}15`,
+                      filter: "blur(20px)",
+                    }}
+                  />
+                )}
+
+                <Stack gap="md" style={{ position: "relative", zIndex: 1 }}>
+                  {/* Coin Image */}
+                  <div
+                    style={{
+                      position: "relative",
+                      width: "100%",
+                      height: 120,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {isUnlocked ? (
+                      <NextImage
+                        src={`/coins/${config.image}`}
+                        alt={config.name}
+                        width={100}
+                        height={100}
+                        style={{
+                          filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.15))",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          position: "relative",
+                          width: 100,
+                          height: 100,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <NextImage
+                          src={`/coins/${config.image}`}
+                          alt={config.name}
+                          width={100}
+                          height={100}
+                          style={{
+                            filter:
+                              "grayscale(100%) brightness(0.7) opacity(0.4)",
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: "50%",
+                              background: "rgba(100, 116, 139, 0.9)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <IconLock size={24} color="white" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Achievement Info */}
+                  <div>
+                    <Group justify="space-between" mb={4}>
+                      <Text
+                        fw={700}
+                        size="md"
+                        c={
+                          isUnlocked
+                            ? getCategoryColor(config.category)
+                            : "dimmed"
+                        }
+                        style={{ flex: 1, minWidth: 0 }}
+                        lineClamp={1}
+                      >
+                        {config.name}
+                      </Text>
+                      <Badge
+                        color={
+                          isUnlocked
+                            ? getCategoryColor(config.category)
+                            : "gray"
+                        }
+                        variant={isUnlocked ? "filled" : "light"}
+                        size="sm"
+                      >
+                        {config.coins} Koin
+                      </Badge>
+                    </Group>
+
+                    <Text
+                      size="sm"
+                      c={isUnlocked ? "dark" : "dimmed"}
+                      mb={8}
+                      lineClamp={2}
+                    >
+                      {config.desc}
+                    </Text>
+
+                    {isUnlocked && earned ? (
+                      <Group gap={4}>
+                        <IconCalendar size={14} color="#64748b" />
+                        <Text size="xs" c="dimmed">
+                          {new Date(earned.earned_at).toLocaleDateString(
+                            "id-ID",
+                            {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            }
+                          )}
+                        </Text>
+                      </Group>
+                    ) : (
+                      <Group gap={4}>
+                        <IconLock size={14} color="#94a3b8" />
+                        <Text size="xs" c="dimmed" fs="italic">
+                          Belum terbuka
+                        </Text>
+                      </Group>
+                    )}
+                  </div>
+
+                  {/* Category Badge */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                    }}
+                  >
+                    <Badge
+                      size="xs"
+                      variant="light"
+                      color={getCategoryColor(config.category)}
+                      style={{ textTransform: "capitalize" }}
+                    >
+                      {config.category}
+                    </Badge>
+                  </div>
+                </Stack>
+              </Card>
+            );
+          })}
+        </SimpleGrid>
+
+        {/* Bottom Row - 2 items centered */}
+        {currentItems.length > 3 && (
+          <SimpleGrid
+            cols={{ base: 1, sm: 2 }}
+            spacing="lg"
+            style={{
+              maxWidth: currentItems.length === 4 ? "66%" : "100%",
+              margin: "0 auto",
+            }}
+          >
+            {currentItems.slice(3, 5).map((config) => {
+              const isUnlocked = earnedKeys.has(config.key);
+              const earned = achievements.find(
+                (a) => a.achievement_key === config.key
+              );
+
+              return (
+                <Card
+                  key={config.key}
+                  withBorder
+                  radius="lg"
+                  p="lg"
+                  style={{
+                    background: isUnlocked
+                      ? "linear-gradient(135deg, #fff 0%, #f8fafc 100%)"
+                      : "#f1f5f9",
+                    border: isUnlocked
+                      ? `2px solid ${getCategoryColor(config.category)}`
+                      : "2px solid #cbd5e1",
+                    position: "relative",
+                    overflow: "hidden",
+                    transition: "all 0.3s ease",
+                    cursor: "pointer",
+                  }}
+                  className="achievement-card"
+                >
+                  {/* Background pattern for unlocked */}
+                  {isUnlocked && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: -20,
+                        right: -20,
+                        width: 100,
+                        height: 100,
+                        borderRadius: "50%",
+                        background: `${getCategoryColor(config.category)}15`,
+                        filter: "blur(20px)",
+                      }}
+                    />
+                  )}
+
+                  <Stack gap="md" style={{ position: "relative", zIndex: 1 }}>
+                    {/* Coin Image */}
+                    <div
+                      style={{
+                        position: "relative",
+                        width: "100%",
+                        height: 120,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isUnlocked ? (
+                        <NextImage
+                          src={`/coins/${config.image}`}
+                          alt={config.name}
+                          width={100}
+                          height={100}
+                          style={{
+                            filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.15))",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            position: "relative",
+                            width: 100,
+                            height: 100,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <NextImage
+                            src={`/coins/${config.image}`}
+                            alt={config.name}
+                            width={100}
+                            height={100}
+                            style={{
+                              filter:
+                                "grayscale(100%) brightness(0.7) opacity(0.4)",
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: "50%",
+                                background: "rgba(100, 116, 139, 0.9)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <IconLock size={24} color="white" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Achievement Info */}
+                    <div>
+                      <Group justify="space-between" mb={4}>
+                        <Text
+                          fw={700}
+                          size="md"
+                          c={
+                            isUnlocked
+                              ? getCategoryColor(config.category)
+                              : "dimmed"
+                          }
+                          style={{ flex: 1, minWidth: 0 }}
+                          lineClamp={1}
+                        >
+                          {config.name}
+                        </Text>
+                        <Badge
+                          color={
+                            isUnlocked
+                              ? getCategoryColor(config.category)
+                              : "gray"
+                          }
+                          variant={isUnlocked ? "filled" : "light"}
+                          size="sm"
+                        >
+                          {config.coins} Koin
+                        </Badge>
+                      </Group>
+
+                      <Text
+                        size="sm"
+                        c={isUnlocked ? "dark" : "dimmed"}
+                        mb={8}
+                        lineClamp={2}
+                      >
+                        {config.desc}
+                      </Text>
+
+                      {isUnlocked && earned ? (
+                        <Group gap={4}>
+                          <IconCalendar size={14} color="#64748b" />
+                          <Text size="xs" c="dimmed">
+                            {new Date(earned.earned_at).toLocaleDateString(
+                              "id-ID",
+                              {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              }
+                            )}
+                          </Text>
+                        </Group>
+                      ) : (
+                        <Group gap={4}>
+                          <IconLock size={14} color="#94a3b8" />
+                          <Text size="xs" c="dimmed" fs="italic">
+                            Belum terbuka
+                          </Text>
+                        </Group>
+                      )}
+                    </div>
+
+                    {/* Category Badge */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                      }}
+                    >
+                      <Badge
+                        size="xs"
+                        variant="light"
+                        color={getCategoryColor(config.category)}
+                        style={{ textTransform: "capitalize" }}
+                      >
+                        {config.category}
+                      </Badge>
+                    </div>
+                  </Stack>
+                </Card>
+              );
+            })}
+          </SimpleGrid>
+        )}
+      </div>
+
+      {/* Page Indicators */}
+      <Group justify="center" mt="lg" gap="xs">
+        {Array.from({ length: totalPages }).map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setCurrentPage(i)}
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              border: "none",
+              background:
+                i === currentPage ? "var(--primary-color)" : "#cbd5e1",
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+            }}
+          />
+        ))}
+      </Group>
+
+      <style jsx>{`
+        .achievement-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+        }
+      `}</style>
+    </div>
+  );
+}
 
 function TierCarouselCard({
   stats,
@@ -1918,7 +2755,7 @@ function TierCarouselCard({
           />
         ))}
       </Group>
-        
+
       {/* Navigation Arrows */}
       {canGoLeft && (
         <button

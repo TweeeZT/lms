@@ -93,6 +93,28 @@ export default function InstructorDiscussionsFeed() {
     fetchItems();
   }, [fetchItems]);
 
+  // Map backend role to human label and color
+  const getRoleLabel = (r?: string | null) => {
+    if (!r) return null;
+    const map: Record<string, string> = {
+      instructor: "Instruktur",
+      user: "Siswa",
+      school: "Sekolah",
+      admin: "Admin",
+    };
+    return map[r] || r;
+  };
+  const getRoleColor = (r?: string | null) => {
+    if (!r) return "gray";
+    const map: Record<string, string> = {
+      instructor: "indigo",
+      user: "teal",
+      school: "orange",
+      admin: "red",
+    };
+    return map[r] || "gray";
+  };
+
   // like anti-spam: toggle once per post via localStorage key
   const likedKey = (id: string) => `disc-liked-${id}`;
 
@@ -256,29 +278,32 @@ export default function InstructorDiscussionsFeed() {
                         <Text fw={600} size="sm" c="dark">
                           {post.user?.full_name || "Pengguna"}
                         </Text>
+                        {post.user?.role && (
+                          <Badge size="xs" variant="light" color={getRoleColor(post.user.role)}>
+                            {getRoleLabel(post.user.role)}
+                          </Badge>
+                        )}
                         <Text size="xs" c="dimmed">
                           •
                         </Text>
                         <Text size="xs" c="dimmed">
                           {relativeTime(post.created_at)}
                         </Text>
-                        {post.tags?.[0] && (
-                          <>
-                            <Text size="xs" c="dimmed">
-                              •
-                            </Text>
-                            <Badge size="xs" variant="light" color="blue">
-                              {post.tags[0]}
-                            </Badge>
-                          </>
-                        )}
+                        {/* tag dipindah ke samping judul */}
                       </Group>
 
                       {/* Post content */}
                       <div style={{ marginBottom: 12 }}>
-                        <Text fw={600} size="sm" mb={6}>
-                          {post.title}
-                        </Text>
+                        <Group gap="xs" mb={6} align="center" wrap="nowrap">
+                          <Text fw={600} size="sm">
+                            {post.title}
+                          </Text>
+                          {post.tags?.[0] && (
+                            <Badge size="xs" variant="light" color="blue" style={{ textTransform: "uppercase" }}>
+                              {post.tags[0]}
+                            </Badge>
+                          )}
+                        </Group>
                         <Text
                           size="sm"
                           style={{ lineHeight: 1.5, whiteSpace: "pre-line" }}

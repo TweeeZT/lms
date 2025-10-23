@@ -108,6 +108,28 @@ export default function PostDetailPage() {
   const [confirmDeleteComment, setConfirmDeleteComment] =
     useState<ApiComment | null>(null);
 
+  // Map backend role to human label and color
+  const getRoleLabel = (r?: string | null) => {
+    if (!r) return null;
+    const map: Record<string, string> = {
+      instructor: "Instruktur",
+      user: "Siswa",
+      school: "Sekolah",
+      admin: "Admin",
+    };
+    return map[r] || r;
+  };
+  const getRoleColor = (r?: string | null) => {
+    if (!r) return "gray";
+    const map: Record<string, string> = {
+      instructor: "indigo",
+      user: "teal",
+      school: "orange",
+      admin: "red",
+    };
+    return map[r] || "gray";
+  };
+
   async function load() {
     if (!user) return;
     setLoading(true);
@@ -448,9 +470,16 @@ export default function PostDetailPage() {
                   </Avatar>
                   <Stack gap={4} style={{ flex: 1 }}>
                     <Group justify="space-between" align="center">
-                      <Text fw={600} size="sm">
-                        {c.user?.full_name || "Pengguna"}
-                      </Text>
+                      <Group gap="xs" align="center">
+                        <Text fw={600} size="sm">
+                          {c.user?.full_name || "Pengguna"}
+                        </Text>
+                        {c.user?.role && (
+                          <Badge size="xs" variant="light" color={getRoleColor(c.user.role)}>
+                            {getRoleLabel(c.user.role)}
+                          </Badge>
+                        )}
+                      </Group>
                       <Text size="xs" c="dimmed">
                         {relativeTime(c.created_at)}
                       </Text>

@@ -2089,7 +2089,7 @@ function AchievementsGrid({
                         variant={isUnlocked ? "filled" : "light"}
                         size="sm"
                       >
-                        {config.coins} 🪙
+                        {config.coins} Koin
                       </Badge>
                     </Group>
 
@@ -2296,7 +2296,7 @@ function AchievementsGrid({
                           variant={isUnlocked ? "filled" : "light"}
                           size="sm"
                         >
-                          {config.coins} 🪙
+                          {config.coins} Koin
                         </Badge>
                       </Group>
 

@@ -259,14 +259,14 @@ export default function UserCoursesPage() {
 
         {/* Progress Overview */}
         <Grid gutter="lg">
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          <Grid.Col span={{ base: 12, md: 12 }}>
             <StatCard
               label="Kursus Aktif"
               value={stats.total}
               Icon={IconBook}
             />
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 3 }}>
+          {/* <Grid.Col span={{ base: 12, md: 3 }}>
             <StatCard label="Tier" value={stats.tier} Icon={IconShield} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>
@@ -282,7 +282,7 @@ export default function UserCoursesPage() {
               value={stats.totalCoins}
               Icon={IconCoins}
             />
-          </Grid.Col>
+          </Grid.Col> */}
         </Grid>
 
         {/* Course List */}
@@ -298,10 +298,12 @@ export default function UserCoursesPage() {
                   0,
                   Math.min(totalModules, row.progress.completedCount || 0)
                 );
-                const isCompleted = totalModules > 0 && completedCount === totalModules;
-                const progress = totalModules > 0
-                  ? Math.round((completedCount / totalModules) * 100)
-                  : 0;
+                const isCompleted =
+                  totalModules > 0 && completedCount === totalModules;
+                const progress =
+                  totalModules > 0
+                    ? Math.round((completedCount / totalModules) * 100)
+                    : 0;
                 const currentModule = completedCount;
 
                 return (

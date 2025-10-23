@@ -73,7 +73,6 @@ export default function AdminCoursesPage() {
     instructor_id: "",
     title: "",
     price: 0,
-    totalModules: 0,
     isPublished: true,
     level: "beginner" as "beginner" | "intermediate" | "advanced",
     thumbnail: "",
@@ -112,7 +111,6 @@ export default function AdminCoursesPage() {
       instructor_id: "",
       title: "",
       price: 0,
-      totalModules: 0,
       isPublished: true,
       level: "beginner",
       thumbnail: "",
@@ -143,7 +141,6 @@ export default function AdminCoursesPage() {
       instructor_id: c.instructor_id,
       title: c.title,
       price: c.price || 0,
-      totalModules: c.total_modules || 0,
       isPublished: c.is_published ?? true,
       level:
         (c.level as "beginner" | "intermediate" | "advanced") || "beginner",
@@ -309,8 +306,6 @@ export default function AdminCoursesPage() {
     if (!form.instructor_id) baseErrors.instructor_id = "Instructor wajib";
     if (!form.title.trim()) baseErrors.title = "Judul wajib";
     if (!form.description.trim()) baseErrors.description = "Deskripsi wajib";
-    if (form.totalModules <= 0)
-      baseErrors.totalModules = "Total modul harus > 0";
     if (form.durationMin <= 0) baseErrors.durationMin = "Durasi harus > 0";
     const needsThumb = !editingId
       ? !selectedFile
@@ -329,7 +324,6 @@ export default function AdminCoursesPage() {
           fd.append("instructor_id", form.instructor_id);
           fd.append("title", form.title);
           fd.append("price", String(form.price ?? 0));
-          fd.append("total_modules", String(form.totalModules));
           fd.append("is_published", String(!!form.isPublished));
           fd.append("level", form.level);
           fd.append("description", form.description);
@@ -350,7 +344,6 @@ export default function AdminCoursesPage() {
             instructor_id: form.instructor_id,
             title: form.title,
             price: form.price,
-            total_modules: form.totalModules,
             is_published: form.isPublished,
             level: form.level,
             thumbnail: form.thumbnail,
@@ -384,7 +377,6 @@ export default function AdminCoursesPage() {
         fd.append("instructor_id", form.instructor_id);
         fd.append("title", form.title);
         fd.append("price", String(form.price ?? 0));
-        fd.append("total_modules", String(form.totalModules));
         fd.append("is_published", String(!!form.isPublished));
         fd.append("level", form.level);
         fd.append("description", form.description);
@@ -951,15 +943,6 @@ export default function AdminCoursesPage() {
             thousandSeparator
             min={0}
             description="Isi 0 untuk kursus gratis"
-            withAsterisk
-            disabled={saving}
-          />
-          <NumberInput
-            label="Total Modul"
-            value={form.totalModules}
-            onChange={(v) => setForm({ ...form, totalModules: Number(v || 0) })}
-            min={0}
-            error={errors.totalModules}
             withAsterisk
             disabled={saving}
           />

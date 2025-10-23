@@ -41,7 +41,6 @@ interface Course {
   price: number | null;
   duration_min?: number | null;
   level: string | null;
-  total_modules?: number | null;
   enrolled_count?: number | null;
   rating?: number | null;
   is_published?: boolean | null;
@@ -188,7 +187,7 @@ export default function AdminCourseDetailPage() {
                   <Group gap="md">
                     <Group gap={6}>
                       <IconBook size="1rem" />
-                      <Text size="sm">{course.total_modules || 0} modul</Text>
+                      <Text size="sm">{sortedModules.length} modul</Text>
                     </Group>
                     <Group gap={6}>
                       <IconClock size="1rem" />

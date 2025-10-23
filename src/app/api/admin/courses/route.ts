@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
     let query = supabaseAdmin
       .from("courses")
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, points, created_at, updated_at, users:instructor_id(full_name)",
+        // removed total_modules from select
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at, users:instructor_id(full_name)",
         { count: "exact" }
       )
       .order("created_at", { ascending: false });
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
       price: number | null;
       duration_min: number | null;
       level: string;
-      total_modules: number | null;
+      // total_modules removed
       enrolled_count: number | null;
       rating: number | null;
       is_published: boolean | null;
@@ -91,31 +92,29 @@ export async function GET(req: NextRequest) {
         .from("modules")
         .select("course_id")
         .in("course_id", courseIds)
+        // count only published modules (or null = published)
         .or("is_published.eq.true,is_published.is.null");
       if (Array.isArray(modRows)) {
-        modulesCountByCourse = (modRows as any[]).reduce(
-          (acc: Record<string, number>, r: any) => {
-            const cid = r.course_id as string;
-            acc[cid] = (acc[cid] || 0) + 1;
-            return acc;
-          },
-          {}
-        );
+        modulesCountByCourse = modRows.reduce<Record<string, number>>((acc, r: any) => {
+          const cid = r.course_id;
+          acc[cid] = (acc[cid] || 0) + 1;
+          return acc;
+        }, {});
       }
     }
 
     const items = (data || []).map((c: RawCourse) => {
       let instructor_name: string | null = null;
       if (c.users) {
-        if (Array.isArray(c.users))
-          instructor_name = c.users[0]?.full_name || null;
-        else instructor_name = c.users.full_name || null;
+        // users can be object or array
+        if (Array.isArray(c.users)) instructor_name = c.users[0]?.full_name || null;
+        else instructor_name = c.users?.full_name || null;
       }
       return {
         ...c,
         instructor_name,
-        total_modules:
-          modulesCountByCourse[c.id] ?? (c.total_modules ?? 0),
+        // derive total_modules from actual module counts only
+        total_modules: modulesCountByCourse[c.id] ?? 0,
       };
     });
 
@@ -159,7 +158,7 @@ export async function POST(req: NextRequest) {
     const category = String(form.get("category") || "").trim();
     const level = String(form.get("level") || "").trim();
     const price = Number(form.get("price") || 0);
-    const total_modules = Number(form.get("total_modules") || 0);
+    const total_modules = undefined; // removed usage
     const duration_min = Number(form.get("duration_min") || 0);
     const points = Number(form.get("points") || 0);
     const is_published = String(form.get("is_published") || "false") === "true";
@@ -173,8 +172,7 @@ export async function POST(req: NextRequest) {
     if (!description) missing.push("deskripsi");
     if (!category) missing.push("kategori");
     if (!level) missing.push("level");
-    if (!Number.isFinite(total_modules) || total_modules <= 0)
-      missing.push("total modul > 0");
+    // removed check for total_modules
     if (!Number.isFinite(duration_min) || duration_min <= 0)
       missing.push("durasi (menit > 0)");
     if (!file || !(file instanceof Blob)) missing.push("thumbnail (file)");
@@ -251,7 +249,7 @@ export async function POST(req: NextRequest) {
       price: Number(price || 0),
       duration_min: Number(duration_min),
       level,
-      total_modules: Number(total_modules),
+      // removed: total_modules
       points: Number(points),
       enrolled_count: 0,
       rating: 0,
@@ -381,7 +379,7 @@ export async function PATCH(req: NextRequest) {
       const category = String(form.get("category") || "").trim();
       const level = String(form.get("level") || "").trim();
       const price = form.get("price");
-      const total_modules = form.get("total_modules");
+      // removed total_modules handling
       const duration_min = form.get("duration_min");
       const points = form.get("points");
       const is_published = form.get("is_published");
@@ -395,7 +393,7 @@ export async function PATCH(req: NextRequest) {
       if (category) allowed.category = category;
       if (level) allowed.level = level;
       if (price !== null) allowed.price = Number(price);
-      if (total_modules !== null) allowed.total_modules = Number(total_modules);
+      // removed: if (total_modules !== null) allowed.total_modules = Number(total_modules);
       if (duration_min !== null) allowed.duration_min = Number(duration_min);
       if (points !== null) allowed.points = Number(points);
       if (is_published !== null)
@@ -467,7 +465,7 @@ export async function PATCH(req: NextRequest) {
         "category",
         "price",
         "level",
-        "total_modules",
+        // "total_modules", // removed
         "duration_min",
         "points",
         "is_published",
@@ -547,7 +545,8 @@ export async function PATCH(req: NextRequest) {
         .update(allowed)
         .eq("id", id)
         .select(
-          "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, points, enrolled_count, rating, is_published, created_at, updated_at"
+          // removed total_modules from returned fields
+          "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, points, enrolled_count, rating, is_published, created_at, updated_at"
         )
         .maybeSingle();
       if (error) {

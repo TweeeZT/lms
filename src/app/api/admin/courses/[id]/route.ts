@@ -35,7 +35,8 @@ export async function GET(
     const { data, error } = await supabaseAdmin
       .from("courses")
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, created_at, updated_at, users:instructor_id(full_name)"
+        // removed total_modules from select
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, created_at, updated_at, users:instructor_id(full_name)"
       )
       .eq("id", courseId)
       .maybeSingle();
@@ -46,6 +47,22 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // derive total_modules from modules table (only published modules)
+    const { data: modsRows, error: modsErr, count: modsCount } =
+      await supabaseAdmin
+        .from("modules")
+        .select("id", { count: "exact" })
+        .eq("course_id", courseId)
+        .or("is_published.eq.true,is_published.is.null");
+    if (modsErr) {
+      // ignore module count error but log / return if you prefer
+    }
+    const total_modules =
+      typeof modsCount === "number"
+        ? modsCount
+        : (modsRows?.length ?? 0);
+
     let instructor_name: string | null = null;
     if (data.users) {
       if (Array.isArray(data.users))
@@ -56,7 +73,7 @@ export async function GET(
     }
     return NextResponse.json({
       success: true,
-      item: { ...data, instructor_name },
+      item: { ...data, instructor_name, total_modules },
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Internal error";

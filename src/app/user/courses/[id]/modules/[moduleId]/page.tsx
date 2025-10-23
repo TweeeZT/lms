@@ -37,7 +37,6 @@ import { useAuth } from "../../../../../../hooks/useAuth";
 import MaterialContent from "../../../../../../components/course-detail/MaterialContent";
 import QuizSection from "../../../../../../components/course-detail/QuizSection";
 import AssignmentSection from "../../../../../../components/course-detail/AssignmentSection";
-import PrimeLoader from "../../../../../../components/PrimeLoader";
 
 // Types
 type QuizQuestionRuntime = {

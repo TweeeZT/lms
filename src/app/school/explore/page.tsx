@@ -65,6 +65,15 @@ export default function UserExplorePage() {
   const [items, setItems] = useState<ExploreCourse[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const formatDurationHours = (durationMin: number | null | undefined) => {
+    if (typeof durationMin !== "number" || Number.isNaN(durationMin)) {
+      return "-";
+    }
+    const hours = Math.ceil(durationMin / 60);
+    if (hours <= 0) return "-";
+    return `${new Intl.NumberFormat("id-ID").format(hours)} jam`;
+  };
+
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
@@ -89,7 +98,11 @@ export default function UserExplorePage() {
           const getInstructor = (src: any) => {
             // look in multiple possible locations that APIs might return
             const cand =
-              src?.instructor ?? src?.users ?? src?.user ?? src?.instructor_user ?? null;
+              src?.instructor ??
+              src?.users ??
+              src?.user ??
+              src?.instructor_user ??
+              null;
             if (!cand) return null;
             // array (joined relation) -> take first
             if (Array.isArray(cand) && cand.length > 0) {
@@ -97,7 +110,11 @@ export default function UserExplorePage() {
               return {
                 id: u?.id ?? u?.user_id ?? null,
                 fullName:
-                  u?.full_name ?? u?.fullName ?? u?.name ?? u?.display_name ?? "",
+                  u?.full_name ??
+                  u?.fullName ??
+                  u?.name ??
+                  u?.display_name ??
+                  "",
                 avatar: u?.avatar ?? u?.avatar_url ?? null,
               };
             }
@@ -105,7 +122,11 @@ export default function UserExplorePage() {
             return {
               id: cand?.id ?? cand?.user_id ?? null,
               fullName:
-                cand?.full_name ?? cand?.fullName ?? cand?.name ?? cand?.display_name ?? "",
+                cand?.full_name ??
+                cand?.fullName ??
+                cand?.name ??
+                cand?.display_name ??
+                "",
               avatar: cand?.avatar ?? cand?.avatar_url ?? null,
             };
           };
@@ -119,7 +140,7 @@ export default function UserExplorePage() {
             rating:
               c.rating !== undefined && c.rating !== null
                 ? Number(c.rating)
-                : (c.rating ?? null),
+                : c.rating ?? null,
             instructor,
           };
         });
@@ -287,14 +308,17 @@ export default function UserExplorePage() {
                     </Text>
                     <IconClock size="1rem" />
                     <Text size="sm">
-                      {Math.round((course.durationMin || 0) / 60)}h
+                      {formatDurationHours(course.durationMin)}
                     </Text>
                   </Group>
 
                   <Group justify="space-between" align="center">
                     <div>
                       <Text size="lg" fw={700} c="green">
-                        Rp {(course.price || 0).toLocaleString()}
+                        Rp{" "}
+                        {new Intl.NumberFormat("id-ID").format(
+                          course.price || 0
+                        )}
                       </Text>
                       <Text size="xs" c="dimmed">
                         oleh {course.instructor?.fullName || "-"}

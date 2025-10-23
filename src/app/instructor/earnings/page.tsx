@@ -758,6 +758,8 @@ export default function InstructorEarningsPage() {
                     )
                   }
                   clearable
+                  locale="id"
+                  valueFormat="DD MMMM YYYY"
                 />
                 <DateInput
                   label="Tanggal Akhir"
@@ -767,6 +769,8 @@ export default function InstructorEarningsPage() {
                     setEndDate(d ? new Date(d).toISOString().slice(0, 10) : "")
                   }
                   clearable
+                  locale="id"
+                  valueFormat="DD MMMM YYYY"
                 />
               </Group>
               <Group gap="sm">

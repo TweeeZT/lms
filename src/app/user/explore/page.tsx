@@ -64,6 +64,15 @@ export default function UserExplorePage() {
   const [items, setItems] = useState<ExploreCourse[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const formatDurationHours = (durationMin: number | null | undefined) => {
+    if (typeof durationMin !== "number" || Number.isNaN(durationMin)) {
+      return "-";
+    }
+    const hours = Math.ceil(durationMin / 60);
+    if (hours <= 0) return "-";
+    return `${new Intl.NumberFormat("id-ID").format(hours)} jam`;
+  };
+
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
@@ -243,14 +252,17 @@ export default function UserExplorePage() {
                     </Text>
                     <IconClock size="1rem" />
                     <Text size="sm">
-                      {Math.round((course.durationMin || 0) / 60)}h
+                      {formatDurationHours(course.durationMin)}
                     </Text>
                   </Group>
 
                   <Group justify="space-between" align="center">
                     <div>
                       <Text size="lg" fw={700} c="green">
-                        Rp {(course.price || 0).toLocaleString()}
+                        Rp{" "}
+                        {new Intl.NumberFormat("id-ID").format(
+                          course.price || 0
+                        )}
                       </Text>
                       <Text size="xs" c="dimmed">
                         oleh {course.instructor?.fullName || "-"}

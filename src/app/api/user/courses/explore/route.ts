@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   let query = supabaseAdmin
     .from("courses")
     .select(
-      "id,title,description,thumbnail,category,price,duration_min,level,total_modules,enrolled_count,rating,is_published,created_at,updated_at,instructor_id, users:instructor_id ( id, full_name, avatar )",
+      "id,title,description,thumbnail,category,price,duration_min,level,enrolled_count,rating,is_published,created_at,updated_at,instructor_id, users:instructor_id ( id, full_name, avatar )",
       { count: "exact" }
     )
     .eq("is_published", true);
@@ -105,31 +105,83 @@ export async function GET(req: Request) {
     );
   }
 
+  const courseIds = (data || [])
+    .map((row: any) => row?.id)
+    .filter((id): id is string => typeof id === "string" && !!id);
+
+  let modulesCountByCourse: Record<string, number> = {};
+  if (courseIds.length > 0) {
+    const { data: modRows, error: modulesError } = await supabaseAdmin
+      .from("modules")
+      .select("course_id")
+      .in("course_id", courseIds)
+      .or("is_published.eq.true,is_published.is.null");
+    if (!modulesError && Array.isArray(modRows)) {
+      modulesCountByCourse = (modRows as any[]).reduce(
+        (acc: Record<string, number>, row: any) => {
+          const cid = row?.course_id as string | undefined;
+          if (!cid) return acc;
+          acc[cid] = (acc[cid] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
+    }
+  }
+
   // Supabase row type is dynamic here; mapping to response shape
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = (data || []).map((c: any) => ({
-    id: c.id,
-    title: c.title,
-    description: c.description,
-    thumbnail: c.thumbnail,
-    category: c.category,
-    price: c.price,
-    durationMin: c.duration_min,
-    level: c.level,
-    totalModules: c.total_modules,
-    enrolledCount: c.enrolled_count,
-    rating: Number(c.rating || 0),
-    isPublished: c.is_published,
-    createdAt: c.created_at,
-    updatedAt: c.updated_at,
-    instructor: c.users
-      ? {
-          id: c.users.id,
-          fullName: c.users.full_name,
-          avatar: c.users.avatar || null,
-        }
-      : null,
-  }));
+  const items = (data || []).map((c: any) => {
+    const usersJoin = c?.users;
+    let instructor: {
+      id: string | null;
+      fullName: string;
+      avatar: string | null;
+    } | null = null;
+
+    if (Array.isArray(usersJoin) && usersJoin.length > 0) {
+      const u = usersJoin[0];
+      instructor = {
+        id: (u?.id ?? null) as string | null,
+        fullName: (u?.full_name ??
+          u?.fullName ??
+          u?.name ??
+          u?.display_name ??
+          "") as string,
+        avatar: (u?.avatar ?? u?.avatar_url ?? null) as string | null,
+      };
+    } else if (usersJoin) {
+      instructor = {
+        id: (usersJoin?.id ?? usersJoin?.user_id ?? null) as string | null,
+        fullName: (usersJoin?.full_name ??
+          usersJoin?.fullName ??
+          usersJoin?.name ??
+          usersJoin?.display_name ??
+          "") as string,
+        avatar: (usersJoin?.avatar ?? usersJoin?.avatar_url ?? null) as
+          | string
+          | null,
+      };
+    }
+
+    return {
+      id: c.id,
+      title: c.title,
+      description: c.description,
+      thumbnail: c.thumbnail,
+      category: c.category,
+      price: c.price != null ? Number(c.price) : null,
+      durationMin: c.duration_min != null ? Number(c.duration_min) : 0,
+      level: c.level,
+      totalModules: modulesCountByCourse[c.id] ?? 0,
+      enrolledCount: c.enrolled_count != null ? Number(c.enrolled_count) : 0,
+      rating:
+        c.rating !== undefined && c.rating !== null ? Number(c.rating) : null,
+      isPublished: c.is_published,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
+      instructor,
+    };
+  });
 
   return NextResponse.json({
     success: true,

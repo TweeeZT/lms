@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   const { data, error, count } = await supabaseAdmin
     .from("enrollments")
     .select(
-      "id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, points, is_published, created_at, updated_at, instructor_id, users:instructor_id ( id, full_name, avatar ) ), progress:user_progress!left ( id, completed_modules, current_module_id )",
+      "id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, points, is_published, created_at, updated_at, instructor_id, users:instructor_id ( id, full_name, avatar ) ), progress:user_progress!left ( id, completed_modules, current_module_id )",
       { count: "exact" }
     )
     .eq("user_id", userId)
@@ -48,7 +48,6 @@ export async function GET(req: Request) {
     price: number | null;
     duration_min: number | null;
     level: string | null;
-    total_modules: number | null;
     enrolled_count: number | null;
     rating: number | null;
     is_published: boolean | null;
@@ -72,6 +71,35 @@ export async function GET(req: Request) {
   // Build a cache by courseId to avoid repeated lookups
   let publishedModulesCountByCourse: Record<string, number> = {};
 
+  const normalizeInstructor = (joined: unknown) => {
+    if (!joined) return null;
+    if (Array.isArray(joined) && joined.length > 0) {
+      const u = joined[0] as Record<string, unknown>;
+      return {
+        id: (u?.id ?? u?.user_id ?? null) as string | null,
+        fullName: (u?.full_name ??
+          u?.fullName ??
+          u?.name ??
+          u?.display_name ??
+          "") as string,
+        avatar: (u?.avatar ?? u?.avatar_url ?? null) as string | null,
+      };
+    }
+    if (typeof joined === "object" && joined !== null) {
+      const u = joined as Record<string, unknown>;
+      return {
+        id: (u?.id ?? u?.user_id ?? null) as string | null,
+        fullName: (u?.full_name ??
+          u?.fullName ??
+          u?.name ??
+          u?.display_name ??
+          "") as string,
+        avatar: (u?.avatar ?? u?.avatar_url ?? null) as string | null,
+      };
+    }
+    return null;
+  };
+
   // Helper to map enrollment rows
   const mapEnrollmentRows = (rows: unknown[]) =>
     rows.map((r) => {
@@ -91,13 +119,12 @@ export async function GET(req: Request) {
         ? p.completed_modules.length
         : 0;
       const totalModules = c?.id
-        ? Number(
-            publishedModulesCountByCourse[c.id] ?? (c?.total_modules || 0)
-          )
+        ? Number(publishedModulesCountByCourse[c.id] ?? 0)
         : 0;
       const progressPct = totalModules
         ? Math.min(100, Math.round((completedCount / totalModules) * 100))
         : 0;
+      const instructor = normalizeInstructor(c?.users);
       return {
         enrollmentId:
           row.id || `up-${(c as JoinedCourse | null)?.id || "unknown"}`,
@@ -120,13 +147,7 @@ export async function GET(req: Request) {
               rating: Number(c.rating || 0),
               isPublished: c.is_published,
               points: c.points ?? null,
-              instructor: c.users
-                ? {
-                    id: c.users.id,
-                    fullName: c.users.full_name,
-                    avatar: c.users.avatar ?? null,
-                  }
-                : null,
+              instructor,
             }
           : null,
         progress: {
@@ -142,7 +163,11 @@ export async function GET(req: Request) {
     const courseIds = (data as unknown[])
       .map((r) => {
         const row = r as EnrollmentJoinedRow;
-        const cRaw = row.course as JoinedCourse | JoinedCourse[] | null | undefined;
+        const cRaw = row.course as
+          | JoinedCourse
+          | JoinedCourse[]
+          | null
+          | undefined;
         const c = Array.isArray(cRaw) ? cRaw[0] : cRaw;
         return c?.id;
       })
@@ -179,7 +204,7 @@ export async function GET(req: Request) {
   const { data: upRows, error: upErr } = await supabaseAdmin
     .from("user_progress")
     .select(
-      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, points, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )"
+      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, points, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )"
     )
     .eq("user_id", userId)
     .range(from, to);
@@ -206,7 +231,11 @@ export async function GET(req: Request) {
   const fallbackCourseIds = (upRows || [])
     .map((rowUnknown: unknown) => {
       const row = rowUnknown as UserProgressJoinedRow;
-      const cRaw = row.course as JoinedCourse | JoinedCourse[] | null | undefined;
+      const cRaw = row.course as
+        | JoinedCourse
+        | JoinedCourse[]
+        | null
+        | undefined;
       const c = Array.isArray(cRaw) ? cRaw[0] : cRaw;
       return c?.id;
     })
@@ -248,13 +277,12 @@ export async function GET(req: Request) {
     };
     const completedCount = (p.completed_modules as unknown[]).length;
     const totalModules = c?.id
-      ? Number(
-          publishedModulesCountByCourse[c.id] ?? (c?.total_modules || 0)
-        )
+      ? Number(publishedModulesCountByCourse[c.id] ?? 0)
       : 0;
     const progressPct = totalModules
       ? Math.min(100, Math.round((completedCount / totalModules) * 100))
       : 0;
+    const instructor = normalizeInstructor(c?.users);
     return {
       enrollmentId: row.id,
       enrolledAt: row.enrolled_at || row.created_at || new Date().toISOString(),
@@ -273,13 +301,7 @@ export async function GET(req: Request) {
             rating: Number(c.rating || 0),
             isPublished: c.is_published,
             points: c.points ?? null,
-            instructor: c.users
-              ? {
-                  id: c.users.id,
-                  fullName: c.users.full_name,
-                  avatar: c.users.avatar ?? null,
-                }
-              : null,
+            instructor,
           }
         : null,
       progress: {

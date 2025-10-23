@@ -680,19 +680,21 @@ export default function UserPostDetailPage() {
                   .join("")}
               </Avatar>
               <Stack gap={6} style={{ flex: 1 }}>
-                <Group justify="space-between" align="flex-start" wrap="nowrap">
-                  <Group gap={12}>
+                <Stack gap={4}>
+                  <Group gap={12} wrap="wrap" align="center">
                     <Text fw={700} size="sm">
                       {post.user?.full_name || "Pengguna"}
                     </Text>
-                    <Badge size="sm" variant="light">
-                      {post.user?.role || "user"}
-                    </Badge>
+                    {post.user?.role && (
+                      <Badge size="sm" variant="light" color={getRoleColor(post.user.role)}>
+                        {getRoleLabel(post.user.role)}
+                      </Badge>
+                    )}
                   </Group>
                   <Text size="xs" c="dimmed">
                     {relativeTime(post.created_at)}
                   </Text>
-                </Group>
+                </Stack>
                 <Title order={3}>{post.title}</Title>
                 <Text
                   size="sm"

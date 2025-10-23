@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Modal, Image, SimpleGrid, ActionIcon } from "@mantine/core";
-import { IconVideo, IconX } from "@tabler/icons-react";
+import { useRef, useState } from "react";
+import { Modal, Image, ActionIcon, Group, Text } from "@mantine/core";
+import { IconVideo, IconX, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 
 type MediaItem = {
   id: string;
@@ -14,87 +14,144 @@ type MediaItem = {
 export function MediaGrid({ media }: { media: MediaItem[] }) {
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [playVideo, setPlayVideo] = useState<string | null>(null);
+  const [index, setIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   if (!media || media.length === 0) return null;
 
-  const handleMediaClick = (item: MediaItem) => {
-    if (item.m_type === "video") {
-      setPlayVideo(item.url);
-    } else {
-      setZoomImage(item.url);
-    }
+  const clamp = (i: number) => (i + media.length) % media.length;
+  const goPrev = () => setIndex((i) => clamp(i - 1));
+  const goNext = () => setIndex((i) => clamp(i + 1));
+
+  const current = media[index];
+  const isVideo = current.m_type === "video";
+  const displaySrc = isVideo
+    ? current.thumbnail ||
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%231e3769' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23f6d457' font-size='48' font-family='Arial'%3E%E2%96%B6%3C/text%3E%3C/svg%3E"
+    : current.url;
+
+  const handleOpen = () => {
+    if (isVideo) setPlayVideo(current.url);
+    else setZoomImage(current.url);
   };
 
-  // Tentukan jumlah kolom berdasarkan jumlah media
-  const cols = media.length === 1 ? 1 : media.length === 2 ? 2 : 3;
+  const onTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const onTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx > 0) goPrev();
+    else goNext();
+  };
 
   return (
     <>
-      <SimpleGrid cols={cols} spacing="md">
-        {media.map((item) => {
-          const isVideo = item.m_type === "video";
-          // Gunakan placeholder SVG jika video tidak punya thumbnail
-          const displaySrc = isVideo
-            ? item.thumbnail ||
-              "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect fill='%231e3769' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23f6d457' font-size='48' font-family='Arial'%3E▶%3C/text%3E%3C/svg%3E"
-            : item.url;
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          borderRadius: 8,
+          overflow: "hidden",
+          border: "1px solid #e9ecef",
+          background: "#0f1f3b",
+        }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <div style={{ position: "relative", width: "100%", paddingBottom: "75%" }}>
+          <Image
+            src={displaySrc}
+            alt={`Media ${index + 1}`}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              cursor: "pointer",
+            }}
+            onClick={handleOpen}
+          />
 
-          return (
+          {isVideo && (
             <div
-              key={item.id}
               style={{
-                position: "relative",
-                width: "100%",
-                paddingBottom: "75%", // 4:3 aspect ratio
-                borderRadius: 8,
-                overflow: "hidden",
-                border: "1px solid #e9ecef",
-                cursor: "pointer",
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(0,0,0,0.3)",
+                pointerEvents: "none",
               }}
-              onClick={() => handleMediaClick(item)}
             >
-              <Image
-                src={displaySrc}
-                alt="Media"
+              <div
                 style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
+                  background: "rgba(255,255,255,0.9)",
+                  borderRadius: "50%",
+                  width: 48,
+                  height: 48,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
-              />
-              {isVideo && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "rgba(0,0,0,0.3)",
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "rgba(255,255,255,0.9)",
-                      borderRadius: "50%",
-                      width: 56,
-                      height: 56,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <IconVideo size={28} color="#1e3769" />
-                  </div>
-                </div>
-              )}
+              >
+                <IconVideo size={22} color="#1e3769" />
+              </div>
             </div>
-          );
-        })}
-      </SimpleGrid>
+          )}
+        </div>
+
+        {media.length > 1 && (
+          <>
+            <ActionIcon
+              variant="light"
+              color="dark"
+              radius="xl"
+              size="lg"
+              style={{ position: "absolute", top: "50%", left: 12, transform: "translateY(-50%)" }}
+              onClick={goPrev}
+              aria-label="Prev"
+            >
+              <IconChevronLeft size={20} />
+            </ActionIcon>
+            <ActionIcon
+              variant="light"
+              color="dark"
+              radius="xl"
+              size="lg"
+              style={{ position: "absolute", top: "50%", right: 12, transform: "translateY(-50%)" }}
+              onClick={goNext}
+              aria-label="Next"
+            >
+              <IconChevronRight size={20} />
+            </ActionIcon>
+
+            <Group gap={6} style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)" }}>
+              {media.map((_, i) => (
+                <div
+                  key={i}
+                  onClick={() => setIndex(i)}
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: i === index ? "#fff" : "#ffffff99",
+                    cursor: "pointer",
+                  }}
+                />
+              ))}
+            </Group>
+
+            <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", color: "#fff", borderRadius: 12, padding: "2px 8px", fontSize: 12 }}>
+              {index + 1} / {media.length}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Modal for Image Zoom */}
       <Modal
@@ -136,7 +193,7 @@ export function MediaGrid({ media }: { media: MediaItem[] }) {
         </div>
       </Modal>
 
-      {/* Modal for Video Playback */}
+  {/* Modal for Video Playback */}
       <Modal
         opened={!!playVideo}
         onClose={() => setPlayVideo(null)}

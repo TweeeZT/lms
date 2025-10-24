@@ -48,6 +48,7 @@ type ApiCourse = {
   price?: number | null;
   durationMin?: number | null;
   level: "beginner" | "intermediate" | "advanced" | string;
+  // totalModules is provided by the API as a computed count of published modules
   totalModules: number;
   enrolledCount?: number | null;
   rating?: number | null;
@@ -291,7 +292,14 @@ export default function UserCoursesPage() {
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
               {paginatedItems.map((row) => {
                 const course = row.course!;
-                const totalModules = course.totalModules || 0;
+                              // Prefer server-provided totalModules if available.
+                              // If not provided, fallback to 0 so we can still show "0 dari X modul" consistently.
+                              const totalModules =
+                                course.totalModules && course.totalModules > 0
+                                  ? course.totalModules
+                                  : 0;
+                
+                
                 const completedCount = Math.max(
                   0,
                   Math.min(totalModules, row.progress.completedCount || 0)
@@ -411,10 +419,7 @@ export default function UserCoursesPage() {
 
                       <div>
                         <Group justify="space-between" mb="xs">
-                          <Text size="sm">
-                            Progress ({currentModule}/{course.totalModules}{" "}
-                            modul)
-                          </Text>
+                          <Text size="sm">{`Progress (${currentModule}/${totalModules} modul)`}</Text>
                           <Text size="sm" fw={600}>
                             {progress}%
                           </Text>

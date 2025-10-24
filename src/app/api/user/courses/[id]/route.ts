@@ -94,7 +94,8 @@ export async function GET(
       level: course.level,
       price: course.price,
       durationMin: course.duration_min,
-      totalModules: modulesCount || 0,
+    // totalModules: expose computed modules count so client can display "x dari y" without extra requests
+    totalModules: modulesCount || 0,
       enrolledCount: course.enrolled_count || 0,
       rating: course.rating ? parseFloat(course.rating) : 0,
       instructorId: course.instructor_id,

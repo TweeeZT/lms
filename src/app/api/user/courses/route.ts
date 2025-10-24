@@ -287,22 +287,22 @@ export async function GET(req: Request) {
       enrollmentId: row.id,
       enrolledAt: row.enrolled_at || row.created_at || new Date().toISOString(),
       course: c
-        ? {
-            id: c.id,
-            title: c.title,
-            description: c.description ?? "",
-            thumbnail: c.thumbnail ?? null,
-            category: c.category,
-            price: c.price,
-            durationMin: c.duration_min,
-            level: c.level ?? "beginner",
-            totalModules: totalModules,
-            enrolledCount: c.enrolled_count,
-            rating: Number(c.rating || 0),
-            isPublished: c.is_published,
-            points: c.points ?? null,
-            instructor,
-          }
+          ? {
+              id: c.id,
+              title: c.title,
+              description: c.description ?? "",
+              thumbnail: c.thumbnail ?? null,
+              category: c.category,
+              price: c.price,
+              durationMin: c.duration_min,
+              level: c.level ?? "beginner",
+              totalModules: totalModules,
+              enrolledCount: c.enrolled_count,
+              rating: Number(c.rating || 0),
+              isPublished: c.is_published,
+              points: c.points ?? null,
+              instructor,
+            }
         : null,
       progress: {
         percentage: progressPct,

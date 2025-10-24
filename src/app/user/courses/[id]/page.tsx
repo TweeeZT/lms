@@ -65,6 +65,7 @@ type CourseData = {
   instructorName?: string;
   category: string;
   level: string;
+  // totalModules is provided by the API as a computed count of published modules
   totalModules: number;
   enrolledCount: number;
   rating?: number;

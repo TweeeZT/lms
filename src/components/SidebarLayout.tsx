@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AppShell,
   Burger,
@@ -41,6 +41,22 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 //
+
+// Normalize various avatar URL shapes to a browser-loadable absolute URL
+// - If full http(s) URL is provided, keep as-is
+// - If it is a Supabase public path starting with /storage/v1/..., prefix with NEXT_PUBLIC_SUPABASE_URL
+// - If it is a bare storage key like "avatar/..." or "avatars/...", build full public URL
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+function normalizeAvatar(url?: string): string | undefined {
+  if (!url) return undefined;
+  const u = url.trim();
+  if (!u) return undefined;
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith("/storage/")) return `${SUPABASE_URL}${u}`;
+  if (u.startsWith("avatar/") || u.startsWith("avatars/"))
+    return `${SUPABASE_URL}/storage/v1/object/public/${u}`;
+  return u;
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -232,6 +248,9 @@ export function DashboardLayout({
     setNavOpened(false);
   }, [pathname]);
 
+  // Normalize avatar URL to handle relative Supabase storage paths
+  const avatarSrc = useMemo(() => normalizeAvatar(user.avatar), [user.avatar]);
+
   return (
     <AppShell
       navbar={
@@ -306,7 +325,7 @@ export function DashboardLayout({
                 <UnstyledButton>
                   <Group>
                     <Avatar
-                      src={user.avatar}
+                      src={avatarSrc}
                       alt={user.fullName}
                       radius="xl"
                       size="md"

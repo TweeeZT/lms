@@ -276,7 +276,6 @@ export default function SchoolDashboard() {
                     <Text size="sm" fw={700}>{s.name}</Text>
                     <Text size="xs" c="dimmed">{s.email}</Text>
                   </div>
-                  <Text size="xs" c="dimmed">{s.status || 'accepted'}</Text>
                 </Group>
               ))}
             </Stack>

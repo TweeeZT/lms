@@ -56,6 +56,9 @@ export default function AdminNewModulePage() {
   const [description, setDescription] = useState("");
   const [moduleKind, setModuleKind] = useState<string>("materi");
   const [isPublished, setIsPublished] = useState(true);
+  // Reward fields
+  const [coins, setCoins] = useState<number | "">(0);
+  const [points, setPoints] = useState<number | "">(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,6 +133,8 @@ export default function AdminNewModulePage() {
         if (contentText) fd.set("text_content", contentText);
         fd.set("file", contentFile);
         fd.set("filename", contentFile.name);
+        fd.set("coins", String(coins || 0));
+        fd.set("points", String(points || 0));
         res = await fetch(
           `/api/admin/courses/${courseId}/modules?userId=${adminId}&debug=1`,
           { method: "POST", body: fd }
@@ -141,6 +146,10 @@ export default function AdminNewModulePage() {
           module_kind: moduleKind,
           is_published: isPublished,
         };
+
+        // include reward fields
+        body.coins = Number(coins || 0);
+        body.points = Number(points || 0);
 
         if (moduleKind === "materi") {
           body.content = {
@@ -549,6 +558,21 @@ export default function AdminNewModulePage() {
               <Radio value="draft" label="Draft" />
             </Group>
           </Radio.Group>
+
+          <SimpleGrid cols={2} mt="md">
+            <NumberInput
+              label="Koin (coins)"
+              value={coins}
+              onChange={(v) => setCoins(typeof v === 'number' ? v : '')}
+              min={0}
+            />
+            <NumberInput
+              label="Poin (points)"
+              value={points}
+              onChange={(v) => setPoints(typeof v === 'number' ? v : '')}
+              min={0}
+            />
+          </SimpleGrid>
           <Divider label="Detail Khusus" />
           {renderExtra()}
           <Group justify="flex-end" mt="md">

@@ -96,6 +96,9 @@ export default function AdminEditModulePage({
   const [description, setDescription] = useState("");
   const [orderIndex, setOrderIndex] = useState<number | undefined>(undefined);
   const [isPublished, setIsPublished] = useState(true);
+  // Reward fields
+  const [coins, setCoins] = useState<number | "">(0);
+  const [points, setPoints] = useState<number | "">(0);
 
   // Materi content fields
   const [contentType, setContentType] = useState<ContentType>("text");
@@ -176,6 +179,9 @@ export default function AdminEditModulePage({
       setTitle(m.title);
       setDescription(m.description || "");
       setIsPublished(m.is_published !== false);
+  // load rewards if present
+  setCoins((m as any).coins ?? 0);
+  setPoints((m as any).points ?? 0);
 
       // Parse based on module kind
       if (m.module_kind === "materi") {
@@ -264,6 +270,10 @@ export default function AdminEditModulePage({
         description: description || null,
         is_published: isPublished,
       };
+
+      // include reward fields
+      body.coins = Number(coins || 0);
+      body.points = Number(points || 0);
 
       if (moduleData.module_kind === "materi") {
         // Build content JSON
@@ -653,6 +663,21 @@ export default function AdminEditModulePage({
                 <Radio value="draft" label="Draft" />
               </Group>
             </Radio.Group>
+
+            <SimpleGrid cols={2} mt="md">
+              <NumberInput
+                label="Koin (coins)"
+                value={coins}
+                onChange={(v) => setCoins(typeof v === 'number' ? v : '')}
+                min={0}
+              />
+              <NumberInput
+                label="Poin (points)"
+                value={points}
+                onChange={(v) => setPoints(typeof v === 'number' ? v : '')}
+                min={0}
+              />
+            </SimpleGrid>
 
             <Divider label="Detail Khusus" />
             {renderModuleSpecificFields()}

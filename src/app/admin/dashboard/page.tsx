@@ -591,7 +591,16 @@ export default function AdminDashboard() {
   const totalRevenue = stats?.revenue.totalRevenue || 0;
   const activeStudents = stats?.activeEnrollments || 0;
   const donutData = distribution.map((r) => ({
-    label: r.role,
+    label:
+      r.role === "admin"
+        ? "Admin"
+        : r.role === "instructor"
+        ? "Instruktur"
+        : r.role === "school"
+        ? "Sekolah"
+        : r.role === "user"
+        ? "Siswa"
+        : r.role || "",
     value: r.value,
     color:
       r.role === "admin"
@@ -699,17 +708,10 @@ export default function AdminDashboard() {
                 <Button
                   component={Link}
                   href="/admin/earnings"
-                  variant="gradient"
-                  gradient={{ from: "#f6d457", to: "#1e3769", deg: 100 }}
                   fullWidth
                   mt="md"
                   size="sm"
-                  styles={(theme) => ({
-                    root: {
-                      color: theme.white,
-                      border: "none",
-                    },
-                  })}
+                  style={{ background: "#1e3769", color: "#fff", border: "none" }}
                 >
                   Lihat selengkapnya
                 </Button>
@@ -763,43 +765,42 @@ export default function AdminDashboard() {
                 <Stack gap="sm">
                   {recentUsers.slice(-3).map((user) => (
                     <Group key={user.id} justify="space-between" wrap="nowrap">
-                      <Group>
-                        <Avatar src={user.avatar} size="sm" radius="xl">
-                          {user.fullName
-                            .split(" ")
-                            .map((n: string) => n[0])
-                            .join("")}
-                        </Avatar>
-                        <div>
-                          <Text fw={600}>{user.fullName}</Text>
-                          <Text size="xs" c="dimmed">
-                            {user.email}
-                          </Text>
-                        </div>
-                      </Group>
-                      <Badge
-                        variant="light"
-                        color={
-                          user.role === "admin"
-                            ? "red"
-                            : user.role === "instructor"
-                            ? "blue"
-                            : "green"
-                        }
-                      >
-                        {user.role}
-                      </Badge>
+                      <div>
+                        <Text fw={600}>{user.fullName}</Text>
+                        <Text size="xs" c="dimmed">
+                          {user.email}
+                        </Text>
+                      </div>
+                          <Badge
+                            variant="light"
+                            color={
+                              user.role === "admin"
+                                ? "red"
+                                : user.role === "instructor"
+                                ? "blue"
+                                : "green"
+                            }
+                          >
+                            {user.role === "admin"
+                              ? "Admin"
+                              : user.role === "instructor"
+                              ? "Instruktur"
+                              : user.role === "school"
+                              ? "Sekolah"
+                              : user.role === "user"
+                              ? "Siswa"
+                              : user.role}
+                          </Badge>
                     </Group>
                   ))}
                 </Stack>
                 <Button
                   component={Link}
                   href="/admin/users"
-                  variant="gradient"
-                  gradient={{ from: "#f6d457", to: "#1e3769", deg: 100 }}
                   fullWidth
                   mt="md"
                   size="sm"
+                  style={{ background: "#1e3769", color: "#fff", border: "none" }}
                 >
                   Lihat selengkapnya
                 </Button>

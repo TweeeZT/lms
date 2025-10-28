@@ -476,7 +476,7 @@ export default function AdminUsersPage() {
                 { value: "admin", label: "Admin" },
                 { value: "instructor", label: "Instruktur" },
                 { value: "school", label: "Sekolah" },
-                { value: "user", label: "User" },
+                  { value: "user", label: "Siswa" },
               ]}
               value={roleFilter}
               onChange={(v) => {
@@ -580,7 +580,15 @@ export default function AdminUsersPage() {
                         }
                         variant="filled"
                       >
-                        {u.role}
+                          {u.role === "admin"
+                            ? "Admin"
+                            : u.role === "instructor"
+                            ? "Instruktur"
+                            : u.role === "school"
+                            ? "Sekolah"
+                            : u.role === "user"
+                            ? "Siswa"
+                            : u.role}
                       </Badge>
                     </Table.Td>
                     <Table.Td>

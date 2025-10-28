@@ -154,6 +154,8 @@ export default function InstructorDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardResponse | null>(null);
+  // Month navigation: 0 means current month window; 1 means window ending previous month, etc.
+  const [offsetMonths, setOffsetMonths] = useState(0);
 
   useEffect(() => {
     let ignore = false;
@@ -162,17 +164,37 @@ export default function InstructorDashboard() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(
-          `/api/instructor/dashboard?instructorId=${encodeURIComponent(
-            user.id
-          )}`
-        );
+        const params = new URLSearchParams({
+          instructorId: user.id,
+          offsetMonths: String(offsetMonths),
+          months: String(6),
+        });
+        const res = await fetch(`/api/instructor/dashboard?${params}`);
         const json: DashboardResponse = await res.json();
         if (!res.ok || !json.success) {
           const errMsg =
             (json as Partial<{ error: string }>).error ||
             "Gagal memuat dashboard";
           throw new Error(errMsg);
+        }
+        // Fallback: if courses list is empty but count > 0, hydrate from courses endpoint
+        if (
+          (json.courses?.length || 0) === 0 &&
+          (json.stats?.coursesCount || 0) > 0
+        ) {
+          try {
+            const p = new URLSearchParams({
+              instructorId: user.id,
+              page: "1",
+              limit: "6",
+              status: "all",
+            });
+            const res2 = await fetch(`/api/instructor/courses?${p.toString()}`);
+            const j2 = await res2.json();
+            if (res2.ok && j2?.success && Array.isArray(j2.items)) {
+              json.courses = j2.items as any;
+            }
+          } catch {}
         }
         if (!ignore) setData(json);
       } catch (e) {
@@ -185,7 +207,7 @@ export default function InstructorDashboard() {
     return () => {
       ignore = true;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, offsetMonths]);
 
   // Make numbers compact and prevent wrapping
   const formatCurrency = (n: number) => {
@@ -397,7 +419,7 @@ export default function InstructorDashboard() {
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
             <StatCard
               label="Kursus Saya"
-              value={myCourses.length}
+              value={data?.stats.coursesCount ?? myCourses.length}
               Icon={IconBook}
               color="blue"
             />

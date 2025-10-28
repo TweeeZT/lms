@@ -88,15 +88,14 @@ export async function GET(req: Request) {
       }
     }
 
-    // User progress with course join
+    // User progress with course join (fallback source for stats)
     const { data: userProgress } = await supabase
       .from("user_progress")
       .select(
         "id, enrolled_at, course_id, completed_modules, progress_percentage, course:courses ( id, title, category, total_modules, duration_min, level, enrolled_count, rating, thumbnail )"
       )
       .eq("user_id", userId)
-      .order("enrolled_at", { ascending: false })
-      .limit(10);
+      .limit(50);
 
     // Helper to unwrap 1:1 or 1:n join shapes from Supabase
     const unwrapCourse = (
@@ -107,13 +106,23 @@ export async function GET(req: Request) {
     };
 
     const progressList = userProgress || [];
-    const courseIds = Array.from(
+    // Derive course ids directly from user_progress rows (robust even if join metadata is missing)
+    const rawProgressCourseIds = Array.from(
       new Set(
         progressList
-          .map((p) => unwrapCourse(p.course)?.id)
+          .map((p: any) => p?.course_id as string | undefined)
           .filter((v): v is string => Boolean(v))
       )
     );
+    // Also try to collect ids from joined course if available
+    const joinedCourseIds = Array.from(
+      new Set(
+        progressList
+          .map((p) => unwrapCourse((p as any).course)?.id)
+          .filter((v): v is string => Boolean(v))
+      )
+    );
+    const courseIds = Array.from(new Set([...(rawProgressCourseIds || []), ...(joinedCourseIds || [])]));
 
     const progressByCourse = new Map<
       string,
@@ -141,14 +150,37 @@ export async function GET(req: Request) {
       });
     }
 
-    // Stats: user wants ALL enrolled (completed + in-progress) counted as "activeCourses" displayed.
+    // Stats derived from user_progress (fallback if no enrollments data)
     let coursesCompleted = 0;
     let inProgress = 0;
     progressByCourse.forEach(({ percentage }) => {
       if (percentage >= 100) coursesCompleted += 1;
       else inProgress += 1;
     });
-    const allEnrolledCount = coursesCompleted + inProgress;
+    // Fallback count: distinct course ids from user_progress when enrollments missing
+    const allEnrolledCount = courseIds.length || (coursesCompleted + inProgress);
+
+    // Primary source: enrollments for accurate "active courses" and latest courses list
+    // Precise count of enrollments (head request to avoid ambiguity with limit/range)
+    const { count: enrollCountExact, error: enrollCountErr } = await supabase
+      .from("enrollments")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    const { data: enrollRows, error: enrollErr } = await supabase
+      .from("enrollments")
+      .select(
+        "id, enrolled_at, course:courses ( id, title, total_modules, thumbnail ), progress:user_progress!left ( completed_modules )",
+        { count: undefined }
+      )
+      .eq("user_id", userId)
+      .order("enrolled_at", { ascending: false })
+      .limit(3);
+
+    // Prefer enrollments count for active courses; fallback to user_progress based count
+    const activeCoursesCount = typeof enrollCountExact === "number" && enrollCountExact >= 0
+      ? enrollCountExact
+      : allEnrolledCount;
     // Note: numeric level not used in stats anymore
     const studentFound = !!student;
     const rawPoints = student?.points ?? null;
@@ -174,18 +206,20 @@ export async function GET(req: Request) {
         if (
           currentXP >= th.xp &&
           points >= th.points &&
-          coursesCompleted >= th.courses
+          // Use enrollments count if available; else fallback to derived completed courses
+          (typeof enrollCountExact === "number" ? enrollCountExact : coursesCompleted) >= th.courses
         )
           return th.key;
       }
       return "newbie";
     })();
 
-    // Recent discussions (latest 3)
+    // Recent discussions (latest 3) - show globally, not only user's posts
+    // Previously filtered by user_id, which caused dashboard to show fewer items
+    // when the user didn't author recent posts. Fetch latest across all users.
     const { data: discussions } = await supabase
       .from("discussion_posts")
       .select("id, title, content, created_at")
-      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(3);
 
@@ -200,38 +234,74 @@ export async function GET(req: Request) {
     // If no transactions found, provide empty array instead of dummy data
     const transactionsList = transactions || [];
 
-    // Top courses (take first 3 from user progress)
-    const courses = progressList
-      .slice(0, 3)
-      .map((p) => {
-        const c = unwrapCourse(p.course);
-        if (!c?.id) return null;
-        const pr = progressByCourse.get(c.id);
+    // Latest active courses: prefer enrollments rows; fallback to user_progress
+    // Build progress map of completed counts per course id for fallback rendering
+    const completedByCourse: Record<string, number> = {};
+    for (const p of progressList as any[]) {
+      const cid = p?.course_id as string | undefined;
+      if (!cid) continue;
+      let mods: unknown = p?.completed_modules;
+      if (typeof mods === "string") {
+        try { mods = JSON.parse(mods); } catch { mods = []; }
+      }
+      const arr = Array.isArray(mods) ? mods : [];
+      completedByCourse[cid] = Math.max((completedByCourse[cid] || 0), arr.length);
+    }
+
+    let courses: Array<{
+      id: string;
+      title: string;
+      thumbnail: string | null;
+      totalModules: number;
+      progress: number;
+    }> = [];
+
+    if (Array.isArray(enrollRows) && enrollRows.length > 0) {
+      courses = enrollRows
+        .map((row: any) => {
+          const cJoined = Array.isArray(row.course) ? row.course[0] : row.course;
+          if (!cJoined?.id) return null;
+          let completedMods: unknown = row?.progress?.completed_modules;
+          if (typeof completedMods === "string") {
+            try { completedMods = JSON.parse(completedMods); } catch { completedMods = []; }
+          }
+          const completedCount = Array.isArray(completedMods) ? completedMods.length : 0;
+          const totalModules = Number(cJoined.total_modules || 0);
+          const pct = totalModules > 0 ? Math.min(100, Math.round((completedCount / totalModules) * 100)) : 0;
+          return {
+            id: cJoined.id as string,
+            title: cJoined.title as string,
+            thumbnail: (cJoined.thumbnail ?? null) as string | null,
+            totalModules,
+            progress: pct,
+          };
+        })
+        .filter(Boolean) as any;
+    } else if (courseIds.length > 0) {
+      const topIds = courseIds.slice(0, 3);
+      const { data: courseRows } = await supabase
+        .from("courses")
+        .select("id, title, total_modules, thumbnail")
+        .in("id", topIds);
+      courses = (courseRows || []).map((c: any) => {
+        const totalModules = Number(c?.total_modules || 0);
+        const completedCount = Number(completedByCourse[c.id] || 0);
+        const pct = totalModules > 0 ? Math.min(100, Math.round((completedCount / totalModules) * 100)) : 0;
         return {
-          id: c.id,
-          title: c.title,
-          thumbnail: c.thumbnail || null,
-          totalModules: c.total_modules || 0,
-          progress: Math.round(pr?.percentage || 0),
+          id: c.id as string,
+          title: (c.title as string) || "",
+          thumbnail: (c.thumbnail ?? null) as string | null,
+          totalModules,
+          progress: pct,
         };
-      })
-      .filter(
-        (
-          c
-        ): c is {
-          id: string;
-          title: string;
-          thumbnail: string | null;
-          totalModules: number;
-          progress: number;
-        } => Boolean(c)
-      );
+      });
+    }
 
     return NextResponse.json({
       success: true,
       user: { id: actor.id, fullName: actor.full_name },
       stats: {
-        activeCourses: allEnrolledCount, // now all enrolled courses (completed + in-progress)
+        activeCourses: activeCoursesCount, // count from enrollments when available
         completed: coursesCompleted,
         xp: currentXP,
         points,
@@ -243,6 +313,8 @@ export async function GET(req: Request) {
           rawCoins,
           rawBalance: null,
           inProgress,
+          enrollmentsCount: activeCoursesCount,
+          enrollmentsCountError: enrollCountErr ? String(enrollCountErr.message || enrollCountErr) : null,
           studentProbe,
         },
         // raw student payload for hard debugging (can be removed later)

@@ -201,10 +201,11 @@ export async function GET(req: Request) {
   }
 
   // Fallback: build list from user_progress joined to courses if no enrollments
-  const { data: upRows, error: upErr } = await supabaseAdmin
+  const { data: upRows, error: upErr, count: upCount } = await supabaseAdmin
     .from("user_progress")
     .select(
-      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, points, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )"
+      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, points, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )",
+      { count: "exact" }
     )
     .eq("user_id", userId)
     .range(from, to);
@@ -315,7 +316,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     success: true,
     items,
-    total: items.length,
+    total: upCount || items.length,
     page,
     limit,
   });

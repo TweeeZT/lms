@@ -166,6 +166,7 @@ export default function UserDashboard() {
           rawBalance?: number | null;
           inProgress?: number;
           studentFound?: boolean;
+          enrollmentsCount?: number;
         };
         const diagUnknown = (
           json as unknown as { stats?: Record<string, unknown> }
@@ -185,7 +186,10 @@ export default function UserDashboard() {
             // fallback to balance if coins null in DB
             json.stats.coins = Number(d.rawBalance);
           }
-          if (
+          // Prefer server-reported enrollmentsCount when available; otherwise fall back to inProgress+completed
+          if (typeof d.enrollmentsCount === "number" && d.enrollmentsCount >= 0) {
+            json.stats.activeCourses = d.enrollmentsCount;
+          } else if (
             typeof d.inProgress === "number" &&
             typeof json.stats.completed === "number"
           ) {
@@ -197,7 +201,7 @@ export default function UserDashboard() {
         if (!res.ok || !json.success)
           throw new Error(json.error || "Gagal memuat dashboard");
         setData(json);
-        // Fallback: if coins & points still zero while we have user, fetch lightweight stats endpoint
+        // Fallback A: if coins & points still zero while we have user, fetch lightweight stats endpoint
         if (
           json?.stats &&
           user?.id &&
@@ -229,6 +233,59 @@ export default function UserDashboard() {
                     }
                   : prev
               );
+            }
+          } catch {}
+        }
+
+        // Fallback B: Ensure activeCourses and course cards reflect actual enrollments
+        if (
+          user?.id &&
+          json?.stats &&
+          ((json.stats.activeCourses ?? 0) === 0 || (json.courses?.length ?? 0) === 0)
+        ) {
+          try {
+            const cRes = await fetch(`/api/user/courses?userId=${user.id}&page=1&limit=3`, { cache: "no-store" });
+            const cJson = await cRes.json();
+            if (cRes.ok && cJson.success) {
+              const items = Array.isArray(cJson.items) ? cJson.items : [];
+              const total = typeof cJson.total === "number" ? cJson.total : items.length;
+              const mapped = items
+                .slice(0, 3)
+                .map((row: any) => {
+                  const course = row.course || {};
+                  const totalModules = Number(course.totalModules || 0);
+                  const pct = Number(row.progress?.percentage || 0);
+                  return {
+                    id: String(course.id || row.enrollmentId || Math.random()),
+                    title: String(course.title || ""),
+                    totalModules,
+                    progress: Math.max(0, Math.min(100, Math.round(pct))),
+                  };
+                });
+              setData((prev) => {
+                if (!prev) return prev;
+                const nextStats = prev.stats
+                  ? {
+                      ...prev.stats,
+                      activeCourses:
+                        (prev.stats.activeCourses ?? 0) === 0
+                          ? total
+                          : prev.stats.activeCourses,
+                    }
+                  : {
+                      activeCourses: total,
+                      xp: 0,
+                      points: 0,
+                      coins: 0,
+                      completed: 0,
+                      tier: "newbie",
+                    };
+                const nextCourses =
+                  (prev.courses?.length ?? 0) === 0 && mapped.length > 0
+                    ? mapped
+                    : prev.courses;
+                return { ...prev, stats: nextStats, courses: nextCourses };
+              });
             }
           } catch {}
         }

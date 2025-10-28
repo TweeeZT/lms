@@ -175,7 +175,7 @@ export async function GET(req: Request) {
       )
       .eq("user_id", userId)
       .order("enrolled_at", { ascending: false })
-      .limit(3);
+      .limit(Math.max(3, Number(enrollCountExact || 0)) || 50);
 
     // Prefer enrollments count for active courses; fallback to user_progress based count
     const activeCoursesCount = typeof enrollCountExact === "number" && enrollCountExact >= 0
@@ -278,7 +278,7 @@ export async function GET(req: Request) {
         })
         .filter(Boolean) as any;
     } else if (courseIds.length > 0) {
-      const topIds = courseIds.slice(0, 3);
+      const topIds = courseIds; // return all active courses from user_progress
       const { data: courseRows } = await supabase
         .from("courses")
         .select("id, title, total_modules, thumbnail")

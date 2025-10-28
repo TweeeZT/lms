@@ -1,7 +1,6 @@
 "use client";
 
-import React from 'react';
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
 import "dayjs/locale/id";
@@ -23,30 +22,28 @@ import {
   Textarea,
   Select,
   ActionIcon,
-  ScrollArea,
   Divider,
   Paper,
   Progress as MantineProgress,
   Box,
 } from "@mantine/core";
+import { DatesProvider, DateInput, Calendar } from "@mantine/dates";
 import {
-  IconBook,
-  IconAward,
-  IconReceipt2,
   IconAlertCircle,
+  IconBook,
+  IconReceipt2,
+  IconSum,
+  IconAward,
   IconCalendarPlus,
-  IconListDetails,
   IconChevronLeft,
   IconChevronRight,
-  IconClock,
-  IconSum,
+  IconListDetails,
 } from "@tabler/icons-react";
-import { Calendar, DateInput, DatesProvider } from "@mantine/dates";
-import { useAuth } from "../../../hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 
-// Set locale dan custom weekday labels
+// Set locale and weekday labels
 dayjs.locale("id");
-const weekdayLabels = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const weekdayLabels = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
 interface StatCardProps {
   label: string;
@@ -94,7 +91,6 @@ function StatCard({ label, value, Icon }: StatCardProps) {
     </Card>
   );
 }
-
 type DashboardData = {
   success: boolean;
   error?: string;
@@ -244,13 +240,12 @@ export default function UserDashboard() {
           ((json.stats.activeCourses ?? 0) === 0 || (json.courses?.length ?? 0) === 0)
         ) {
           try {
-            const cRes = await fetch(`/api/user/courses?userId=${user.id}&page=1&limit=3`, { cache: "no-store" });
+            const cRes = await fetch(`/api/user/courses?userId=${user.id}&page=1&limit=50`, { cache: "no-store" });
             const cJson = await cRes.json();
             if (cRes.ok && cJson.success) {
               const items = Array.isArray(cJson.items) ? cJson.items : [];
               const total = typeof cJson.total === "number" ? cJson.total : items.length;
               const mapped = items
-                .slice(0, 3)
                 .map((row: any) => {
                   const course = row.course || {};
                   const totalModules = Number(course.totalModules || 0);
@@ -574,73 +569,117 @@ export default function UserDashboard() {
                 </Group>
 
                 <Grid gutter="md">
-                  {(data?.courses || []).slice(0, 3).map((course) => {
-                    const done = course.progress >= 100;
+                  {(() => {
+                    const courses = data?.courses || [];
+                    const total = courses.length;
+                    const MAX_SHOW_WITHOUT_PLACEHOLDER = 6;
+                    const MAX_SHOW_WITH_PLACEHOLDER = 5;
+                    const shouldUsePlaceholder = total > MAX_SHOW_WITHOUT_PLACEHOLDER;
+                    const visibleCourses = shouldUsePlaceholder
+                      ? courses.slice(0, MAX_SHOW_WITH_PLACEHOLDER)
+                      : courses.slice(0, MAX_SHOW_WITHOUT_PLACEHOLDER);
+
                     return (
-                      <Grid.Col
-                        key={course.id}
-                        span={{ base: 12, sm: 6, md: 4 }}
-                      >
-                        <Paper
-                          shadow="sm"
-                          radius="lg"
-                          p="lg"
-                          style={{
-                            background: done
-                              ? "var(--secondary-color)"
-                              : "var(--primary-color)",
-                            color: "white",
-                            display: "flex",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                            minHeight: 160,
-                          }}
-                        >
-                          <div>
-                            <Text fw={700} size="sm" lineClamp={2}>
-                              {course.title}
-                            </Text>
-                            <Text size="xs" c="white" opacity={0.8}>
-                              {course.totalModules} modul
-                            </Text>
-                          </div>
+                      <>
+                        {visibleCourses.map((course) => {
+                          const done = course.progress >= 100;
+                          return (
+                            <Grid.Col
+                              key={course.id}
+                              span={{ base: 12, sm: 6, md: 4 }}
+                            >
+                              <Paper
+                                shadow="sm"
+                                radius="lg"
+                                p="lg"
+                                style={{
+                                  background: done
+                                    ? "var(--secondary-color)"
+                                    : "var(--primary-color)",
+                                  color: "white",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "space-between",
+                                  minHeight: 160,
+                                }}
+                              >
+                                <div>
+                                  <Text fw={700} size="sm" lineClamp={2}>
+                                    {course.title}
+                                  </Text>
+                                  <Text size="xs" c="white" opacity={0.8}>
+                                    {course.totalModules} modul
+                                  </Text>
+                                </div>
 
-                          <div>
-                            <Group justify="space-between" mb={6}>
-                              <Text size="xs" fw={600}>
-                                {Math.round(course.progress)}%
-                              </Text>
-                            </Group>
-                            <MantineProgress
-                              value={course.progress}
-                              size="sm"
-                              radius="xl"
-                              color="white"
-                              style={{ background: "rgba(255,255,255,0.3)" }}
-                            />
-                          </div>
+                                <div>
+                                  <Group justify="space-between" mb={6}>
+                                    <Text size="xs" fw={600}>
+                                      {Math.round(course.progress)}%
+                                    </Text>
+                                  </Group>
+                                  <MantineProgress
+                                    value={course.progress}
+                                    size="sm"
+                                    radius="xl"
+                                    color="white"
+                                    style={{ background: "rgba(255,255,255,0.3)" }}
+                                  />
+                                </div>
 
-                          <Button
-                            fullWidth
-                            size="xs"
-                            radius="xl"
-                            component={Link}
-                            href={`/user/courses/${course.id}`}
-                            style={{
-                              marginTop: 12,
-                              background: "white",
-                              color: done
-                                ? "var(--secondary-color)"
-                                : "var(--primary-color)",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {done ? "Review" : "Lanjutkan"}
-                          </Button>
-                        </Paper>
-                      </Grid.Col>
+                                <Button
+                                  fullWidth
+                                  size="xs"
+                                  radius="xl"
+                                  component={Link}
+                                  href={`/user/courses/${course.id}`}
+                                  style={{
+                                    marginTop: 12,
+                                    background: "white",
+                                    color: done
+                                      ? "var(--secondary-color)"
+                                      : "var(--primary-color)",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {done ? "Review" : "Lanjutkan"}
+                                </Button>
+                              </Paper>
+                            </Grid.Col>
+                          );
+                        })}
+
+                        {shouldUsePlaceholder && (
+                          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+                            <Paper
+                              withBorder
+                              radius="lg"
+                              p="lg"
+                              style={{
+                                minHeight: 160,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                background: "var(--mantine-color-gray-0)",
+                              }}
+                              component={Link}
+                              href="/user/courses"
+                            >
+                              <div style={{ textAlign: "center" }}>
+                                <Title order={2}>
+                                  +{Math.max(0, total - MAX_SHOW_WITH_PLACEHOLDER)}
+                                </Title>
+                                <Text size="xs" c="dimmed">
+                                  Lihat kursus lainnya
+                                </Text>
+                              </div>
+                            </Paper>
+                          </Grid.Col>
+                        )}
+                      </>
                     );
-                  })}
+                  })()}
 
                   {!loading && (data?.courses || []).length === 0 && (
                     <Grid.Col span={12}>
@@ -650,7 +689,7 @@ export default function UserDashboard() {
                     </Grid.Col>
                   )}
                   {loading &&
-                    Array.from({ length: 3 }).map((_, i) => (
+                    Array.from({ length: 6 }).map((_, i) => (
                       <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4 }}>
                         <Skeleton height={160} radius="lg" />
                       </Grid.Col>

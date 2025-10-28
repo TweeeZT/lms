@@ -106,10 +106,12 @@ function Navbar() {
         left: 0,
         right: 0,
         zIndex: 1000,
-        background: scrolled
-          ? "var(--primary-color)"
-          : "rgba(30, 55, 105, 0.1)",
-        borderBottom: scrolled ? "none" : "1px solid rgba(30, 55, 105, 0.2)",
+        background:
+          scrolled || opened
+            ? "var(--primary-color)"
+            : "rgba(30, 55, 105, 0.1)",
+        borderBottom:
+          scrolled || opened ? "none" : "1px solid rgba(30, 55, 105, 0.2)",
         transition: "all 0.3s ease",
       }}
     >
@@ -183,7 +185,7 @@ function Navbar() {
             onClick={toggle}
             hiddenFrom="md"
             size="sm"
-            color={scrolled ? "white" : "var(--primary-color)"}
+            color={scrolled || opened ? "white" : "var(--primary-color)"}
           />
         </Group>
       </Container>

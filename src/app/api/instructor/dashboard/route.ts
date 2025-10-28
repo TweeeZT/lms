@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Ensure Node runtime so service role env vars are available (Edge can strip them)
+export const runtime = "nodejs";
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 const supabase = createClient(url, serviceRole);
@@ -9,6 +12,15 @@ const supabase = createClient(url, serviceRole);
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
+  // Monthly trend window controls
+  const offsetMonths = Math.max(
+    0,
+    Number(searchParams.get("offsetMonths") || 0)
+  );
+  const windowMonths = Math.min(
+    12,
+    Math.max(1, Number(searchParams.get("months") || 6))
+  );
   if (!instructorId) {
     return NextResponse.json(
       { success: false, error: "instructorId wajib" },
@@ -55,14 +67,21 @@ export async function GET(req: Request) {
       .eq("user_id", instructorId)
       .maybeSingle();
 
-    // 3) Courses
+    // 3) Courses (preview list) + exact count for accuracy
     const coursesQ = await supabase
       .from("courses")
       .select(
         "id, title, thumbnail, category, price, duration_min, level, total_modules, enrolled_count, rating, is_published, created_at, updated_at"
       )
       .eq("instructor_id", instructorId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(12);
+
+    // Head count for total courses (even if list is limited)
+    const { count: coursesCountExact, error: coursesCountError } = await supabase
+      .from("courses")
+      .select("id", { count: "exact", head: true })
+      .eq("instructor_id", instructorId);
 
     const courses = (coursesQ.data || []) as CourseRow[];
 
@@ -202,30 +221,89 @@ export async function GET(req: Request) {
         courses.length
       : instQ.data?.rating || 0;
 
-    // Monthly series from payouts by month; fallback to 6 months zeros if none
-    const byMonth = new Map<string, { revenue: number; orders: number }>();
-    for (const p of payoutsQ.data || []) {
-      const d = new Date(p.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-        2,
-        "0"
-      )}`;
-      const prev = byMonth.get(key) || { revenue: 0, orders: 0 };
-      byMonth.set(key, {
-        revenue: prev.revenue + p.amount,
-        orders: prev.orders + 1,
-      });
+    // Helper: month arithmetic and formatting
+    const startOfMonth = (dt: Date) =>
+      new Date(dt.getFullYear(), dt.getMonth(), 1, 0, 0, 0, 0);
+    const addMonths = (dt: Date, n: number) =>
+      new Date(dt.getFullYear(), dt.getMonth() + n, 1, 0, 0, 0, 0);
+    const formatMonth = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+
+    // Build range [from, to)
+    const now = new Date();
+    const endMonth = startOfMonth(addMonths(now, -offsetMonths)); // inclusive end month
+    const fromMonth = startOfMonth(addMonths(endMonth, -(windowMonths - 1)));
+    const fromISO = fromMonth.toISOString();
+    const toISO = addMonths(endMonth, 1).toISOString();
+
+    // Initialize months bucket with zeros
+    const monthsKeys: string[] = [];
+    for (let i = 0; i < windowMonths; i++) {
+      const d = addMonths(fromMonth, i);
+      monthsKeys.push(formatMonth(d));
     }
-    const months = Array.from(byMonth.entries()).sort((a, b) =>
-      a[0] < b[0] ? -1 : 1
-    );
+    const byMonth = new Map<string, { revenue: number; orders: number }>();
+    monthsKeys.forEach((k) => byMonth.set(k, { revenue: 0, orders: 0 }));
+
+    // Aggregate from transactions in range
+    const successStatuses = new Set([
+      "paid",
+      "completed",
+      "success",
+      "berhasil",
+      "settled",
+      "succeeded",
+    ]);
+
+    let trxRowsRange:
+      | Array<{ amount: number; status: string | null; date: string; course_id?: string | null }>
+      | null = null;
+    {
+      const { data: trx } = await supabase
+        .from("transactions")
+        .select("amount, status, date, course_id")
+        .eq("instructors_id", instructorId)
+        .gte("date", fromISO)
+        .lt("date", toISO);
+      trxRowsRange = trx as any[] | null;
+      if ((!trxRowsRange || trxRowsRange.length === 0) && courses.length) {
+        const courseIds = courses.map((c) => c.id);
+        const { data: trx2 } = await supabase
+          .from("transactions")
+          .select("amount, status, date, course_id")
+          .in("course_id", courseIds)
+          .gte("date", fromISO)
+          .lt("date", toISO);
+        trxRowsRange = trx2 as any[] | null;
+      }
+    }
+    for (const t of trxRowsRange || []) {
+      const d = new Date((t as any).date);
+      if (isNaN(d.getTime())) continue;
+      const key = formatMonth(d);
+      if (!byMonth.has(key)) continue; // outside range (defensive)
+      const st = String((t as any).status || "").toLowerCase();
+      if (successStatuses.has(st)) {
+        const prev = byMonth.get(key)!;
+        byMonth.set(key, {
+          revenue: prev.revenue + (Number((t as any).amount) || 0),
+          orders: prev.orders + 1,
+        });
+      }
+    }
+
+    const months = monthsKeys.map((k) => ({
+      month: k,
+      revenue: byMonth.get(k)!.revenue,
+      orders: byMonth.get(k)!.orders,
+    }));
 
     return NextResponse.json({
       success: true,
       profile: profileQ.data,
       instructor: instQ.data || null,
       stats: {
-        coursesCount: courses.length,
+        coursesCount: typeof coursesCountExact === "number" ? coursesCountExact : courses.length,
         totalStudents,
         totalEarnings,
         avgRating,
@@ -233,11 +311,7 @@ export async function GET(req: Request) {
       courses,
       payouts: payoutsQ.data || [],
       purchases,
-      monthly: months.map(([month, v]) => ({
-        month,
-        revenue: v.revenue,
-        orders: v.orders,
-      })),
+      monthly: months,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Gagal memuat data";

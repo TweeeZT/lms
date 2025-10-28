@@ -71,6 +71,96 @@ export default function UserProfilePage() {
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [bio, setBio] = useState(user?.bio || "");
+  const [errors, setErrors] = useState<{
+    username?: string;
+    phone?: string;
+    bio?: string;
+  }>({});
+
+  // Validation functions
+  const validateUsername = async (value: string) => {
+    // Skip validation if no change
+    if (value === initialRef.current?.username) {
+      setErrors(prev => ({ ...prev, username: undefined }));
+      return true;
+    }
+
+    // Basic validations
+    if (value.length < 3) {
+      setErrors(prev => ({ ...prev, username: "Username minimal 3 karakter" }));
+      return false;
+    }
+    if (!/^[a-zA-Z0-9._-]+$/.test(value)) {
+      setErrors(prev => ({ ...prev, username: "Username hanya boleh huruf, angka, titik, dan underscore" }));
+      return false;
+    }
+
+    // Check uniqueness via API
+    try {
+      const res = await fetch(
+        `/api/user/profile/validate?username=${encodeURIComponent(value)}&excludeId=${encodeURIComponent(user?.id || "")}`
+      );
+      const json = await res.json();
+      if (!json.valid) {
+        setErrors(prev => ({ ...prev, username: json.error }));
+        return false;
+      }
+      setErrors(prev => ({ ...prev, username: undefined }));
+      return true;
+    } catch (error) {
+      setErrors(prev => ({ ...prev, username: "Gagal validasi username" }));
+      return false;
+    }
+  };
+
+  const validatePhone = async (value: string) => {
+    // Skip validation if no value (phone is optional) or no change
+    if (!value) {
+      setErrors(prev => ({ ...prev, phone: undefined }));
+      return true;
+    }
+    if (value === initialRef.current?.phone) {
+      setErrors(prev => ({ ...prev, phone: undefined }));
+      return true;
+    }
+
+    // Basic validations
+    if (!/^\+?\d+$/.test(value)) {
+      setErrors(prev => ({ ...prev, phone: "Nomor telepon hanya boleh angka dan tanda +" }));
+      return false;
+    }
+    const phoneDigits = value.replace(/^\+/, "");
+    if (phoneDigits.length < 10) {
+      setErrors(prev => ({ ...prev, phone: "Nomor telepon minimal 10 digit" }));
+      return false;
+    }
+
+    // Check uniqueness via API
+    try {
+      const res = await fetch(
+        `/api/user/profile/validate?phone=${encodeURIComponent(value)}&excludeId=${encodeURIComponent(user?.id || "")}`
+      );
+      const json = await res.json();
+      if (!json.valid) {
+        setErrors(prev => ({ ...prev, phone: json.error }));
+        return false;
+      }
+      setErrors(prev => ({ ...prev, phone: undefined }));
+      return true;
+    } catch (error) {
+      setErrors(prev => ({ ...prev, phone: "Gagal validasi nomor telepon" }));
+      return false;
+    }
+  };
+
+  const validateBio = (value: string) => {
+    if (value.length > 300) {
+      setErrors(prev => ({ ...prev, bio: "Bio maksimal 300 karakter" }));
+      return false;
+    }
+    setErrors(prev => ({ ...prev, bio: undefined }));
+    return true;
+  };
 
   // server data
   // numeric level no longer used; tier derived from xp/points/courses
@@ -569,6 +659,21 @@ export default function UserProfilePage() {
 
   const onSave = async () => {
     if (!user?.id) return;
+    
+    // Validate all fields before saving
+    const usernameValid = await validateUsername(username);
+    const phoneValid = await validatePhone(phone);
+    const bioValid = validateBio(bio);
+
+    if (!usernameValid || !phoneValid || !bioValid) {
+      notifications.show({
+        title: "Validasi Gagal",
+        message: "Silakan periksa kembali input yang tidak valid",
+        color: "red",
+      });
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -590,8 +695,18 @@ export default function UserProfilePage() {
       updateUser({ fullName, username, phone, bio } as any);
       // update initial snapshot
       initialRef.current = { fullName, username, email, phone, bio } as any;
+      notifications.show({
+        title: "Berhasil",
+        message: "Profil berhasil disimpan",
+        color: "green",
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal menyimpan");
+      notifications.show({
+        title: "Gagal",
+        message: e instanceof Error ? e.message : "Gagal menyimpan profil",
+        color: "red",
+      });
     } finally {
       setSaving(false);
     }
@@ -742,7 +857,13 @@ export default function UserProfilePage() {
                 <TextInput
                   label="Username"
                   value={username}
-                  onChange={(e) => setUsername(e.currentTarget.value)}
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setUsername(value);
+                    validateUsername(value);
+                  }}
+                  onBlur={() => validateUsername(username)}
+                  error={errors.username}
                   radius="md"
                   size="md"
                 />
@@ -764,7 +885,14 @@ export default function UserProfilePage() {
                   label="Telepon"
                   leftSection={<IconPhone size={16} />}
                   value={phone}
-                  onChange={(e) => setPhone(e.currentTarget.value)}
+                  placeholder="+628123456789"
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setPhone(value);
+                    validatePhone(value);
+                  }}
+                  onBlur={() => validatePhone(phone)}
+                  error={errors.phone}
                   radius="md"
                   size="md"
                 />
@@ -773,7 +901,13 @@ export default function UserProfilePage() {
                 <Textarea
                   label="Bio"
                   value={bio}
-                  onChange={(e) => setBio(e.currentTarget.value)}
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setBio(value);
+                    validateBio(value);
+                  }}
+                  onBlur={() => validateBio(bio)}
+                  error={errors.bio}
                   rows={4}
                   radius="md"
                   size="md"
@@ -1468,6 +1602,8 @@ function Leaderboard() {
       style={{
         background: "var(--card-bg)",
         position: "relative",
+        overflowX: "auto",
+        maxWidth: "100vw",
       }}
     >
       <Stack gap="md">
@@ -1498,6 +1634,7 @@ function Leaderboard() {
               gap: 12,
               alignItems: "end",
               marginBottom: 16,
+              minWidth: 320,
             }}
             className="podium-grid"
           >
@@ -1584,6 +1721,10 @@ function Leaderboard() {
         @media (max-width: 640px) {
           .podium-grid {
             gap: 8px !important;
+            min-width: 320px;
+          }
+          .podium-item {
+            min-width: 90px;
           }
         }
       `}</style>

@@ -1017,16 +1017,34 @@ function FooterSection() {
                 Hubungi Kami
               </Title>
               <Stack gap="sm">
-                <Text c="gray.4" size="sm">
+                <Anchor
+                  href="https://mail.google.com/mail/?view=cm&fs=1&to=admin@afterschola.com"
+                  target="_blank"
+                  c="gray.4"
+                  size="sm"
+                  style={{ textDecoration: "none" }}
+                >
                   📧 hello@afterschola.com
-                </Text>
-                <Text c="gray.4" size="sm">
+                </Anchor>
+                <Anchor
+                  href="http://wa.me/+6282338089915"
+                  c="gray.4"
+                  size="sm"
+                  style={{ textDecoration: "none" }}
+                >
                   📞 +62 823-3808-9915
-                </Text>
-                <Text c="gray.4" size="sm">
+                </Anchor>
+                <Anchor
+                  href="https://maps.app.goo.gl/UzPNsQa1rV5Ba95q9"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  c="gray.4"
+                  size="sm"
+                  style={{ textDecoration: "none" }}
+                >
                   📍 Jl. Cisaranten Wetan No.167 A, Cisaranten Wetan, Kec.
                   Cinambo, Kota Bandung, Jawa Barat 40294
-                </Text>
+                </Anchor>
               </Stack>
             </Stack>
           </Grid.Col>

@@ -1025,6 +1025,7 @@ export default function UserDashboard() {
               weekdayFormat="ddd"
               firstDayOfWeek={1}
               locale="id"
+              valueFormat="DD MMMM, YYYY"
               styles={(theme) => ({
                 weekday: {
                   fontSize: '0.875rem'
@@ -1041,6 +1042,7 @@ export default function UserDashboard() {
               weekdayFormat="ddd"
               firstDayOfWeek={1}
               locale="id"
+              valueFormat="DD MMMM, YYYY"
               styles={(theme) => ({
                 weekday: {
                   fontSize: '0.875rem'
@@ -1176,6 +1178,7 @@ export default function UserDashboard() {
                 weekdayFormat="ddd"
                 firstDayOfWeek={1}
                 locale="id"
+                valueFormat="DD MMMM, YYYY"
                 styles={(theme) => ({
                   weekday: {
                     fontSize: '0.875rem'
@@ -1192,6 +1195,7 @@ export default function UserDashboard() {
                 weekdayFormat="ddd"
                 firstDayOfWeek={1}
                 locale="id"
+                valueFormat="DD MMMM, YYYY"
                 styles={(theme) => ({
                   weekday: {
                     fontSize: '0.875rem'

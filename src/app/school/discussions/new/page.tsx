@@ -98,7 +98,7 @@ export default function NewUserDiscussionPage() {
           message: "Diskusi berhasil dibuat",
           color: "green",
         });
-        router.push("/user/discussions");
+        router.push("/school/discussions");
       } else {
         notifications.show({
           title: "Gagal",
@@ -265,7 +265,7 @@ export default function NewUserDiscussionPage() {
             <Group justify="flex-end">
               <Button
                 variant="light"
-                onClick={() => router.push("/user/discussions")}
+                onClick={() => router.push("/school/discussions")}
                 disabled={submitting}
               >
                 Batal

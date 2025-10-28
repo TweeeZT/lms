@@ -331,7 +331,7 @@ export default function UserPostDetailPage() {
           message: "Postingan telah dihapus",
           color: "green",
         });
-        router.push("/user/discussions");
+        router.push("/school/discussions");
       } else {
         notifications.show({
           title: "Gagal",
@@ -528,15 +528,95 @@ export default function UserPostDetailPage() {
           <Stack gap="md">
             <TextInput
               label="Judul"
-              placeholder="Judul postingan"
+              placeholder="Masukkan judul diskusi"
               value={editTitle}
               onChange={(e) => setEditTitle(e.currentTarget.value)}
               required
               disabled={savingEdit}
             />
+
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>
+                Media (gambar atau video, opsional)
+              </Text>
+              <Stack>
+                {/* Existing Media */}
+                {existingMedia.length > 0 && (
+                  <SimpleGrid cols={3} spacing="xs">
+                    {existingMedia.map((m) => (
+                      <Card
+                        key={m.id}
+                        p={0}
+                        radius="md"
+                        style={{ position: "relative" }}
+                      >
+                        <Image
+                          src={
+                            m.m_type === "video"
+                              ? m.thumbnail || undefined
+                              : m.url
+                          }
+                          alt="media"
+                          radius="md"
+                          style={{ objectFit: "cover", height: 100 }}
+                        />
+                        <ActionIcon
+                          color="red"
+                          size="sm"
+                          radius="xl"
+                          variant="filled"
+                          style={{ position: "absolute", top: 4, right: 4 }}
+                          onClick={() => removeExistingMedia(m.id)}
+                          disabled={savingEdit}
+                        >
+                          <IconX size="1rem" />
+                        </ActionIcon>
+                      </Card>
+                    ))}
+                  </SimpleGrid>
+                )}
+
+                {/* Upload New Media */}
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,video/*"
+                  disabled={savingEdit}
+                  onChange={(e) => {
+                    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+                    const files = Array.from(e.currentTarget.files || []);
+                    const validated = files.filter((f) => {
+                      if (f.size > MAX_SIZE) {
+                        alert(`File ${f.name} terlalu besar. Maksimal 10MB.`);
+                        return false;
+                      }
+                      return true;
+                    });
+                    setEditFiles(validated);
+                  }}
+                  style={{
+                    padding: "8px",
+                    border: "1px dashed #ced4da",
+                    borderRadius: "4px",
+                    width: "100%",
+                    cursor: "pointer"
+                  }}
+                />
+                <Text size="xs" c="dimmed">Format: gambar / video (maks 10MB per file)</Text>
+              </Stack>
+            </Stack>
+
+            <TextInput
+              label="Tag (opsional)"
+              placeholder="Tambahkan tag lalu Enter"
+              value={editTags.join(", ")}
+              onChange={(e) => setEditTags(e.currentTarget.value.split(/,\s*/).filter(Boolean))}
+              disabled={savingEdit}
+            />
+
             <Textarea
-              label="Konten"
-              placeholder="Isi postingan"
+              label="Deskripsi"
+              placeholder="Tuliskan isi diskusi..."
               value={editContent}
               onChange={(e) => setEditContent(e.currentTarget.value)}
               minRows={5}
@@ -544,81 +624,13 @@ export default function UserPostDetailPage() {
               disabled={savingEdit}
             />
 
-            {/* Existing Media */}
-            {existingMedia.length > 0 && (
-              <Stack gap="xs">
-                <Text size="sm" fw={500}>
-                  Gambar/Video Saat Ini:
-                </Text>
-                <SimpleGrid cols={3} spacing="xs">
-                  {existingMedia.map((m) => (
-                    <Card
-                      key={m.id}
-                      p={0}
-                      radius="md"
-                      style={{ position: "relative" }}
-                    >
-                      <Image
-                        src={
-                          m.m_type === "video"
-                            ? m.thumbnail || undefined
-                            : m.url
-                        }
-                        alt="media"
-                        radius="md"
-                        style={{ objectFit: "cover", height: 100 }}
-                      />
-                      <ActionIcon
-                        color="red"
-                        size="sm"
-                        radius="xl"
-                        variant="filled"
-                        style={{ position: "absolute", top: 4, right: 4 }}
-                        onClick={() => removeExistingMedia(m.id)}
-                        disabled={savingEdit}
-                      >
-                        <IconX size="1rem" />
-                      </ActionIcon>
-                    </Card>
-                  ))}
-                </SimpleGrid>
-              </Stack>
-            )}
-
-            {/* Upload New Media */}
-            <Stack gap="xs">
-              <Text size="sm" fw={500}>
-                Tambah Gambar/Video Baru (maks 10MB per file)
-              </Text>
-              <input
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                disabled={savingEdit}
-                onChange={(e) => {
-                  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-                  const files = Array.from(e.currentTarget.files || []);
-                  const validated = files.filter((f) => {
-                    if (f.size > MAX_SIZE) {
-                      alert(`File ${f.name} terlalu besar. Maksimal 10MB.`);
-                      return false;
-                    }
-                    return true;
-                  });
-                  setEditFiles(validated);
-                }}
-                style={{
-                  padding: "8px",
-                  border: "1px solid #ced4da",
-                  borderRadius: "4px",
-                  width: "100%",
-                }}
-              />
-            </Stack>
+            <Text size="xs" c="dimmed" ta="right">
+              0/1500 kata
+            </Text>
 
             <Group justify="flex-end" gap="sm" mt="md">
               <Button
-                variant="subtle"
+                variant="default"
                 onClick={cancelEdit}
                 disabled={savingEdit}
               >

@@ -258,48 +258,81 @@ export default function QuizSection({
         >
           <Stack gap="md">
             {attemptAnswers && attemptAnswers.length > 0 ? (
-              attemptAnswers.map((ans, idx) => (
-                <Card key={ans.questionId} withBorder p="md">
-                  <Stack gap="xs">
-                    <Group justify="space-between">
-                      <Text fw={600} size="sm">
-                        Soal {idx + 1}
-                      </Text>
-                    </Group>
-                    <Text size="sm">{ans.question}</Text>
-                    <Divider />
-                    <Box>
-                      <Text size="xs" c="dimmed">
-                        Jawaban Anda:
-                      </Text>
-                      <Text
-                        size="sm"
-                        fw={500}
-                        c={ans.isCorrect ? "green" : "red"}
-                      >
-                        {ans.userAnswer}
-                      </Text>
-                    </Box>
-                    {!ans.isCorrect && (
-                      <Box>
-                        <Text size="xs" c="dimmed">
-                          Jawaban Benar:
+              attemptAnswers.map((ans, idx) => {
+                // Format answers for display
+                const formatAnswer = (answer: string) => {
+                  if (answer === "True" || answer === "true") return "Benar";
+                  if (answer === "False" || answer === "false") return "Salah";
+                  return answer;
+                };
+
+                const userAnswerDisplay = formatAnswer(ans.userAnswer);
+                const correctAnswerDisplay = formatAnswer(ans.correctAnswer);
+
+                return (
+                  <Card key={ans.questionId} withBorder p="md">
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Text fw={600} size="sm">
+                          Soal {idx + 1}
                         </Text>
-                        <Text size="sm" fw={500} c="green">
-                          {ans.correctAnswer}
+                        {ans.isCorrect ? (
+                          <Badge
+                            color="green"
+                            leftSection={<IconCheck size={12} />}
+                          >
+                            Benar
+                          </Badge>
+                        ) : (
+                          <Badge color="red" leftSection={<IconX size={12} />}>
+                            Salah
+                          </Badge>
+                        )}
+                      </Group>
+                      <Text size="sm">{ans.question}</Text>
+                      <Divider />
+                      <Box
+                        p="xs"
+                        style={{
+                          background: ans.isCorrect ? "#d1fae5" : "#fee2e2",
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Text size="xs" c="dimmed" mb={4}>
+                          Jawaban Anda:
+                        </Text>
+                        <Text
+                          size="sm"
+                          fw={500}
+                          c={ans.isCorrect ? "green.8" : "red.8"}
+                        >
+                          {userAnswerDisplay}
                         </Text>
                       </Box>
-                    )}
-                    {ans.explanation && (
-                      <Alert color="blue" p="xs">
-                        <Text size="xs">
-                          <strong>Penjelasan:</strong> {ans.explanation}
-                        </Text>
-                      </Alert>
-                    )}
-                  </Stack>
-                </Card>
-              ))
+                      {!ans.isCorrect && (
+                        <Box
+                          p="xs"
+                          style={{ background: "#d1fae5", borderRadius: 6 }}
+                        >
+                          <Text size="xs" c="dimmed" mb={4}>
+                            Jawaban Benar:
+                          </Text>
+                          <Text size="sm" fw={500} c="green.8">
+                            {correctAnswerDisplay}
+                          </Text>
+                        </Box>
+                      )}
+                      {ans.explanation && (
+                        <Alert color="blue" p="xs">
+                          <Text size="xs">
+                            <strong>Penjelasan:</strong> {ans.explanation}
+                          </Text>
+                        </Alert>
+                      )}
+                    </Stack>
+                  </Card>
+                );
+              })
             ) : (
               <Text c="dimmed">Tidak ada detail jawaban tersedia</Text>
             )}

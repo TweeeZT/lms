@@ -31,12 +31,29 @@ export default function NewUserDiscussionPage() {
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [contentTouched, setContentTouched] = useState(false);
 
   const words = useMemo(
     () => content.trim().split(/\s+/).filter(Boolean).length,
     [content]
   );
   const maxWords = 1500;
+
+  // Validation
+  const titleError =
+    titleTouched && title.trim().length === 0
+      ? "Judul harus diisi"
+      : titleTouched && title.trim().length < 3
+      ? "Judul minimal 3 karakter"
+      : null;
+  const contentError =
+    contentTouched && words < 3
+      ? "Deskripsi minimal 3 kata"
+      : contentTouched && words > maxWords
+      ? `Maksimal ${maxWords} kata`
+      : null;
+  const canSubmit = title.trim().length >= 3 && words >= 3 && words <= maxWords;
 
   const addFiles = (incoming: File[]) => {
     const MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -73,11 +90,14 @@ export default function NewUserDiscussionPage() {
   const removeTag = (value: string) =>
     setTags((t) => t.filter((x) => x !== value));
 
-  const isValid = () =>
-    title.trim().length >= 3 &&
-    (content.trim().length >= 10 || files.length > 0);
   const submit = async () => {
-    if (!user || !isValid() || submitting) return;
+    if (!user || submitting) return;
+    // Touch all fields to show errors
+    if (!canSubmit) {
+      setTitleTouched(true);
+      setContentTouched(true);
+      return;
+    }
     setSubmitting(true);
     try {
       const fd = new FormData();
@@ -143,7 +163,12 @@ export default function NewUserDiscussionPage() {
               placeholder="Masukkan judul diskusi"
               required
               value={title}
-              onChange={(e) => setTitle(e.currentTarget.value)}
+              onChange={(e) => {
+                setTitle(e.currentTarget.value);
+                if (!titleTouched) setTitleTouched(true);
+              }}
+              onBlur={() => setTitleTouched(true)}
+              error={titleError}
               disabled={submitting}
             />
             <Stack gap="xs">
@@ -249,7 +274,10 @@ export default function NewUserDiscussionPage() {
                 <Text fw={500} size="sm">
                   Deskripsi
                 </Text>
-                <Text size="xs" c={words > maxWords ? "red" : "dimmed"}>
+                <Text
+                  size="xs"
+                  c={contentTouched && contentError ? "red" : "dimmed"}
+                >
                   {words}/{maxWords} kata
                 </Text>
               </Group>
@@ -258,7 +286,12 @@ export default function NewUserDiscussionPage() {
                 minRows={10}
                 autosize
                 value={content}
-                onChange={(e) => setContent(e.currentTarget.value)}
+                onChange={(e) => {
+                  setContent(e.currentTarget.value);
+                  if (!contentTouched) setContentTouched(true);
+                }}
+                onBlur={() => setContentTouched(true)}
+                error={contentError}
                 disabled={submitting}
               />
             </Stack>
@@ -273,8 +306,16 @@ export default function NewUserDiscussionPage() {
               <Button
                 className="btn-primary"
                 onClick={submit}
-                disabled={!isValid() || words > maxWords || submitting}
+                disabled={!canSubmit || submitting}
                 loading={submitting}
+                styles={{
+                  root: {
+                    "&[dataDisabled]": {
+                      cursor: "not-allowed",
+                      pointerEvents: "all",
+                    },
+                  },
+                }}
               >
                 Publikasikan
               </Button>

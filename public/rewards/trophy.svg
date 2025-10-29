@@ -1,0 +1,15 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Trophy cup -->
+  <path d="M10 7.5H30V17.5C30 22.3325 26.0825 26.25 21.25 26.25H18.75C13.9175 26.25 10 22.3325 10 17.5V7.5Z" fill="#f6d457" stroke="#1e3769" stroke-width="2"/>
+  
+  <!-- Handles -->
+  <path d="M8.75 10H6.25C5.55964 10 5 10.5596 5 11.25V13.75C5 15.1307 6.11929 16.25 7.5 16.25H8.75" stroke="#1e3769" stroke-width="2" stroke-linecap="round"/>
+  <path d="M31.25 10H33.75C34.4404 10 35 10.5596 35 11.25V13.75C35 15.1307 33.8807 16.25 32.5 16.25H31.25" stroke="#1e3769" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Base -->
+  <rect x="15" y="26.25" width="10" height="5" rx="1.25" fill="#1e3769"/>
+  <rect x="11.25" y="31.25" width="17.5" height="3.75" rx="1.875" fill="#f6d457" stroke="#1e3769" stroke-width="2"/>
+  
+  <!-- Star on cup -->
+  <path d="M20 12.5L21.25 16.25L25 16.875L22.5 19.375L23.125 23.125L20 21.25L16.875 23.125L17.5 19.375L15 16.875L18.75 16.25L20 12.5Z" fill="#1e3769"/>
+</svg>

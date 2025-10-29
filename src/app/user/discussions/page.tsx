@@ -215,7 +215,7 @@ export default function UserDiscussionsPage() {
           onKeyDown={(e) => e.key === "Enter" && setPage(1)}
         />
 
-        {loading && items.length === 0 ? (
+        {loading ? (
           <Stack gap="md">
             {Array.from({ length: 10 }).map((_, i) => (
               <Skeleton key={i} height={120} radius="md" />
@@ -259,7 +259,11 @@ export default function UserDiscussionsPage() {
                         radius="xl"
                         size="md"
                         src={post.user?.avatar || undefined}
-                        style={{ flexShrink: 0, marginTop: 2, cursor: "pointer" }}
+                        style={{
+                          flexShrink: 0,
+                          marginTop: 2,
+                          cursor: "pointer",
+                        }}
                         title={post.user?.full_name || "Profil"}
                       >
                         {(post.user?.full_name || "U")
@@ -269,12 +273,17 @@ export default function UserDiscussionsPage() {
                       </Avatar>
                     </Link>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <Group gap="xs" mb={8}>
+                      {/* Header: Name, Role, Time */}
+                      <Group gap="xs" mb={8} wrap="wrap" align="center">
                         <Text fw={600} size="sm" c="dark">
                           {post.user?.full_name || "Pengguna"}
                         </Text>
                         {post.user?.role && (
-                          <Badge size="xs" variant="light" color={getRoleColor(post.user.role)}>
+                          <Badge
+                            size="xs"
+                            variant="light"
+                            color={getRoleColor(post.user.role)}
+                          >
                             {getRoleLabel(post.user.role)}
                           </Badge>
                         )}
@@ -285,110 +294,151 @@ export default function UserDiscussionsPage() {
                           {relativeTime(post.created_at)}
                         </Text>
                       </Group>
-                      <div style={{ marginBottom: 12 }}>
-                        <Group gap="xs" mb={6} align="center" wrap="nowrap">
-                          <Text fw={600} size="sm">
-                            {post.title}
-                          </Text>
-                          {post.tags?.[0] && (
-                            <Badge size="xs" variant="light" color="blue" style={{ textTransform: "uppercase" }}>
-                              {post.tags[0]}
+
+                      {/* Title */}
+                      <Text fw={600} size="md" mb={8}>
+                        {post.title}
+                      </Text>
+
+                      {/* Description */}
+                      <Text
+                        size="sm"
+                        c="dimmed"
+                        style={{
+                          lineHeight: 1.6,
+                          whiteSpace: "pre-line",
+                          marginBottom: 16,
+                        }}
+                      >
+                        {post.content.replace(/\\n/g, "\n")}
+                      </Text>
+
+                      {/* Hashtags at the bottom with larger gap */}
+                      {post.tags && post.tags.length > 0 && (
+                        <Group gap={8} mb={12} wrap="wrap">
+                          {post.tags.map((tag) => (
+                            <Badge
+                              key={tag}
+                              size="sm"
+                              variant="light"
+                              color="blue"
+                              style={{
+                                cursor: "pointer",
+                                textTransform: "none",
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setQ(tag);
+                                setPage(1);
+                              }}
+                            >
+                              #{tag}
                             </Badge>
-                          )}
+                          ))}
                         </Group>
-                        <Text
-                          size="sm"
-                          style={{ lineHeight: 1.5, whiteSpace: "pre-line" }}
-                        >
-                          {post.content.replace(/\\n/g, "\n")}
-                        </Text>
-                      </div>
+                      )}
 
                       {/* Tampilkan 1 media pertama + 1 tile overlay "+N" */}
                       {post.media && post.media.length > 0 && (
                         <div style={{ marginBottom: 12 }}>
-                          <SimpleGrid cols={post.media.length > 1 ? 2 : 1} spacing={6}>
-                            {post.media.slice(0, Math.min(2, post.media.length)).map((m, idx) => {
-                              const isVid = m.m_type === "video";
-                              const src = isVid
-                                ? m.thumbnail ||
-                                  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%231e3769' width='200' height='200'/%3E%3C/svg%3E"
-                                : m.url;
-                              const remaining = Math.max(0, post.media.length - 1); // sisa setelah tile pertama
-                              const isOverlayTile = idx === 1 && post.media.length > 2; // overlay HANYA jika total > 2
-                              return (
-                                <div
-                                  key={m.id}
-                                  style={{
-                                    position: "relative",
-                                    width: "100%",
-                                    aspectRatio: "1 / 1",
-                                    borderRadius: 8,
-                                    overflow: "hidden",
-                                    border: "1px solid #e9ecef",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (isOverlayTile) {
-                                      window.location.href = `/user/discussions/${post.id}`;
-                                      return;
-                                    }
-                                    if (isVid) setPlayVideo(m.url);
-                                    else setZoomImage(m.url);
-                                  }}
-                                >
-                                  <Image
-                                    src={src}
-                                    alt={`Media ${idx + 1}`}
-                                    fit="cover"
-                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                  />
-                                  {isVid && !isOverlayTile && (
-                                    <div
+                          <SimpleGrid
+                            cols={post.media.length > 1 ? 2 : 1}
+                            spacing={6}
+                          >
+                            {post.media
+                              .slice(0, Math.min(2, post.media.length))
+                              .map((m, idx) => {
+                                const isVid = m.m_type === "video";
+                                const src = isVid
+                                  ? m.thumbnail ||
+                                    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%231e3769' width='200' height='200'/%3E%3C/svg%3E"
+                                  : m.url;
+                                const remaining = Math.max(
+                                  0,
+                                  post.media.length - 1
+                                ); // sisa setelah tile pertama
+                                const isOverlayTile =
+                                  idx === 1 && post.media.length > 2; // overlay HANYA jika total > 2
+                                return (
+                                  <div
+                                    key={m.id}
+                                    style={{
+                                      position: "relative",
+                                      width: "100%",
+                                      aspectRatio: "1 / 1",
+                                      borderRadius: 8,
+                                      overflow: "hidden",
+                                      border: "1px solid #e9ecef",
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isOverlayTile) {
+                                        window.location.href = `/user/discussions/${post.id}`;
+                                        return;
+                                      }
+                                      if (isVid) setPlayVideo(m.url);
+                                      else setZoomImage(m.url);
+                                    }}
+                                  >
+                                    <Image
+                                      src={src}
+                                      alt={`Media ${idx + 1}`}
+                                      fit="cover"
                                       style={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        background: "rgba(0,0,0,0.3)",
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
                                       }}
-                                    >
+                                    />
+                                    {isVid && !isOverlayTile && (
                                       <div
                                         style={{
-                                          background: "rgba(255,255,255,0.9)",
-                                          borderRadius: "50%",
-                                          width: 32,
-                                          height: 32,
+                                          position: "absolute",
+                                          inset: 0,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          background: "rgba(0,0,0,0.3)",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            background: "rgba(255,255,255,0.9)",
+                                            borderRadius: "50%",
+                                            width: 32,
+                                            height: 32,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconVideo
+                                            size={16}
+                                            color="#1e3769"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                    {isOverlayTile && (
+                                      <div
+                                        style={{
+                                          position: "absolute",
+                                          inset: 0,
+                                          background: "rgba(0,0,0,0.6)",
                                           display: "flex",
                                           alignItems: "center",
                                           justifyContent: "center",
                                         }}
                                       >
-                                        <IconVideo size={16} color="#1e3769" />
+                                        <Text c="white" fw={700} size="xl">
+                                          +{remaining}
+                                        </Text>
                                       </div>
-                                    </div>
-                                  )}
-                                  {isOverlayTile && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        background: "rgba(0,0,0,0.6)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <Text c="white" fw={700} size="xl">
-                                        +{remaining}
-                                      </Text>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                    )}
+                                  </div>
+                                );
+                              })}
                           </SimpleGrid>
                         </div>
                       )}

@@ -248,58 +248,134 @@ export default function UserCoursesPage() {
     <Container size="xl">
       <Stack gap="xl">
         <div>
-          <Title order={1} mb="md">
-            Kursus Saya
-          </Title>
-          <Text size="lg" c="dimmed">
-            Pantau progress belajar dan lanjutkan kursus yang sedang Anda ikuti
-          </Text>
+          {loading ? (
+            <>
+              <Skeleton height={36} width={200} mb="md" />
+              <Skeleton height={24} width={400} />
+            </>
+          ) : (
+            <>
+              <Title order={1} mb="md">
+                Kursus Saya
+              </Title>
+              <Text size="lg" c="dimmed">
+                Pantau progress belajar dan lanjutkan kursus yang sedang Anda
+                ikuti
+              </Text>
+            </>
+          )}
         </div>
 
         {/* Progress Overview */}
         <Grid gutter="lg">
-          <Grid.Col span={{ base: 12, md: 3 }}>
-            <StatCard
-              label="Kursus Aktif"
-              value={stats.total}
-              Icon={IconBook}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 3 }}>
-            <StatCard label="Tier" value={stats.tier} Icon={IconShield} />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 3 }}>
-            <StatCard
-              label="Total Points"
-              value={stats.totalPoints}
-              Icon={IconAward}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 3 }}>
-            <StatCard
-              label="Total Coins"
-              value={stats.totalCoins}
-              Icon={IconCoins}
-            />
-          </Grid.Col>
+          {loading ? (
+            // Skeleton untuk 4 stat cards
+            Array.from({ length: 4 }).map((_, idx) => (
+              <Grid.Col key={idx} span={{ base: 12, md: 3 }}>
+                <Card
+                  withBorder
+                  padding="lg"
+                  radius="md"
+                  shadow="sm"
+                  style={{
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    minHeight: 170,
+                  }}
+                >
+                  <Skeleton height={12} width={100} mb="sm" />
+                  <Skeleton height={56} width={56} circle mb="md" />
+                  <Skeleton height={32} width={80} />
+                </Card>
+              </Grid.Col>
+            ))
+          ) : (
+            <>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <StatCard
+                  label="Kursus Aktif"
+                  value={stats.total}
+                  Icon={IconBook}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <StatCard label="Tier" value={stats.tier} Icon={IconShield} />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <StatCard
+                  label="Total Points"
+                  value={stats.totalPoints}
+                  Icon={IconAward}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <StatCard
+                  label="Total Coins"
+                  value={stats.totalCoins}
+                  Icon={IconCoins}
+                />
+              </Grid.Col>
+            </>
+          )}
         </Grid>
 
         {/* Course List */}
-        {loading && items.length === 0 ? (
-          <PrimeLoader />
+        {loading ? (
+          <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <Card
+                key={idx}
+                radius="lg"
+                padding={0}
+                style={{ overflow: "hidden" }}
+              >
+                <Skeleton height={180} />
+                <Stack gap="md" p="lg">
+                  <Skeleton height={24} width="80%" />
+                  <Skeleton height={16} width="100%" />
+                  <Skeleton height={16} width="60%" />
+                  <Skeleton height={8} width="100%" />
+                  <Group justify="space-between">
+                    <Skeleton height={32} width={100} />
+                    <Skeleton height={32} width={120} />
+                  </Group>
+                </Stack>
+              </Card>
+            ))}
+          </SimpleGrid>
+        ) : items.length === 0 ? (
+          <Card padding="xl" radius="md">
+            <Stack align="center" gap="md">
+              <IconBook size="3rem" color="gray" />
+              <Text size="lg" c="dimmed">
+                Belum ada kursus yang diikuti
+              </Text>
+              <Text size="sm" c="dimmed" ta="center">
+                Mulai perjalanan belajar Anda dengan memilih kursus yang menarik
+              </Text>
+              <Button
+                className="btn-primary"
+                component={Link}
+                href="/user/explore"
+              >
+                Jelajahi Kursus
+              </Button>
+            </Stack>
+          </Card>
         ) : (
           <>
             <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
               {paginatedItems.map((row) => {
                 const course = row.course!;
-                              // Prefer server-provided totalModules if available.
-                              // If not provided, fallback to 0 so we can still show "0 dari X modul" consistently.
-                              const totalModules =
-                                course.totalModules && course.totalModules > 0
-                                  ? course.totalModules
-                                  : 0;
-                
-                
+                // Prefer server-provided totalModules if available.
+                // If not provided, fallback to 0 so we can still show "0 dari X modul" consistently.
+                const totalModules =
+                  course.totalModules && course.totalModules > 0
+                    ? course.totalModules
+                    : 0;
+
                 const completedCount = Math.max(
                   0,
                   Math.min(totalModules, row.progress.completedCount || 0)
@@ -531,79 +607,100 @@ export default function UserCoursesPage() {
 
         {/* Completed Courses with Certificates */}
         <Card padding="lg" radius="md">
-          <Title order={3} mb="md">
-            Sertifikat yang Diperoleh
-          </Title>
-          {items.filter((i) => i.progress.percentage >= 100).length === 0 ? (
-            <Text size="sm" c="dimmed">
-              Belum ada sertifikat yang diperoleh.
-            </Text>
-          ) : (
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-              {items
-                .filter((i) => i.progress.percentage >= 100)
-                .map((i) => (
-                  <Card
-                    key={i.enrollmentId}
-                    p="md"
-                    radius="sm"
-                    withBorder
-                    className="card-hover"
-                  >
+          {loading ? (
+            <>
+              <Skeleton height={28} width={250} mb="md" />
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <Card key={idx} p="md" radius="sm" withBorder>
                     <Stack align="center" gap="sm">
-                      <IconCertificate size="3rem" color="gold" />
-                      <div style={{ textAlign: "center" }}>
-                        <Text fw={600} size="sm">
-                          {i.course?.title}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          Diperoleh{" "}
-                          {new Date(i.enrolledAt).toLocaleDateString()}
-                        </Text>
-                      </div>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="yellow"
-                        leftSection={<IconDownload size="0.8rem" />}
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(
-                              `/api/user/certificates?userId=${user?.id}&courseId=${i.course?.id}`
-                            );
-                            const json = await res.json();
-                            if (!res.ok || !json.success) return;
-                            const url =
-                              json.certificate?.url ||
-                              json.certificateUrl ||
-                              (Array.isArray(json.items) &&
-                              json.items.length > 0
-                                ? json.items[0].certificate_url ||
-                                  json.items[0].url
-                                : null);
-                            if (url) {
-                              const link = document.createElement("a");
-                              link.href = url;
-                              link.download = `sertifikat-${i.course?.title?.replace(
-                                /\s+/g,
-                                "-"
-                              )}.pdf`;
-                              link.click();
-                            }
-                          } catch (error) {
-                            console.error(
-                              "Error downloading certificate:",
-                              error
-                            );
-                          }
-                        }}
-                      >
-                        Download
-                      </Button>
+                      <Skeleton height={48} width={48} circle />
+                      <Skeleton height={16} width="80%" />
+                      <Skeleton height={12} width="60%" />
+                      <Skeleton height={32} width={100} />
                     </Stack>
                   </Card>
                 ))}
-            </SimpleGrid>
+              </SimpleGrid>
+            </>
+          ) : (
+            <>
+              <Title order={3} mb="md">
+                Sertifikat yang Diperoleh
+              </Title>
+              {items.filter((i) => i.progress.percentage >= 100).length ===
+              0 ? (
+                <Text size="sm" c="dimmed">
+                  Belum ada sertifikat yang diperoleh.
+                </Text>
+              ) : (
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                  {items
+                    .filter((i) => i.progress.percentage >= 100)
+                    .map((i) => (
+                      <Card
+                        key={i.enrollmentId}
+                        p="md"
+                        radius="sm"
+                        withBorder
+                        className="card-hover"
+                      >
+                        <Stack align="center" gap="sm">
+                          <IconCertificate size="3rem" color="gold" />
+                          <div style={{ textAlign: "center" }}>
+                            <Text fw={600} size="sm">
+                              {i.course?.title}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              Diperoleh{" "}
+                              {new Date(i.enrolledAt).toLocaleDateString()}
+                            </Text>
+                          </div>
+                          <Button
+                            size="xs"
+                            variant="light"
+                            color="yellow"
+                            leftSection={<IconDownload size="0.8rem" />}
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(
+                                  `/api/user/certificates?userId=${user?.id}&courseId=${i.course?.id}`
+                                );
+                                const json = await res.json();
+                                if (!res.ok || !json.success) return;
+                                const url =
+                                  json.certificate?.url ||
+                                  json.certificateUrl ||
+                                  (Array.isArray(json.items) &&
+                                  json.items.length > 0
+                                    ? json.items[0].certificate_url ||
+                                      json.items[0].url
+                                    : null);
+                                if (url) {
+                                  const link = document.createElement("a");
+                                  link.href = url;
+                                  link.download = `sertifikat-${i.course?.title?.replace(
+                                    /\s+/g,
+                                    "-"
+                                  )}.pdf`;
+                                  link.click();
+                                }
+                              } catch (error) {
+                                console.error(
+                                  "Error downloading certificate:",
+                                  error
+                                );
+                              }
+                            }}
+                          >
+                            Download
+                          </Button>
+                        </Stack>
+                      </Card>
+                    ))}
+                </SimpleGrid>
+              )}
+            </>
           )}
         </Card>
 

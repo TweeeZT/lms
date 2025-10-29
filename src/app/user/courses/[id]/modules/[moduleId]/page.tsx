@@ -37,6 +37,7 @@ import { useAuth } from "../../../../../../hooks/useAuth";
 import MaterialContent from "../../../../../../components/course-detail/MaterialContent";
 import QuizSection from "../../../../../../components/course-detail/QuizSection";
 import AssignmentSection from "../../../../../../components/course-detail/AssignmentSection";
+import RewardModal from "../../../../../../components/course-detail/RewardModal";
 
 // Types
 type QuizQuestionRuntime = {
@@ -55,6 +56,8 @@ export interface ModuleDetailType {
     kind?: string | null;
     order?: number | null;
     duration_min?: number | null;
+    coins?: number;
+    points?: number;
     content?: {
       type?: string | null;
       url?: string | null;
@@ -140,7 +143,7 @@ const MODULE_LABELS = {
   quiz: "Quiz",
   tugas: "Tugas",
   live: "Live Session",
-  overview: "Overview",
+  overview: "Pengantar",
 };
 
 export default function ModuleDetailPage() {
@@ -155,6 +158,11 @@ export default function ModuleDetailPage() {
   const [detail, setDetail] = useState<ModuleDetailType | null>(null);
   const [showCompleteButton, setShowCompleteButton] = useState(false);
   // Removed module order locking; modules can be completed independently
+
+  // Reward modal state
+  const [rewardModalOpened, setRewardModalOpened] = useState(false);
+  const [rewardPoints, setRewardPoints] = useState(0);
+  const [rewardCoins, setRewardCoins] = useState(0);
 
   // Load module detail
   useEffect(() => {
@@ -229,27 +237,39 @@ export default function ModuleDetailPage() {
         });
         const json = await res.json();
 
-        console.log("Quiz submission response:", json);
+        console.log("=== QUIZ SUBMIT RESPONSE ===");
+        console.log("Full response:", json);
+        console.log("Passed?", json.passed);
+        console.log("Has rewards?", !!json.rewards);
+        console.log("Rewards data:", json.rewards);
 
         if (!res.ok || !json.success) {
           throw new Error(json.error || "Gagal submit quiz");
         }
 
-        // Show notification
-        notifications.show({
-          title: json.passed ? "Quiz Selesai!" : "Quiz Selesai",
-          message: json.passed
-            ? `Selamat! Anda lulus dengan skor ${json.score || 0}`
-            : `Skor Anda: ${
-                json.score || 0
-              }. Anda belum mencapai passing score.`,
-          color: json.passed ? "green" : "yellow",
-        });
+        // Check for rewards - ALWAYS show modal if passed and rewards exist (even if 0)
+        if (json.passed && json.rewards) {
+          console.log("SHOWING REWARD MODAL FOR QUIZ!");
+          setRewardPoints(json.rewards.points || 0);
+          setRewardCoins(json.rewards.coins || 0);
+          setRewardModalOpened(true);
+        } else {
+          // Show notification for non-passing or no rewards
+          notifications.show({
+            title: json.passed ? "Quiz Selesai!" : "Quiz Selesai",
+            message: json.passed
+              ? `Selamat! Anda lulus dengan skor ${json.score || 0}`
+              : `Skor Anda: ${
+                  json.score || 0
+                }. Anda belum mencapai passing score.`,
+            color: json.passed ? "green" : "yellow",
+          });
 
-        // Reload the detail to show attempt results
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+          // Reload the detail to show attempt results
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        }
       } catch (err) {
         console.error("Quiz submission error:", err);
         notifications.show({
@@ -404,15 +424,32 @@ export default function ModuleDetailPage() {
         }),
       });
       const json = await res.json();
+
+      console.log("=== MATERIAL COMPLETE RESPONSE ===");
+      console.log("Full response:", json);
+      console.log("Has rewards?", !!json.rewards);
+      console.log("Rewards data:", json.rewards);
+      console.log("Coins:", json.rewards?.coins);
+      console.log("Points:", json.rewards?.points);
+
       if (res.ok && json.success) {
-        notifications.show({
-          title: "Modul Selesai!",
-          message: "Modul berhasil diselesaikan!",
-          color: "green",
-        });
-        setTimeout(() => {
-          router.push(`/user/courses/${courseId}`);
-        }, 1500);
+        // Check for rewards - ALWAYS show modal if rewards exist (even if 0)
+        if (json.rewards) {
+          console.log("SHOWING REWARD MODAL!");
+          setRewardPoints(json.rewards.points || 0);
+          setRewardCoins(json.rewards.coins || 0);
+          setRewardModalOpened(true);
+        } else {
+          console.log("No rewards to show, redirecting...");
+          notifications.show({
+            title: "Modul Selesai!",
+            message: "Modul berhasil diselesaikan!",
+            color: "green",
+          });
+          setTimeout(() => {
+            router.push(`/user/courses/${courseId}`);
+          }, 1500);
+        }
       }
     } catch (err) {
       console.error("Failed to mark complete:", err);
@@ -434,16 +471,30 @@ export default function ModuleDetailPage() {
         }),
       });
       const json = await res.json();
+
+      console.log("=== LIVE SESSION COMPLETE RESPONSE ===");
+      console.log("Full response:", json);
+      console.log("Has rewards?", !!json.rewards);
+      console.log("Rewards data:", json.rewards);
+
       if (res.ok && json.success) {
-        notifications.show({
-          title: "Live Session Selesai!",
-          message: "Live session berhasil diselesaikan!",
-          color: "green",
-        });
-        // Reload page to show updated completion status
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        // Check for rewards - ALWAYS show modal if rewards exist (even if 0)
+        if (json.rewards) {
+          console.log("SHOWING REWARD MODAL FOR LIVE!");
+          setRewardPoints(json.rewards.points || 0);
+          setRewardCoins(json.rewards.coins || 0);
+          setRewardModalOpened(true);
+        } else {
+          notifications.show({
+            title: "Live Session Selesai!",
+            message: "Live session berhasil diselesaikan!",
+            color: "green",
+          });
+          // Reload page to show updated completion status
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
       } else {
         throw new Error(json.error || "Gagal menandai selesai");
       }
@@ -551,6 +602,16 @@ export default function ModuleDetailPage() {
 
   return (
     <Container size="lg" py="xl">
+      <RewardModal
+        opened={rewardModalOpened}
+        onClose={() => {
+          setRewardModalOpened(false);
+          router.push(`/user/courses/${courseId}`);
+        }}
+        points={rewardPoints}
+        coins={rewardCoins}
+      />
+
       <Stack gap="xl">
         {/* Back Button */}
         <Group>
@@ -625,7 +686,7 @@ export default function ModuleDetailPage() {
                 content={moduleData.content}
                 onAutoComplete={() => {}} // Disabled auto-complete
               />
-              {!isCompleted && showCompleteButton && (
+              {!isCompleted && (
                 <>
                   <Divider my="lg" />
                   <Button
@@ -657,7 +718,7 @@ export default function ModuleDetailPage() {
                   }}
                 />
               </Stack>
-              {!isCompleted && showCompleteButton && (
+              {!isCompleted && (
                 <>
                   <Divider my="lg" />
                   <Button

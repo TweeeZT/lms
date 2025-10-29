@@ -106,70 +106,123 @@ export default function UserExplorePage() {
 
   // enroll handled via checkout flow now
 
-  if (loading && items.length === 0) {
-    return <PrimeLoader />;
-  }
-
   return (
     <Container size="xl">
       <Stack gap="xl">
         <div>
-          <Title order={1} mb="md">
-            Jelajahi Kursus
-          </Title>
-          <Text size="lg" c="dimmed">
-            Temukan kursus yang sesuai dengan minat dan level Anda
-          </Text>
+          {loading && items.length === 0 ? (
+            <>
+              <Skeleton height={36} width={250} mb="md" />
+              <Skeleton height={24} width={450} />
+            </>
+          ) : (
+            <>
+              <Title order={1} mb="md">
+                Jelajahi Kursus
+              </Title>
+              <Text size="lg" c="dimmed">
+                Temukan kursus yang sesuai dengan minat dan level Anda
+              </Text>
+            </>
+          )}
         </div>
 
         {/* Search and Filters */}
         <Card padding="lg" radius="md">
-          <Grid gutter="md" align="end">
-            <Grid.Col span={{ base: 12, md: 6 }}>
-              <TextInput
-                placeholder="Cari kursus..."
-                leftSection={<IconSearch size="1rem" />}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-              />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, md: 3 }}>
-              <Select
-                placeholder="Kategori"
-                leftSection={<IconFilter size="1rem" />}
-                data={[
-                  { value: "all", label: "Semua Kategori" },
-                  { value: "scratch", label: "Scratch" },
-                  { value: "roblox", label: "Roblox" },
-                  { value: "robotics", label: "Robotik" },
-                ]}
-                value={categoryFilter}
-                onChange={setCategoryFilter}
-              />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, md: 3 }}>
-              <Select
-                placeholder="Level"
-                data={[
-                  { value: "all", label: "Semua Level" },
-                  { value: "beginner", label: "Pemula" },
-                  { value: "intermediate", label: "Menengah" },
-                  { value: "advanced", label: "Lanjutan" },
-                ]}
-                value={levelFilter}
-                onChange={setLevelFilter}
-              />
-            </Grid.Col>
-          </Grid>
+          {loading && items.length === 0 ? (
+            <Grid gutter="md" align="end">
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <Skeleton height={40} />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <Skeleton height={40} />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <Skeleton height={40} />
+              </Grid.Col>
+            </Grid>
+          ) : (
+            <Grid gutter="md" align="end">
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <TextInput
+                  placeholder="Cari kursus..."
+                  leftSection={<IconSearch size="1rem" />}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <Select
+                  placeholder="Kategori"
+                  leftSection={<IconFilter size="1rem" />}
+                  data={[
+                    { value: "all", label: "Semua Kategori" },
+                    { value: "scratch", label: "Scratch" },
+                    { value: "roblox", label: "Roblox" },
+                    { value: "robotics", label: "Robotik" },
+                  ]}
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 3 }}>
+                <Select
+                  placeholder="Level"
+                  data={[
+                    { value: "all", label: "Semua Level" },
+                    { value: "beginner", label: "Pemula" },
+                    { value: "intermediate", label: "Menengah" },
+                    { value: "advanced", label: "Lanjutan" },
+                  ]}
+                  value={levelFilter}
+                  onChange={setLevelFilter}
+                />
+              </Grid.Col>
+            </Grid>
+          )}
         </Card>
 
         {/* Course Grid */}
         {loading && items.length === 0 ? (
-          <Stack gap="md">
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} height={260} radius="md" />
+              <Card key={i} radius="lg" padding={0}>
+                <Skeleton height={200} />
+                <Stack p="md" gap="sm">
+                  <Group justify="space-between">
+                    <Skeleton height={24} width={80} />
+                    <Skeleton height={24} width={80} />
+                  </Group>
+                  <Skeleton height={24} width="90%" />
+                  <Skeleton height={16} width="100%" />
+                  <Skeleton height={16} width="80%" />
+                  <Group gap="xs">
+                    <Skeleton height={16} width={80} />
+                    <Skeleton height={16} width={60} />
+                  </Group>
+                  <Group justify="space-between">
+                    <Skeleton height={28} width={100} />
+                    <Group gap="xs">
+                      <Skeleton height={32} width={70} />
+                      <Skeleton height={32} width={90} />
+                    </Group>
+                  </Group>
+                </Stack>
+              </Card>
             ))}
-          </Stack>
+          </SimpleGrid>
+        ) : items.length === 0 ? (
+          <Card padding="xl" radius="md">
+            <Stack align="center" gap="md">
+              <IconBook size="3rem" color="gray" />
+              <Text size="lg" c="dimmed">
+                Tidak ada kursus ditemukan
+              </Text>
+              <Text size="sm" c="dimmed" ta="center">
+                Coba ubah filter atau kata kunci pencarian Anda
+              </Text>
+            </Stack>
+          </Card>
         ) : (
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
             {items.map((course) => (

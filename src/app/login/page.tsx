@@ -71,6 +71,8 @@ export function LoginForm() {
   const [providerLoading, setProviderLoading] = useState<
     "google" | "github" | null
   >(null);
+  const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   const {
     register,
@@ -137,9 +139,10 @@ export function LoginForm() {
   const getRedirectPath = (role?: string | null) => {
     if (role === "admin") return "/admin/dashboard";
     if (role === "instructor") return "/instructor/dashboard";
-    if (role === "user") return "/user/dashboard";
     if (role === "school") return "/school/dashboard";
-    return "/";
+    if (role === "user") return "/user/dashboard";
+    // Default fallback ke user dashboard jika role tidak dikenali
+    return "/user/dashboard";
   };
 
   const signInWithProvider = async (provider: "google" | "github") => {
@@ -237,57 +240,133 @@ export function LoginForm() {
   // Auto finalize jika user kembali dari redirect OAuth dan sudah punya session tapi belum terset local storage
   useEffect(() => {
     let cancelled = false;
-    const finalize = async () => {
+
+    const processOAuth = async () => {
+      if (
+        typeof window === "undefined" ||
+        isProcessingOAuth ||
+        cancelled ||
+        hasRedirected
+      )
+        return;
+
       try {
-        // Hindari override kalau sudah ada userRole di localStorage
-        if (typeof window === "undefined") return;
-        const existingRole = localStorage.getItem("userRole");
-        if (existingRole) return; // sudah selesai sebelumnya
-        const session = await supabase.auth.getSession();
-        const userId = session.data.session?.user?.id;
-        if (!userId) return;
-        const res = await fetch(`/api/auth/guard?userId=${userId}`);
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok || !json.success) {
-          if (json?.error === "not_found") {
-            await supabase.auth.signOut();
-            if (!cancelled)
+        // Check if we have hash fragment (OAuth callback)
+        const hash = window.location.hash;
+
+        if (hash && hash.includes("access_token")) {
+          setIsProcessingOAuth(true);
+          setProviderLoading(null);
+
+          // Parse hash fragment
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get("access_token");
+          const refreshToken = params.get("refresh_token");
+
+          if (!accessToken || !refreshToken) {
+            setLoginError("Token OAuth tidak valid");
+            setIsProcessingOAuth(false);
+            return;
+          }
+
+          // Set session manually
+          const { data: sessionData, error: sessionError } =
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+          if (sessionError || !sessionData.session) {
+            setLoginError("Gagal set session OAuth");
+            setIsProcessingOAuth(false);
+            return;
+          }
+
+          const userId = sessionData.session.user.id;
+
+          // Verify user exists in database
+          const res = await fetch(`/api/auth/guard?userId=${userId}`);
+          const json = await res.json().catch(() => ({}));
+
+          if (!res.ok || !json.success) {
+            if (json?.error === "not_found") {
+              await supabase.auth.signOut();
               setLoginError(
                 "Akun OAuth belum terdaftar. Silakan daftar manual."
               );
+            } else {
+              setLoginError(json?.error || "Login OAuth gagal");
+            }
+            setIsProcessingOAuth(false);
+            return;
           }
+
+          // Save to localStorage
+          const mapped = json.user;
+          localStorage.setItem(
+            "afterschola_user",
+            JSON.stringify({
+              id: mapped.id,
+              email: mapped.email,
+              username: mapped.username,
+              fullName: mapped.fullName,
+              role: mapped.role,
+              avatar: mapped.avatar,
+              phone: mapped.phone,
+              bio: mapped.bio,
+              level: 1,
+              points: 0,
+              balance: 0,
+              createdAt: mapped.createdAt,
+              updatedAt: mapped.updatedAt,
+            })
+          );
+          localStorage.setItem("userRole", mapped.role || "user");
+
+          // Set cookies
+          try {
+            const ttlDays = 7;
+            const maxAge = ttlDays * 24 * 60 * 60;
+            document.cookie = `a_uid=${encodeURIComponent(
+              mapped.id
+            )}; Path=/; Max-Age=${maxAge}`;
+            document.cookie = `a_role=${encodeURIComponent(
+              mapped.role
+            )}; Path=/; Max-Age=${maxAge}`;
+            document.cookie = `a_uname=${encodeURIComponent(
+              mapped.fullName || "User"
+            )}; Path=/; Max-Age=${maxAge}`;
+          } catch {}
+
+          // Clear hash fragment
+          window.history.replaceState(
+            null,
+            "",
+            window.location.pathname + window.location.search
+          );
+
+          // Redirect sesuai role - HANYA SEKALI
+          setHasRedirected(true);
+          const redirectPath = getRedirectPath(mapped.role);
+          router.push(redirectPath);
+          setIsProcessingOAuth(false);
           return;
         }
-        if (cancelled) return;
-        const mapped = json.user;
-        localStorage.setItem(
-          "afterschola_user",
-          JSON.stringify({
-            id: mapped.id,
-            email: mapped.email,
-            username: mapped.username,
-            fullName: mapped.fullName,
-            role: mapped.role,
-            avatar: mapped.avatar,
-            phone: mapped.phone,
-            bio: mapped.bio,
-            level: 1,
-            points: 0,
-            balance: 0,
-            createdAt: mapped.createdAt,
-            updatedAt: mapped.updatedAt,
-          })
-        );
-        localStorage.setItem("userRole", mapped.role || "user");
-        // Redirect sesuai role
-        router.push(getRedirectPath(mapped.role));
-      } catch {}
+
+        // HAPUS pengecekan existingRole di sini karena ini yang bikin redirect loop
+        // Kalau user sudah login, authProvider akan handle redirect otomatis
+      } catch (err) {
+        console.error("OAuth finalize error:", err);
+        setIsProcessingOAuth(false);
+      }
     };
-    finalize();
+
+    processOAuth();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router, isProcessingOAuth, hasRedirected]);
 
   // Map notice query to a friendly alert
   useEffect(() => {

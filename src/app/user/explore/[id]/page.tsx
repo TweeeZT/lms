@@ -154,16 +154,75 @@ export default function ExploreCourseDetailPage() {
   // Loading skeleton redesigned
   if (loading) {
     return (
-      <Container size="lg" py="xl">
-        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="lg" mb="lg">
-          <Skeleton height={220} radius="md" />
-          <Skeleton height={220} radius="md" />
-          <Skeleton height={220} radius="md" />
-        </SimpleGrid>
-        <Skeleton height={46} mb="sm" />
-        <Skeleton height={20} mb="sm" />
-        <Skeleton height={20} mb="sm" />
-        <Skeleton height={300} radius="md" />
+      <Container size="xl" py="xl">
+        <Stack gap="xl">
+          {/* Hero Card Skeleton */}
+          <Card withBorder radius="md" p={0}>
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing={0}>
+              <Skeleton height={280} />
+              <Stack p="lg" gap="sm">
+                <Group gap="xs">
+                  <Skeleton height={24} width={100} />
+                  <Skeleton height={24} width={80} />
+                </Group>
+                <Skeleton height={32} width="90%" />
+                <Skeleton height={16} width="100%" />
+                <Skeleton height={16} width="80%" />
+                <Group gap="md">
+                  <Skeleton height={16} width={80} />
+                  <Skeleton height={16} width={100} />
+                  <Skeleton height={16} width={80} />
+                </Group>
+                <Group gap="sm">
+                  <Skeleton height={32} width={32} circle />
+                  <div>
+                    <Skeleton height={14} width={120} mb="xs" />
+                    <Skeleton height={12} width={80} />
+                  </div>
+                </Group>
+              </Stack>
+            </SimpleGrid>
+            <Group
+              p="lg"
+              justify="space-between"
+              style={{ borderTop: "1px solid var(--mantine-color-gray-2)" }}
+            >
+              <Skeleton height={32} width={150} />
+              <Skeleton height={40} width={200} />
+            </Group>
+          </Card>
+
+          {/* Overview Skeleton */}
+          <Card withBorder radius="md" p="lg">
+            <Skeleton height={28} width={200} mb="md" />
+            <Skeleton height={16} width="100%" mb="xs" />
+            <Skeleton height={16} width="95%" mb="xs" />
+            <Skeleton height={16} width="85%" />
+          </Card>
+
+          {/* Modules List Skeleton */}
+          <Card withBorder radius="md" p="lg">
+            <Skeleton height={28} width={250} mb="md" />
+            <Stack gap="sm">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <Group
+                  key={idx}
+                  p="md"
+                  style={{
+                    border: "1px solid var(--mantine-color-gray-2)",
+                    borderRadius: 8,
+                  }}
+                >
+                  <Skeleton height={40} width={40} circle />
+                  <Stack flex={1} gap={4}>
+                    <Skeleton height={16} width="70%" />
+                    <Skeleton height={12} width="50%" />
+                  </Stack>
+                </Group>
+              ))}
+            </Stack>
+          </Card>
+        </Stack>
       </Container>
     );
   }

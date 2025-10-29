@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   Container,
   Title,
@@ -17,10 +25,12 @@ import {
   Textarea,
   ActionIcon,
   Image,
-  Loader,
   ScrollArea,
   SimpleGrid,
   Tooltip,
+  Progress,
+  Skeleton,
+  Center,
 } from "@mantine/core";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
@@ -43,6 +53,7 @@ import {
   IconExternalLink,
   IconInfoCircle,
   IconRefresh,
+  IconCoin,
 } from "@tabler/icons-react";
 import NextImage from "next/image";
 import Cropper from "react-easy-crop";
@@ -81,34 +92,42 @@ export default function UserProfilePage() {
   const validateUsername = async (value: string) => {
     // Skip validation if no change
     if (value === initialRef.current?.username) {
-      setErrors(prev => ({ ...prev, username: undefined }));
+      setErrors((prev) => ({ ...prev, username: undefined }));
       return true;
     }
 
     // Basic validations
     if (value.length < 3) {
-      setErrors(prev => ({ ...prev, username: "Username minimal 3 karakter" }));
+      setErrors((prev) => ({
+        ...prev,
+        username: "Username minimal 3 karakter",
+      }));
       return false;
     }
     if (!/^[a-zA-Z0-9._-]+$/.test(value)) {
-      setErrors(prev => ({ ...prev, username: "Username hanya boleh huruf, angka, titik, dan underscore" }));
+      setErrors((prev) => ({
+        ...prev,
+        username: "Username hanya boleh huruf, angka, titik, dan underscore",
+      }));
       return false;
     }
 
     // Check uniqueness via API
     try {
       const res = await fetch(
-        `/api/user/profile/validate?username=${encodeURIComponent(value)}&excludeId=${encodeURIComponent(user?.id || "")}`
+        `/api/user/profile/validate?username=${encodeURIComponent(
+          value
+        )}&excludeId=${encodeURIComponent(user?.id || "")}`
       );
       const json = await res.json();
       if (!json.valid) {
-        setErrors(prev => ({ ...prev, username: json.error }));
+        setErrors((prev) => ({ ...prev, username: json.error }));
         return false;
       }
-      setErrors(prev => ({ ...prev, username: undefined }));
+      setErrors((prev) => ({ ...prev, username: undefined }));
       return true;
     } catch (error) {
-      setErrors(prev => ({ ...prev, username: "Gagal validasi username" }));
+      setErrors((prev) => ({ ...prev, username: "Gagal validasi username" }));
       return false;
     }
   };
@@ -116,49 +135,57 @@ export default function UserProfilePage() {
   const validatePhone = async (value: string) => {
     // Skip validation if no value (phone is optional) or no change
     if (!value) {
-      setErrors(prev => ({ ...prev, phone: undefined }));
+      setErrors((prev) => ({ ...prev, phone: undefined }));
       return true;
     }
     if (value === initialRef.current?.phone) {
-      setErrors(prev => ({ ...prev, phone: undefined }));
+      setErrors((prev) => ({ ...prev, phone: undefined }));
       return true;
     }
 
     // Basic validations
     if (!/^\+?\d+$/.test(value)) {
-      setErrors(prev => ({ ...prev, phone: "Nomor telepon hanya boleh angka dan tanda +" }));
+      setErrors((prev) => ({
+        ...prev,
+        phone: "Nomor telepon hanya boleh angka dan tanda +",
+      }));
       return false;
     }
     const phoneDigits = value.replace(/^\+/, "");
     if (phoneDigits.length < 10) {
-      setErrors(prev => ({ ...prev, phone: "Nomor telepon minimal 10 digit" }));
+      setErrors((prev) => ({
+        ...prev,
+        phone: "Nomor telepon minimal 10 digit",
+      }));
       return false;
     }
 
     // Check uniqueness via API
     try {
       const res = await fetch(
-        `/api/user/profile/validate?phone=${encodeURIComponent(value)}&excludeId=${encodeURIComponent(user?.id || "")}`
+        `/api/user/profile/validate?phone=${encodeURIComponent(
+          value
+        )}&excludeId=${encodeURIComponent(user?.id || "")}`
       );
       const json = await res.json();
       if (!json.valid) {
-        setErrors(prev => ({ ...prev, phone: json.error }));
+        setErrors((prev) => ({ ...prev, phone: json.error }));
         return false;
       }
-      setErrors(prev => ({ ...prev, phone: undefined }));
+      setErrors((prev) => ({ ...prev, phone: undefined }));
       return true;
     } catch (error) {
-      setErrors(prev => ({ ...prev, phone: "Gagal validasi nomor telepon" }));
+      setErrors((prev) => ({ ...prev, phone: "Gagal validasi nomor telepon" }));
       return false;
     }
   };
 
   const validateBio = (value: string) => {
     if (value.length > 300) {
-      setErrors(prev => ({ ...prev, bio: "Bio maksimal 300 karakter" }));
+      setErrors((prev) => ({ ...prev, bio: "Bio maksimal 300 karakter" }));
       return false;
     }
-    setErrors(prev => ({ ...prev, bio: undefined }));
+    setErrors((prev) => ({ ...prev, bio: undefined }));
     return true;
   };
 
@@ -169,15 +196,17 @@ export default function UserProfilePage() {
   const [currentXP, setCurrentXP] = useState<number>(0);
   const [, setNextLevelXP] = useState<number>(1500);
   const [coursesCompleted, setCoursesCompleted] = useState<number>(0);
+  const [coins, setCoins] = useState(0);
+
   const avgScore = useMemo(
     () =>
       Math.floor(
-        (Number(currentXP || 0) +
+        (Number(coins || 0) +
           Number(points || 0) +
           Number(coursesCompleted || 0)) /
           3
       ),
-    [currentXP, points, coursesCompleted]
+    [coins, points, coursesCompleted]
   );
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -191,6 +220,7 @@ export default function UserProfilePage() {
       courseTitle: string;
       amount: number;
       status: string;
+      method?: string | null;
     }[]
   >([]);
   const [txTotal, setTxTotal] = useState(0);
@@ -209,7 +239,10 @@ export default function UserProfilePage() {
     { achievement_key: string; coins_earned: number; earned_at: string }[]
   >([]);
   const [achievementsLoading, setAchievementsLoading] = useState(false);
-  const [coins, setCoins] = useState(0);
+
+  // Purchases and Certificates loading states
+  const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [certificatesLoading, setCertificatesLoading] = useState(false);
 
   // keep initial snapshot for reset
   const initialRef = useRef<{
@@ -316,17 +349,8 @@ export default function UserProfilePage() {
     ],
   };
 
-  const displayMethod = (method?: string) => {
-    if (!method) return "Transfer Bank";
-    const m = method.toLowerCase();
-    if (m.includes("qris")) return "QRIS";
-    if (m.includes("bca")) return "BCA Virtual Account";
-    if (m.includes("mandiri")) return "Mandiri Virtual Account";
-    if (m.includes("bni")) return "BNI Virtual Account";
-    if (m.includes("bri")) return "BRI Virtual Account";
-    if (m.includes("gopay")) return "GoPay";
-    if (m.includes("ovo")) return "OVO";
-    if (m.includes("dana")) return "DANA";
+  const displayMethod = (method?: string | null) => {
+    if (!method) return "Metode Tidak Diketahui";
     return method;
   };
 
@@ -344,6 +368,7 @@ export default function UserProfilePage() {
     courseTitle: string;
     amount: number;
     status: string;
+    method?: string | null;
   }) => {
     const w = window.open("", "_blank", "width=800,height=1000");
     if (!w) {
@@ -420,7 +445,7 @@ export default function UserProfilePage() {
       ${line(pad("Waktu: ", timeStr))}
       ${line(pad("Nama: ", user?.fullName || "User"))}
       ${line(pad("Kursus: ", t.courseTitle))}
-      ${line(pad("Metode: ", displayMethod()))}
+  ${line(pad("Metode: ", displayMethod(t.method || undefined)))}
       ${line(pad("Status: ", statusLabel(t.status)))}
       ${hr}
       ${line(pad("Total Bayar: ", formatCurrency(t.amount)))}
@@ -488,6 +513,7 @@ export default function UserProfilePage() {
         };
 
         // transactions (latest, prefer completed/paid)
+        setPurchasesLoading(true);
         const tr = await fetch(
           `/api/user/transactions?userId=${user.id}&page=${txPage}&limit=${txLimit}&sortBy=date&sortDir=desc`
         );
@@ -499,6 +525,7 @@ export default function UserProfilePage() {
             course_title: string;
             amount: number;
             status: string;
+            method?: string | null;
           };
           const items = (tj.items as ApiTx[]).filter(
             (r) =>
@@ -512,6 +539,7 @@ export default function UserProfilePage() {
               courseTitle: r.course_title,
               amount: Number(r.amount || 0),
               status: r.status,
+              method: r.method ?? null,
             }))
           );
           setTxTotal(Number(tj.total || items.length));
@@ -519,8 +547,10 @@ export default function UserProfilePage() {
           setLatestPaid([]);
           setTxTotal(0);
         }
+        setPurchasesLoading(false);
 
         // certificates
+        setCertificatesLoading(true);
         const cr = await fetch(
           `/api/user/certificates?userId=${user.id}&page=1&limit=10&sortBy=date&sortDir=desc`
         );
@@ -549,6 +579,7 @@ export default function UserProfilePage() {
         } else {
           setCertificates([]);
         }
+        setCertificatesLoading(false);
 
         // Scratch projects - hanya untuk user yang sedang login
         if (user.username) {
@@ -590,7 +621,8 @@ export default function UserProfilePage() {
           if (statsRes.ok) {
             const statsJson = await statsRes.json();
             if (statsJson.success) {
-              setCoins(statsJson.coins || 0);
+              setCoins(Number(statsJson.coins || 0));
+              setCoursesCompleted(Number(statsJson.coursesCompleted || 0));
             }
           }
         } catch {
@@ -659,7 +691,7 @@ export default function UserProfilePage() {
 
   const onSave = async () => {
     if (!user?.id) return;
-    
+
     // Validate all fields before saving
     const usernameValid = await validateUsername(username);
     const phoneValid = await validatePhone(phone);
@@ -939,42 +971,112 @@ export default function UserProfilePage() {
 
         {/* Achievements */}
         {activeTab === "achievements" && (
-          <Stack gap="xl">
-            <Group justify="space-between" align="center">
-              <div>
-                <Title order={3} c="var(--primary-color)">
-                  Pencapaian & Koin
-                </Title>
-                <Text c="dimmed">
-                  Kumpulkan koin dengan menyelesaikan pencapaian
-                </Text>
-              </div>
-              <Card withBorder radius="xl" p="md" bg="var(--secondary-color)">
-                <Group gap="xs">
-                  <Text size="xl" fw={700} c="var(--primary-color)">
-                    {coins.toLocaleString("id-ID")}
-                  </Text>
-                  <Text size="sm" c="var(--primary-color)">
-                    Koin
-                  </Text>
+          <>
+            {achievementsLoading ? (
+              <Stack gap="xl">
+                {/* Header Skeleton */}
+                <Group justify="space-between" align="center">
+                  <Stack gap="xs">
+                    <Skeleton height={28} width={200} radius="md" />
+                    <Skeleton height={20} width={300} radius="md" />
+                  </Stack>
+                  <Skeleton height={60} width={120} radius="xl" />
                 </Group>
-              </Card>
-            </Group>
 
-            {/* Achievements Grid */}
-            <AchievementsGrid
-              achievements={achievements}
-              loading={achievementsLoading}
-              stats={{ xp: currentXP, points, coursesCompleted }}
-            />
+                {/* Coin Badge Grid Skeleton */}
+                <Stack gap="md">
+                  <Skeleton height={80} radius="md" />
+                  <SimpleGrid cols={{ base: 3, sm: 6 }} spacing="md">
+                    {[...Array(6)].map((_, i) => (
+                      <Skeleton key={i} height={120} radius="md" />
+                    ))}
+                  </SimpleGrid>
+                </Stack>
 
-            <TierCarouselCard
-              stats={{ xp: currentXP, points, coursesCompleted }}
-            />
+                {/* Achievements Grid Skeleton */}
+                <Stack gap="md">
+                  <Group justify="space-between">
+                    <Skeleton height={24} width={200} radius="md" />
+                    <Skeleton height={20} width={60} radius="md" />
+                  </Group>
+                  <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} height={280} radius="lg" />
+                    ))}
+                  </SimpleGrid>
+                  <SimpleGrid
+                    cols={{ base: 1, sm: 2 }}
+                    spacing="lg"
+                    style={{ maxWidth: "66%", margin: "0 auto" }}
+                  >
+                    {[...Array(2)].map((_, i) => (
+                      <Skeleton key={i} height={280} radius="lg" />
+                    ))}
+                  </SimpleGrid>
+                </Stack>
 
-            {/* Leaderboard Top 5 */}
-            <Leaderboard />
-          </Stack>
+                {/* Second Coin Badge Grid Skeleton */}
+                <Stack gap="md">
+                  <Skeleton height={80} radius="md" />
+                  <SimpleGrid cols={{ base: 3, sm: 6 }} spacing="md">
+                    {[...Array(6)].map((_, i) => (
+                      <Skeleton key={`second-${i}`} height={120} radius="md" />
+                    ))}
+                  </SimpleGrid>
+                </Stack>
+
+                {/* Tier Carousel Skeleton */}
+                <Skeleton height={300} radius="lg" />
+
+                {/* Leaderboard has its own loading state */}
+                <Leaderboard />
+              </Stack>
+            ) : (
+              <Stack gap="xl">
+                <Group justify="space-between" align="center">
+                  <div>
+                    <Title order={3} c="var(--primary-color)">
+                      Pencapaian & Koin
+                    </Title>
+                    <Text c="dimmed">
+                      Kumpulkan koin dengan menyelesaikan pencapaian
+                    </Text>
+                  </div>
+                  <Card
+                    withBorder
+                    radius="xl"
+                    p="md"
+                    bg="var(--secondary-color)"
+                  >
+                    <Group gap="xs">
+                      <Text size="xl" fw={700} c="var(--primary-color)">
+                        {coins.toLocaleString("id-ID")}
+                      </Text>
+                      <Text size="sm" c="var(--primary-color)">
+                        Koin
+                      </Text>
+                    </Group>
+                  </Card>
+                </Group>
+
+                <CoinBadgeGrid coins={coins} />
+
+                {/* Achievements Grid */}
+                <AchievementsGrid
+                  achievements={achievements}
+                  stats={{ xp: currentXP, points, coursesCompleted }}
+                  coins={coins}
+                />
+
+                <CoinBadgeGrid coins={coins} />
+
+                <TierCarouselCard stats={{ coins, points, coursesCompleted }} />
+
+                {/* Leaderboard Top 5 */}
+                <Leaderboard />
+              </Stack>
+            )}
+          </>
         )}
 
         {activeTab === "purchases" && (
@@ -982,78 +1084,96 @@ export default function UserProfilePage() {
             <Title order={3} c="var(--primary-color)">
               Riwayat Pembelian
             </Title>
-            <Group justify="space-between" align="center">
-              <Text size="sm" c="white">
-                Halaman {txPage} dari{" "}
-                {Math.max(1, Math.ceil(txTotal / txLimit))}
-              </Text>
-              <Group gap="xs">
-                <Button
-                  size="xs"
-                  variant="light"
-                  disabled={txPage <= 1}
-                  onClick={() => setTxPage((p) => Math.max(1, p - 1))}
-                >
-                  Sebelumnya
-                </Button>
-                <Button
-                  size="xs"
-                  variant="light"
-                  disabled={txPage >= Math.max(1, Math.ceil(txTotal / txLimit))}
-                  onClick={() => setTxPage((p) => p + 1)}
-                >
-                  Berikutnya
-                </Button>
-              </Group>
-            </Group>
-            {latestPaid.map((t) => (
-              <Card
-                key={t.id}
-                withBorder
-                radius="md"
-                p="lg"
-                className="card-hover"
-              >
-                <Group justify="space-between" align="start">
-                  <div style={{ flex: 1 }}>
-                    <Text fw={600} mb={6}>
-                      {t.courseTitle}
-                    </Text>
-                    <Group gap="xs">
-                      <IconCalendar size={16} color="var(--primary-color)" />
-                      <Text size="sm" c="dimmed">
-                        {new Date(t.date).toLocaleDateString("id-ID", {
-                          dateStyle: "long",
-                        })}
-                      </Text>
-                    </Group>
-                  </div>
-                  <Stack gap="xs" align="flex-end">
-                    <Text fw={700} size="lg" c="green">
-                      {formatCurrency(t.amount)}
-                    </Text>
-                    <Badge color="green" variant="light" radius="xl">
-                      {String(t.status).toLowerCase() === "completed"
-                        ? "Berhasil"
-                        : t.status}
-                    </Badge>
+            {purchasesLoading ? (
+              <Stack gap="md">
+                <Skeleton height={120} radius="md" />
+                <Skeleton height={120} radius="md" />
+                <Skeleton height={120} radius="md" />
+              </Stack>
+            ) : (
+              <>
+                <Group justify="space-between" align="center">
+                  <Text size="sm" c="white">
+                    Halaman {txPage} dari{" "}
+                    {Math.max(1, Math.ceil(txTotal / txLimit))}
+                  </Text>
+                  <Group gap="xs">
                     <Button
                       size="xs"
                       variant="light"
-                      color="blue"
-                      leftSection={<IconPrinter size={14} />}
-                      onClick={() => printThermalReceipt(t)}
+                      disabled={txPage <= 1}
+                      onClick={() => setTxPage((p) => Math.max(1, p - 1))}
                     >
-                      Print Struk
+                      Sebelumnya
                     </Button>
-                  </Stack>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      disabled={
+                        txPage >= Math.max(1, Math.ceil(txTotal / txLimit))
+                      }
+                      onClick={() => setTxPage((p) => p + 1)}
+                    >
+                      Berikutnya
+                    </Button>
+                  </Group>
                 </Group>
-              </Card>
-            ))}
-            {latestPaid.length === 0 && (
-              <Text c="white" ta="center" py="xl">
-                Belum ada riwayat pembelian
-              </Text>
+                {latestPaid.map((t) => (
+                  <Card
+                    key={t.id}
+                    withBorder
+                    radius="md"
+                    p="lg"
+                    className="card-hover"
+                  >
+                    <Group justify="space-between" align="start">
+                      <div style={{ flex: 1 }}>
+                        <Text fw={600} mb={6}>
+                          {t.courseTitle}
+                        </Text>
+                        <Group gap="xs">
+                          <IconCalendar
+                            size={16}
+                            color="var(--primary-color)"
+                          />
+                          <Text size="sm" c="dimmed">
+                            {new Date(t.date).toLocaleDateString("id-ID", {
+                              dateStyle: "long",
+                            })}
+                          </Text>
+                        </Group>
+                      </div>
+                      <Stack gap="xs" align="flex-end">
+                        <Text fw={700} size="lg" c="green">
+                          {formatCurrency(t.amount)}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          Metode: {displayMethod(t.method)}
+                        </Text>
+                        <Badge color="green" variant="light" radius="xl">
+                          {String(t.status).toLowerCase() === "completed"
+                            ? "Berhasil"
+                            : t.status}
+                        </Badge>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="blue"
+                          leftSection={<IconPrinter size={14} />}
+                          onClick={() => printThermalReceipt(t)}
+                        >
+                          Print Struk
+                        </Button>
+                      </Stack>
+                    </Group>
+                  </Card>
+                ))}
+                {latestPaid.length === 0 && (
+                  <Text c="white" ta="center" py="xl">
+                    Belum ada riwayat pembelian
+                  </Text>
+                )}
+              </>
             )}
           </Stack>
         )}
@@ -1063,163 +1183,189 @@ export default function UserProfilePage() {
             <Title order={3} c="var(--primary-color)">
               Sertifikat Kursus
             </Title>
-            <Grid gutter="lg">
-              {certificates.map((cert) => (
-                <Grid.Col key={cert.id} span={{ base: 12, md: 6 }}>
-                  <Card withBorder radius="xl" p="lg" className="card-hover">
-                    <Stack gap="md">
-                      <Group justify="space-between">
-                        <div>
-                          <Title order={4} c="var(--primary-color)">
-                            {cert.courseTitle}
-                          </Title>
-                          <Group gap="xs" mt={6}>
-                            <IconCalendar size={16} />
-                            <Text size="sm" c="dimmed">
-                              {formatDate(cert.date)}
-                            </Text>
-                          </Group>
-                        </div>
-                        <IconAward size={32} color="var(--secondary-color)" />
-                      </Group>
-
-                      <div
-                        style={{
-                          position: "relative",
-                          width: "100%",
-                          height: 200,
-                          borderRadius: 12,
-                          overflow: "hidden",
-                          cursor: "pointer",
-                          border: "2px solid var(--border-color)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: "var(--accent-color)",
-                        }}
-                        onClick={() => {
-                          setModalImg(cert.url);
-                          setModalOpen(true);
-                        }}
-                        onMouseEnter={() => setHoveredCert(cert.id)}
-                        onMouseLeave={() => setHoveredCert(null)}
+            {certificatesLoading ? (
+              <Grid gutter="lg">
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                  <Skeleton height={400} radius="xl" />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, md: 6 }}>
+                  <Skeleton height={400} radius="xl" />
+                </Grid.Col>
+              </Grid>
+            ) : (
+              <>
+                <Grid gutter="lg">
+                  {certificates.map((cert) => (
+                    <Grid.Col key={cert.id} span={{ base: 12, md: 6 }}>
+                      <Card
+                        withBorder
+                        radius="xl"
+                        p="lg"
+                        className="card-hover"
                       >
-                        {cert.url && cert.url.endsWith(".pdf") ? (
-                          <CertificateThumbnail
-                            url={cert.url}
-                            className="pdf-thumb"
-                          />
-                        ) : (
-                          <NextImage
-                            src={cert.url || "/certificate_template.png"}
-                            alt="Sertifikat"
-                            fill
-                            style={{
-                              objectFit: "cover",
-                              filter:
-                                hoveredCert === cert.id
-                                  ? "brightness(0.85)"
-                                  : "none",
-                              transition: "filter 0.3s ease",
-                            }}
-                          />
-                        )}
+                        <Stack gap="md">
+                          <Group justify="space-between">
+                            <div>
+                              <Title order={4} c="var(--primary-color)">
+                                {cert.courseTitle}
+                              </Title>
+                              <Group gap="xs" mt={6}>
+                                <IconCalendar size={16} />
+                                <Text size="sm" c="dimmed">
+                                  {formatDate(cert.date)}
+                                </Text>
+                              </Group>
+                            </div>
+                            <IconAward
+                              size={32}
+                              color="var(--secondary-color)"
+                            />
+                          </Group>
 
-                        {/* Hover overlay sama kayak sebelumnya */}
-                        {hoveredCert === cert.id && (
                           <div
                             style={{
-                              position: "absolute",
-                              inset: 0,
+                              position: "relative",
+                              width: "100%",
+                              height: 200,
+                              borderRadius: 12,
+                              overflow: "hidden",
+                              cursor: "pointer",
+                              border: "2px solid var(--border-color)",
                               display: "flex",
-                              flexDirection: "column",
                               alignItems: "center",
                               justifyContent: "center",
-                              color: "#fff",
-                              background: "rgba(30,55,105,0.9)",
-                              fontWeight: 600,
-                              backdropFilter: "blur(4px)",
-                              zIndex: 2,
+                              background: "var(--accent-color)",
                             }}
+                            onClick={() => {
+                              setModalImg(cert.url);
+                              setModalOpen(true);
+                            }}
+                            onMouseEnter={() => setHoveredCert(cert.id)}
+                            onMouseLeave={() => setHoveredCert(null)}
                           >
-                            <IconEye size={32} style={{ marginBottom: 8 }} />
-                            <Text size="md" fw={600}>
-                              Lihat Sertifikat
-                            </Text>
-                            <Text size="xs" opacity={0.8} mt={4}>
-                              Klik untuk membuka di modal
-                            </Text>
-                          </div>
-                        )}
-                      </div>
+                            {cert.url && cert.url.endsWith(".pdf") ? (
+                              <CertificateThumbnail
+                                url={cert.url}
+                                className="pdf-thumb"
+                              />
+                            ) : (
+                              <NextImage
+                                src={cert.url || "/certificate_template.png"}
+                                alt="Sertifikat"
+                                fill
+                                style={{
+                                  objectFit: "cover",
+                                  filter:
+                                    hoveredCert === cert.id
+                                      ? "brightness(0.85)"
+                                      : "none",
+                                  transition: "filter 0.3s ease",
+                                }}
+                              />
+                            )}
 
-                      <Group gap="xs">
-                        <Button
-                          variant="light"
-                          radius="xl"
-                          onClick={() => {
-                            setModalImg(cert.url);
-                            setModalOpen(true);
-                          }}
-                          flex={1}
-                        >
-                          Lihat Sertifikat
-                        </Button>
-                        {cert.url && (
-                          <Button
-                            variant="filled"
-                            bg="var(--primary-color)"
-                            radius="xl"
-                            onClick={async () => {
-                              if (!cert.url) return;
-                              try {
-                                const res = await fetch(cert.url, {
-                                  cache: "no-store",
-                                });
-                                if (!res.ok)
-                                  throw new Error("Gagal mengunduh sertifikat");
-                                const blob = await res.blob();
-                                const objectUrl = URL.createObjectURL(blob);
-                                const link = document.createElement("a");
-                                const ext =
-                                  blob.type === "application/pdf"
-                                    ? "pdf"
-                                    : blob.type.split("/")[1] || "pdf";
-                                link.href = objectUrl;
-                                link.download = `sertifikat-${cert.courseTitle
-                                  .replace(/\s+/g, "-")
-                                  .toLowerCase()}.${ext}`;
-                                document.body.appendChild(link);
-                                link.click();
-                                link.remove();
-                                URL.revokeObjectURL(objectUrl);
-                              } catch (e) {
-                                console.error(e);
-                              }
-                            }}
-                            flex={1}
-                          >
-                            Download
-                          </Button>
-                        )}
-                      </Group>
-                    </Stack>
+                            {/* Hover overlay sama kayak sebelumnya */}
+                            {hoveredCert === cert.id && (
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  inset: 0,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "#fff",
+                                  background: "rgba(30,55,105,0.9)",
+                                  fontWeight: 600,
+                                  backdropFilter: "blur(4px)",
+                                  zIndex: 2,
+                                }}
+                              >
+                                <IconEye
+                                  size={32}
+                                  style={{ marginBottom: 8 }}
+                                />
+                                <Text size="md" fw={600}>
+                                  Lihat Sertifikat
+                                </Text>
+                                <Text size="xs" opacity={0.8} mt={4}>
+                                  Klik untuk membuka di modal
+                                </Text>
+                              </div>
+                            )}
+                          </div>
+
+                          <Group gap="xs">
+                            <Button
+                              variant="light"
+                              radius="xl"
+                              onClick={() => {
+                                setModalImg(cert.url);
+                                setModalOpen(true);
+                              }}
+                              flex={1}
+                            >
+                              Lihat Sertifikat
+                            </Button>
+                            {cert.url && (
+                              <Button
+                                variant="filled"
+                                bg="var(--primary-color)"
+                                radius="xl"
+                                onClick={async () => {
+                                  if (!cert.url) return;
+                                  try {
+                                    const res = await fetch(cert.url, {
+                                      cache: "no-store",
+                                    });
+                                    if (!res.ok)
+                                      throw new Error(
+                                        "Gagal mengunduh sertifikat"
+                                      );
+                                    const blob = await res.blob();
+                                    const objectUrl = URL.createObjectURL(blob);
+                                    const link = document.createElement("a");
+                                    const ext =
+                                      blob.type === "application/pdf"
+                                        ? "pdf"
+                                        : blob.type.split("/")[1] || "pdf";
+                                    link.href = objectUrl;
+                                    link.download = `sertifikat-${cert.courseTitle
+                                      .replace(/\s+/g, "-")
+                                      .toLowerCase()}.${ext}`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    link.remove();
+                                    URL.revokeObjectURL(objectUrl);
+                                  } catch (e) {
+                                    console.error(e);
+                                  }
+                                }}
+                                flex={1}
+                              >
+                                Download
+                              </Button>
+                            )}
+                          </Group>
+                        </Stack>
+                      </Card>
+                    </Grid.Col>
+                  ))}
+                </Grid>
+                {certificates.length === 0 && (
+                  <Card
+                    withBorder
+                    radius="xl"
+                    p="xl"
+                    style={{ textAlign: "center", background: "#f8fafc" }}
+                  >
+                    <IconCertificate size={48} color="var(--primary-color)" />
+                    <Text c="dimmed" mt={10}>
+                      Belum ada sertifikat yang diperoleh
+                    </Text>
                   </Card>
-                </Grid.Col>
-              ))}
-            </Grid>
-            {certificates.length === 0 && (
-              <Card
-                withBorder
-                radius="xl"
-                p="xl"
-                style={{ textAlign: "center", background: "#f8fafc" }}
-              >
-                <IconCertificate size={48} color="var(--primary-color)" />
-                <Text c="dimmed" mt={10}>
-                  Belum ada sertifikat yang diperoleh
-                </Text>
-              </Card>
+                )}
+              </>
             )}
           </Stack>
         )}
@@ -1291,9 +1437,12 @@ export default function UserProfilePage() {
 
             {/* Content */}
             {scratchProjectsLoading ? (
-              <Group justify="center" mt="xl">
-                <Loader />
-              </Group>
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
+                <Skeleton height={280} radius="md" />
+                <Skeleton height={280} radius="md" />
+                <Skeleton height={280} radius="md" />
+                <Skeleton height={280} radius="md" />
+              </SimpleGrid>
             ) : !user?.username ? (
               <Card withBorder p="md">
                 <Text>
@@ -1577,6 +1726,7 @@ function Leaderboard() {
         const json = await res.json();
         if (!res.ok || !json.success)
           throw new Error(json.error || "Gagal memuat leaderboard");
+
         setItems(json.items || []);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Gagal memuat leaderboard");
@@ -1587,8 +1737,33 @@ function Leaderboard() {
     run();
   }, [showAll]);
 
-  if (loading) return <Text c="white">Memuat leaderboard…</Text>;
-  if (error) return <Text c="red">{error}</Text>;
+  if (loading) {
+    return (
+      <Card withBorder radius="lg" p="lg">
+        <Stack gap="md">
+          <Title order={3} c="var(--primary-color)">
+            Leaderboard Siswa
+          </Title>
+          <Text size="sm" c="dimmed">
+            Urutan berdasarkan rata-rata tiga kategori
+          </Text>
+          <Stack gap="sm">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} height={80} radius="md" />
+            ))}
+          </Stack>
+        </Stack>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card withBorder radius="lg" p="lg">
+        <Text c="red">{error}</Text>
+      </Card>
+    );
+  }
 
   // Podium style for top 3
   const top3 = items.slice(0, 3);
@@ -1860,137 +2035,408 @@ const ACHIEVEMENTS_CONFIG = [
   {
     key: "first_step",
     name: "Langkah Pertama",
-    desc: "Selesaikan kursus pertama",
-    coins: 10,
+    desc: "Badge awal: terbuka otomatis saat kamu mulai mengumpulkan koin.",
+    coins: 0,
     image: "1.png",
-    category: "course",
+    category: "coin",
   },
   {
     key: "knowledge_seeker",
     name: "Pencari Ilmu",
-    desc: "Selesaikan 3 kursus",
-    coins: 25,
+    desc: "Capai 1.000 koin untuk membuka pencapaian ini.",
+    coins: 1000,
     image: "2.png",
-    category: "course",
+    category: "coin",
   },
   {
     key: "dedicated_learner",
     name: "Pembelajar Tekun",
-    desc: "Selesaikan 5 kursus",
-    coins: 50,
+    desc: "Capai 3.000 koin untuk membuka pencapaian ini.",
+    coins: 3000,
     image: "3.png",
-    category: "course",
+    category: "coin",
   },
   {
     key: "quiz_master",
-    name: "Master Kuis",
-    desc: "Selesaikan 10 kuis dengan skor >80%",
-    coins: 30,
+    name: "Penjelajah Materi",
+    desc: "Capai 5.000 koin untuk membuka pencapaian ini.",
+    coins: 5000,
     image: "4.png",
-    category: "quiz",
+    category: "coin",
   },
   {
     key: "perfect_score",
-    name: "Nilai Sempurna",
-    desc: "Dapatkan skor 100% di kuis pertama kali",
-    coins: 50,
+    name: "Pencetak Prestasi",
+    desc: "Capai 7.000 koin untuk membuka pencapaian ini.",
+    coins: 7000,
     image: "5.png",
-    category: "quiz",
+    category: "coin",
   },
   {
     key: "assignment_pro",
-    name: "Pro Tugas",
-    desc: "Kumpulkan 5 tugas",
-    coins: 40,
+    name: "Pengumpul Aktif",
+    desc: "Capai 9.000 koin untuk membuka pencapaian ini.",
+    coins: 9000,
     image: "6.png",
-    category: "assignment",
+    category: "coin",
   },
   {
     key: "discussion_star",
-    name: "Bintang Diskusi",
-    desc: "Buat 10 postingan diskusi",
-    coins: 20,
+    name: "Penggiat Diskusi",
+    desc: "Capai 12.000 koin untuk membuka pencapaian ini.",
+    coins: 12000,
     image: "7.png",
-    category: "discussion",
+    category: "coin",
   },
   {
     key: "helper",
-    name: "Penolong",
-    desc: "Beri 20 komentar di diskusi",
-    coins: 30,
+    name: "Pelatih Mandiri",
+    desc: "Capai 15.000 koin untuk membuka pencapaian ini.",
+    coins: 15000,
     image: "8.png",
-    category: "discussion",
+    category: "coin",
   },
   {
     key: "early_bird",
-    name: "Rajin Login",
-    desc: "Login 5 hari berturut-turut",
-    coins: 15,
+    name: "Kolektor Berdedikasi",
+    desc: "Capai 20.000 koin untuk membuka pencapaian ini.",
+    coins: 20000,
     image: "9.png",
-    category: "activity",
+    category: "coin",
   },
   {
     key: "consistent",
-    name: "Konsisten",
-    desc: "Login 15 hari berturut-turut",
-    coins: 40,
+    name: "Pejuang Koin",
+    desc: "Capai 25.000 koin untuk membuka pencapaian ini.",
+    coins: 25000,
     image: "10.png",
-    category: "activity",
+    category: "coin",
   },
   {
     key: "code_creator",
-    name: "Pembuat Kode",
-    desc: "Buat 5 proyek Scratch/Blockly",
-    coins: 35,
+    name: "Penguasa Kelas",
+    desc: "Capai 30.000 koin untuk membuka pencapaian ini.",
+    coins: 30000,
     image: "11.png",
-    category: "project",
+    category: "coin",
   },
   {
     key: "rating_giver",
-    name: "Pemberi Rating",
-    desc: "Beri rating pada 5 kursus",
-    coins: 10,
+    name: "Mentor Afterschola",
+    desc: "Capai 35.000 koin untuk membuka pencapaian ini.",
+    coins: 35000,
     image: "12.png",
-    category: "rating",
+    category: "coin",
   },
   {
     key: "marathon",
-    name: "Marathon",
-    desc: "Selesaikan 10 kursus",
-    coins: 100,
+    name: "Inspirator Kelas",
+    desc: "Capai 40.000 koin untuk membuka pencapaian ini.",
+    coins: 40000,
     image: "13.png",
-    category: "course",
+    category: "coin",
   },
   {
     key: "explorer_tier",
-    name: "Tier Explorer",
-    desc: "Capai tier Explorer",
-    coins: 150,
+    name: "Maestro Ilmu",
+    desc: "Capai 50.000 koin untuk membuka pencapaian ini.",
+    coins: 50000,
     image: "14.png",
-    category: "tier",
+    category: "coin",
   },
   {
     key: "master_tier",
-    name: "Tier Master",
-    desc: "Capai tier Master",
-    coins: 500,
+    name: "Legenda Afterschola",
+    desc: "Capai 60.000 koin untuk membuka pencapaian ini.",
+    coins: 60000,
     image: "15.png",
-    category: "tier",
+    category: "coin",
   },
 ];
 
+const COIN_BADGES = [
+  {
+    key: "coin_0",
+    name: "Langkah Pertama",
+    desc: "Badge awal: terbuka otomatis saat kamu punya 0 koin.",
+    threshold: 0,
+    image: "/coins/1.png",
+    highlight: "#f97316",
+  },
+  {
+    key: "coin_1000",
+    name: "Pencari Ilmu",
+    desc: "Capai 1.000 koin untuk membuka badge ini.",
+    threshold: 1000,
+    image: "/coins/2.png",
+    highlight: "#6b7280",
+  },
+  {
+    key: "coin_5000",
+    name: "Pembelajar Gigih",
+    desc: "Capai 5.000 koin untuk membuka badge ini.",
+    threshold: 5000,
+    image: "/coins/3.png",
+    highlight: "#facc15",
+  },
+  {
+    key: "coin_15000",
+    name: "Kolektor Berdedikasi",
+    desc: "Capai 15.000 koin untuk membuka badge ini.",
+    threshold: 15000,
+    image: "/coins/4.png",
+    highlight: "#38bdf8",
+  },
+  {
+    key: "coin_30000",
+    name: "Master Pembelajar",
+    desc: "Capai 30.000 koin untuk membuka badge ini.",
+    threshold: 30000,
+    image: "/coins/5.png",
+    highlight: "#8b5cf6",
+  },
+  {
+    key: "coin_60000",
+    name: "Legenda Afterschola",
+    desc: "Capai 60.000 koin untuk membuka badge tertinggi ini.",
+    threshold: 60000,
+    image: "/coins/6.png",
+    highlight: "#ef4444",
+  },
+] as const;
+
+function CoinBadgeGrid({ coins }: { coins: number }) {
+  const [selectedBadge, setSelectedBadge] = useState<
+    (typeof COIN_BADGES)[number] | null
+  >(null);
+
+  const unlocked = COIN_BADGES.filter((badge) => coins >= badge.threshold);
+  const maxThreshold = COIN_BADGES[COIN_BADGES.length - 1].threshold;
+  const progressPercent = Math.min(
+    100,
+    Math.round((coins / maxThreshold) * 100)
+  );
+
+  const handleActivateBadge =
+    (badge: (typeof COIN_BADGES)[number]) =>
+    (event: ReactKeyboardEvent | ReactMouseEvent) => {
+      if (
+        "key" in event &&
+        event.key !== "Enter" &&
+        event.key !== " " &&
+        event.key !== "Spacebar"
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setSelectedBadge(badge);
+    };
+
+  return (
+    <>
+      <Modal
+        opened={Boolean(selectedBadge)}
+        onClose={() => setSelectedBadge(null)}
+        title={
+          <Text fw={700} size="lg" style={{ color: "var(--primary-color)" }}>
+            {selectedBadge?.name}
+          </Text>
+        }
+        centered
+        size="md"
+        styles={{
+          header: {
+            borderBottom: "2px solid var(--secondary-color)",
+            paddingBottom: 12,
+          },
+        }}
+      >
+        {selectedBadge && (
+          <Stack gap="lg">
+            <Group gap="lg" align="center" wrap="nowrap">
+              <div
+                style={{
+                  position: "relative",
+                  width: 120,
+                  height: 120,
+                  borderRadius: 16,
+                  background:
+                    coins >= selectedBadge.threshold
+                      ? "var(--primary-color)"
+                      : "#e5e7eb",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 8px 16px rgba(0,0,0,0.1)",
+                  transition: "all 0.3s ease",
+                }}
+              >
+                <NextImage
+                  src={selectedBadge.image}
+                  alt={selectedBadge.name}
+                  width={96}
+                  height={96}
+                  style={{
+                    filter:
+                      coins >= selectedBadge.threshold
+                        ? "none"
+                        : "grayscale(100%) opacity(0.5)",
+                  }}
+                />
+                {coins < selectedBadge.threshold && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: "rgba(0,0,0,0.2)",
+                      borderRadius: 16,
+                    }}
+                  >
+                    <IconLock size={32} color="#fff" />
+                  </div>
+                )}
+              </div>
+              <Stack gap={4} style={{ flex: 1 }}>
+                <Text
+                  fw={700}
+                  size="lg"
+                  style={{ color: "var(--primary-color)" }}
+                >
+                  {selectedBadge.name}
+                </Text>
+                <Text size="sm" c="dimmed" style={{ lineHeight: 1.5 }}>
+                  {selectedBadge.desc}
+                </Text>
+                <Badge
+                  size="lg"
+                  style={{
+                    background: "var(--secondary-color)",
+                    color: "#fff",
+                    marginTop: 4,
+                  }}
+                >
+                  Target: {selectedBadge.threshold.toLocaleString("id-ID")} koin
+                </Badge>
+              </Stack>
+            </Group>
+
+            <div
+              style={{
+                background: "#f9fafb",
+                padding: 16,
+                borderRadius: 12,
+                border: "1px solid #e5e7eb",
+              }}
+            >
+              <Group
+                justify="space-between"
+                mb={selectedBadge.threshold > 0 ? 8 : 0}
+              >
+                <Text size="sm" fw={600} c="dark">
+                  Progres Saat Ini
+                </Text>
+                {selectedBadge.threshold > 0 ? (
+                  <Text
+                    size="sm"
+                    fw={700}
+                    style={{ color: "var(--primary-color)" }}
+                  >
+                    {Math.min(coins, selectedBadge.threshold).toLocaleString(
+                      "id-ID"
+                    )}
+                    {" / "}
+                    {selectedBadge.threshold.toLocaleString("id-ID")}
+                  </Text>
+                ) : (
+                  <Text size="sm" fw={600} c="var(--primary-color)">
+                    Terbuka otomatis
+                  </Text>
+                )}
+              </Group>
+              {selectedBadge.threshold > 0 && (
+                <Progress
+                  value={Math.min(100, (coins / selectedBadge.threshold) * 100)}
+                  radius="xl"
+                  size="lg"
+                  styles={{
+                    root: {
+                      background: "#e5e7eb",
+                    },
+                    section: {
+                      background: "var(--primary-color)",
+                    },
+                  }}
+                />
+              )}
+            </div>
+
+            {coins >= selectedBadge.threshold ? (
+              <Group
+                gap="xs"
+                style={{
+                  background: "#d1fae5",
+                  padding: 12,
+                  borderRadius: 8,
+                  border: "2px solid #10b981",
+                }}
+              >
+                <IconTrophy size={24} color="#10b981" />
+                <Text fw={600} c="#059669">
+                  Selamat! Badge ini sudah kamu buka.
+                </Text>
+              </Group>
+            ) : (
+              <Group
+                gap="xs"
+                style={{
+                  background: "#fef3c7",
+                  padding: 12,
+                  borderRadius: 8,
+                  border: "2px solid #f59e0b",
+                }}
+              >
+                <IconInfoCircle size={24} color="#f59e0b" />
+                <Text fw={500} c="#d97706">
+                  Kumpulkan{" "}
+                  {(selectedBadge.threshold - coins).toLocaleString("id-ID")}{" "}
+                  koin lagi untuk membuka badge ini!
+                </Text>
+              </Group>
+            )}
+          </Stack>
+        )}
+      </Modal>
+
+      <style jsx>{`
+        .coin-badge-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18);
+        }
+
+        .coin-badge-card:focus {
+          outline: 3px solid var(--secondary-color);
+          outline-offset: 4px;
+        }
+      `}</style>
+    </>
+  );
+}
+
 function AchievementsGrid({
   achievements,
-  loading,
   stats,
+  coins,
 }: {
   achievements: {
     achievement_key: string;
     coins_earned: number;
     earned_at: string;
   }[];
-  loading: boolean;
   stats: { xp: number; points: number; coursesCompleted: number };
+  coins: number;
 }) {
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 5;
@@ -2005,6 +2451,8 @@ function AchievementsGrid({
 
   const getCategoryColor = (category: string) => {
     switch (category) {
+      case "coin":
+        return "var(--secondary-color)"; // gold/yellow for coin badges
       case "course":
         return "#3b82f6"; // blue
       case "quiz":
@@ -2025,14 +2473,6 @@ function AchievementsGrid({
         return "#6b7280"; // gray
     }
   };
-
-  if (loading) {
-    return (
-      <Group justify="center" py="xl">
-        <Loader size="lg" />
-      </Group>
-    );
-  }
 
   return (
     <div style={{ position: "relative" }}>
@@ -2094,7 +2534,11 @@ function AchievementsGrid({
         {/* Top Row - 3 items */}
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg" mb="lg">
           {currentItems.slice(0, 3).map((config) => {
-            const isUnlocked = earnedKeys.has(config.key);
+            // For coin-based achievements, unlock based on coins threshold
+            const isUnlocked =
+              config.category === "coin"
+                ? coins >= config.coins
+                : earnedKeys.has(config.key);
             const earned = achievements.find(
               (a) => a.achievement_key === config.key
             );
@@ -2243,18 +2687,11 @@ function AchievementsGrid({
                       {config.desc}
                     </Text>
 
-                    {isUnlocked && earned ? (
+                    {isUnlocked ? (
                       <Group gap={4}>
                         <IconCalendar size={14} color="#64748b" />
-                        <Text size="xs" c="dimmed">
-                          {new Date(earned.earned_at).toLocaleDateString(
-                            "id-ID",
-                            {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            }
-                          )}
+                        <Text size="xs" c="green" fw={600}>
+                          Terbuka
                         </Text>
                       </Group>
                     ) : (
@@ -2301,7 +2738,11 @@ function AchievementsGrid({
             }}
           >
             {currentItems.slice(3, 5).map((config) => {
-              const isUnlocked = earnedKeys.has(config.key);
+              // For coin-based achievements, unlock based on coins threshold
+              const isUnlocked =
+                config.category === "coin"
+                  ? coins >= config.coins
+                  : earnedKeys.has(config.key);
               const earned = achievements.find(
                 (a) => a.achievement_key === config.key
               );
@@ -2450,18 +2891,11 @@ function AchievementsGrid({
                         {config.desc}
                       </Text>
 
-                      {isUnlocked && earned ? (
+                      {isUnlocked ? (
                         <Group gap={4}>
                           <IconCalendar size={14} color="#64748b" />
-                          <Text size="xs" c="dimmed">
-                            {new Date(earned.earned_at).toLocaleDateString(
-                              "id-ID",
-                              {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              }
-                            )}
+                          <Text size="xs" c="green" fw={600}>
+                            Terbuka
                           </Text>
                         </Group>
                       ) : (
@@ -2532,7 +2966,7 @@ function AchievementsGrid({
 function TierCarouselCard({
   stats,
 }: {
-  stats: { xp: number; points: number; coursesCompleted: number };
+  stats: { coins: number; points: number; coursesCompleted: number };
 }) {
   const tiers = useMemo(
     () => [
@@ -2541,7 +2975,7 @@ function TierCarouselCard({
         title: "Newbie",
         desc: "Pemula yang semangat",
         img: "/rewards/newbie.png",
-        thresholds: { xp: 1000, points: 5000, courses: 4 },
+        thresholds: { coins: 1000, points: 5000, courses: 4 },
         color: "#1e3a8a", // Biru tua
         gradient: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
       },
@@ -2550,7 +2984,7 @@ function TierCarouselCard({
         title: "Explorer",
         desc: "Penjelajah yang penasaran",
         img: "/rewards/explorer.png",
-        thresholds: { xp: 10000, points: 20000, courses: 8 },
+        thresholds: { coins: 10000, points: 20000, courses: 8 },
         color: "#059669", // Hijau Emerald
         gradient: "linear-gradient(135deg, #059669 0%, #fbbf24 100%)", // Emerald to Gold
       },
@@ -2559,7 +2993,7 @@ function TierCarouselCard({
         title: "Scientist",
         desc: "Peneliti yang teliti",
         img: "/rewards/scientist.png",
-        thresholds: { xp: 20000, points: 40000, courses: 12 },
+        thresholds: { coins: 20000, points: 40000, courses: 12 },
         color: "#3b82f6", // Biru instead of white
         gradient: "linear-gradient(135deg, #f8fafc 0%, #3b82f6 100%)", // White to Blue
       },
@@ -2568,7 +3002,7 @@ function TierCarouselCard({
         title: "Creative",
         desc: "Kreator yang inovatif",
         img: "/rewards/creative.png",
-        thresholds: { xp: 30000, points: 60000, courses: 20 },
+        thresholds: { coins: 30000, points: 60000, courses: 20 },
         color: "#f97316", // Oranye
         gradient: "linear-gradient(135deg, #f97316 0%, #fbbf24 100%)", // Orange to Gold
       },
@@ -2577,7 +3011,7 @@ function TierCarouselCard({
         title: "Futuristic",
         desc: "Visionaris masa depan",
         img: "/rewards/futuristic.png",
-        thresholds: { xp: 40000, points: 80000, courses: 32 },
+        thresholds: { coins: 40000, points: 80000, courses: 32 },
         color: "#94a3b8", // Silver
         gradient: "linear-gradient(135deg, #94a3b8 0%, #06b6d4 100%)", // Silver to Neon Blue
       },
@@ -2586,7 +3020,7 @@ function TierCarouselCard({
         title: "Hero",
         desc: "Pahlawan sejati",
         img: "/rewards/hero.png",
-        thresholds: { xp: 50000, points: 100000, courses: 40 },
+        thresholds: { coins: 50000, points: 100000, courses: 40 },
         color: "#dc2626", // Merah
         gradient: "linear-gradient(135deg, #dc2626 0%, #ffffff 100%)", // Red to White
       },
@@ -2595,7 +3029,7 @@ function TierCarouselCard({
         title: "Master",
         desc: "Master yang sempurna",
         img: "/rewards/master.png",
-        thresholds: { xp: 60000, points: 120000, courses: 50 },
+        thresholds: { coins: 60000, points: 120000, courses: 50 },
         color: "#7c3aed", // Ungu
         gradient: "linear-gradient(135deg, #7c3aed 0%, #fbbf24 100%)", // Purple to Gold
       },
@@ -2614,12 +3048,12 @@ function TierCarouselCard({
 
       const previousTier = tiers[tierIndex - 1];
       return (
-        stats.xp >= previousTier.thresholds.xp &&
+        stats.coins >= previousTier.thresholds.coins &&
         stats.points >= previousTier.thresholds.points &&
         stats.coursesCompleted >= previousTier.thresholds.courses
       );
     },
-    [stats.xp, stats.points, stats.coursesCompleted, tiers]
+    [stats.coins, stats.points, stats.coursesCompleted, tiers]
   );
 
   // Find current tier (highest unlocked tier)
@@ -2764,8 +3198,8 @@ function TierCarouselCard({
                   Total Koin
                 </Text>
                 <Text size="sm" c="rgba(255,255,255,0.8)">
-                  {stats.xp.toLocaleString("id-ID")} /{" "}
-                  {t.thresholds.xp.toLocaleString("id-ID")}
+                  {stats.coins.toLocaleString("id-ID")} /{" "}
+                  {t.thresholds.coins.toLocaleString("id-ID")}
                 </Text>
               </Group>
               <div
@@ -2780,7 +3214,7 @@ function TierCarouselCard({
                   style={{
                     width: `${Math.min(
                       100,
-                      (stats.xp / t.thresholds.xp) * 100
+                      (stats.coins / t.thresholds.coins) * 100
                     )}%`,
                     height: "100%",
                     background: "rgba(255,255,255,0.9)",

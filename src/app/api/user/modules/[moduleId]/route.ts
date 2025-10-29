@@ -16,10 +16,10 @@ export async function GET(
       { status: 400 }
     );
 
-  // Base module
+  // Base module (with coins and points)
   const { data: mod, error: modErr } = await supabaseAdmin
     .from("modules")
-    .select("id, course_id, title, description, module_kind")
+    .select("id, course_id, title, description, module_kind, coins, points")
     .eq("id", moduleId)
     .maybeSingle();
   if (modErr || !mod)
@@ -290,6 +290,8 @@ export async function GET(
       title: mod.title,
       description: mod.description,
       kind: mod.module_kind,
+      coins: mod.coins || 0,
+      points: mod.points || 0,
       content: content
         ? {
             type: content.content_type,
@@ -380,6 +382,40 @@ export async function POST(
     return progressPct;
   };
 
+  // Helper to award coins & points to student
+  const awardRewards = async (coins: number, points: number) => {
+    if (coins === 0 && points === 0) return;
+
+    try {
+      const { data: student } = await supabaseAdmin
+        .from("students")
+        .select("coins, points")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const currentCoins = student?.coins || 0;
+      const currentPoints = student?.points || 0;
+
+      if (student) {
+        await supabaseAdmin
+          .from("students")
+          .update({
+            coins: currentCoins + coins,
+            points: currentPoints + points,
+          })
+          .eq("user_id", userId);
+      } else {
+        await supabaseAdmin.from("students").insert({
+          user_id: userId,
+          coins,
+          points,
+        });
+      }
+    } catch (err) {
+      console.error("Error awarding rewards:", err);
+    }
+  };
+
   // Helper to load / init progress row
   const loadProgress = async () => {
     // First, check user role to determine which table to use
@@ -418,7 +454,7 @@ export async function POST(
     // Determine module kind to guard improper completion
     const { data: baseMod } = await supabaseAdmin
       .from("modules")
-      .select("id, module_kind")
+      .select("id, module_kind, coins, points")
       .eq("id", moduleId)
       .maybeSingle();
     if (baseMod?.module_kind === "quiz") {
@@ -444,12 +480,21 @@ export async function POST(
       );
 
     const completedSet = new Set<string>(completed);
+    const isAlreadyCompleted = completedSet.has(moduleId);
+
     // Add current module to completed set (no prerequisite gating)
     completedSet.add(moduleId);
     const updated = Array.from(completedSet);
 
     // Calculate progress percentage
     const progressPct = await getProgressPercentage(completedSet);
+
+    // Award coins and points ONLY if not already completed and not school user
+    const moduleCoins = baseMod?.coins || 0;
+    const modulePoints = baseMod?.points || 0;
+    if (!isAlreadyCompleted && !isSchool) {
+      await awardRewards(moduleCoins, modulePoints);
+    }
 
     // Check for course completion and award points
     let courseCompleted = false;
@@ -579,6 +624,10 @@ export async function POST(
       pointsAwarded: pointsAwarded > 0 ? pointsAwarded : undefined,
       certificateAvailable: certificateGenerated,
       auto: action === "auto-complete",
+      rewards:
+        !isAlreadyCompleted && !isSchool
+          ? { coins: moduleCoins, points: modulePoints }
+          : undefined,
     });
   }
 
@@ -829,18 +878,37 @@ export async function POST(
     let courseCompleted = false;
     let pointsAwarded = 0;
     let certificateGenerated = false;
+    let moduleCoins = 0;
+    let modulePoints = 0;
 
     if (passed) {
-      const { prog, completed, error } = await loadProgress();
+      // Get module coins and points
+      const { data: moduleMod } = await supabaseAdmin
+        .from("modules")
+        .select("coins, points")
+        .eq("id", moduleId)
+        .maybeSingle();
+
+      moduleCoins = moduleMod?.coins || 0;
+      modulePoints = moduleMod?.points || 0;
+
+      const { prog, completed, error, isSchool } = await loadProgress();
       if (error)
         return NextResponse.json(
           { success: false, error: error.message },
           { status: 500 }
         );
       const set = new Set<string>(completed);
+      const isAlreadyCompleted = set.has(moduleId);
+
       set.add(moduleId);
       updated = Array.from(set);
       progressPct = await getProgressPercentage(set);
+
+      // Award module rewards ONLY if not already completed and not school user
+      if (!isAlreadyCompleted && !isSchool) {
+        await awardRewards(moduleCoins, modulePoints);
+      }
 
       // Check for course completion
       const { data: allMods } = await supabaseAdmin
@@ -958,6 +1026,10 @@ export async function POST(
       courseCompleted,
       pointsAwarded: pointsAwarded > 0 ? pointsAwarded : undefined,
       certificateAvailable: certificateGenerated,
+      rewards:
+        (passed && moduleCoins > 0) || modulePoints > 0
+          ? { coins: moduleCoins, points: modulePoints }
+          : undefined,
     });
   }
 

@@ -183,57 +183,132 @@ export function QuizHistoryModal({
                     active={attempt.enrichedAnswers.length}
                     bulletSize={24}
                   >
-                    {attempt.enrichedAnswers.map((answer, ansIdx) => (
-                      <Timeline.Item
-                        key={answer.questionId}
-                        bullet={
-                          answer.isCorrect ? (
-                            <IconX size={14} />
-                          ) : (
-                            <IconCheck size={14} />
-                          )
-                        }
-                        color={answer.isCorrect ? "red" : "green"}
-                        title={
-                          <Text size="sm" fw={500}>
-                            Soal {ansIdx + 1}
-                          </Text>
-                        }
-                      >
-                        <Stack gap="xs" mt="xs">
-                          <Text size="sm">{answer.questionText}</Text>
+                    {attempt.enrichedAnswers.map((answer, ansIdx) => {
+                      // Parse option to get actual answer text
+                      const getUserAnswerText = (
+                        userAns: string,
+                        opts: string[]
+                      ) => {
+                        // Check if it's True/False
+                        if (userAns === "True" || userAns === "true")
+                          return "Benar";
+                        if (userAns === "False" || userAns === "false")
+                          return "Salah";
 
-                          <Paper withBorder p="xs" bg="blue.0">
-                            <Text size="xs" c="dimmed" mb={4}>
-                              Jawaban Anda:
-                            </Text>
+                        // Check if it's an index
+                        const idx = parseInt(userAns);
+                        if (!isNaN(idx) && opts && opts[idx]) {
+                          return opts[idx];
+                        }
+
+                        return userAns;
+                      };
+
+                      const getCorrectAnswerText = (
+                        correctAns: string,
+                        opts: string[]
+                      ) => {
+                        // Check if it's True/False
+                        if (correctAns === "True" || correctAns === "true")
+                          return "Benar";
+                        if (correctAns === "False" || correctAns === "false")
+                          return "Salah";
+
+                        // Check if it's an index
+                        const idx = parseInt(correctAns);
+                        if (!isNaN(idx) && opts && opts[idx]) {
+                          return opts[idx];
+                        }
+
+                        return correctAns;
+                      };
+
+                      const userAnswerDisplay = getUserAnswerText(
+                        answer.userAnswer,
+                        answer.options
+                      );
+                      const correctAnswerDisplay = getCorrectAnswerText(
+                        answer.correctAnswer,
+                        answer.options
+                      );
+
+                      return (
+                        <Timeline.Item
+                          key={answer.questionId}
+                          bullet={
+                            answer.isCorrect ? (
+                              <IconCheck size={14} />
+                            ) : (
+                              <IconX size={14} />
+                            )
+                          }
+                          color={answer.isCorrect ? "green" : "red"}
+                          title={
                             <Text size="sm" fw={500}>
-                              {answer.userAnswer || "(Tidak dijawab)"}
+                              Soal {ansIdx + 1}
                             </Text>
-                          </Paper>
+                          }
+                        >
+                          <Stack gap="xs" mt="xs">
+                            <Text size="sm">{answer.questionText}</Text>
 
-                          {!answer.isCorrect && (
-                            <Paper withBorder p="xs" bg="green.0">
+                            {/* Jawaban User - Hijau jika benar, Merah jika salah */}
+                            <Paper
+                              withBorder
+                              p="xs"
+                              style={{
+                                background: answer.isCorrect
+                                  ? "#d1fae5"
+                                  : "#fee2e2",
+                                borderColor: answer.isCorrect
+                                  ? "#10b981"
+                                  : "#ef4444",
+                              }}
+                            >
                               <Text size="xs" c="dimmed" mb={4}>
-                                Jawaban Benar:
+                                Jawaban Anda:
                               </Text>
-                              <Text size="sm" fw={500} c="green.8">
-                                {answer.correctAnswer}
+                              <Text
+                                size="sm"
+                                fw={500}
+                                c={answer.isCorrect ? "#10b981" : "#ef4444"}
+                              >
+                                {userAnswerDisplay || "(Tidak dijawab)"}
                               </Text>
                             </Paper>
-                          )}
 
-                          {answer.explanation && (
-                            <Paper withBorder p="xs" bg="gray.0">
-                              <Text size="xs" c="dimmed" mb={4}>
-                                Penjelasan:
-                              </Text>
-                              <Text size="sm">{answer.explanation}</Text>
-                            </Paper>
-                          )}
-                        </Stack>
-                      </Timeline.Item>
-                    ))}
+                            {/* Jawaban Benar - Hanya muncul jika salah */}
+                            {!answer.isCorrect && (
+                              <Paper
+                                withBorder
+                                p="xs"
+                                style={{
+                                  background: "#d1fae5",
+                                  borderColor: "#10b981",
+                                }}
+                              >
+                                <Text size="xs" c="dimmed" mb={4}>
+                                  Jawaban Benar:
+                                </Text>
+                                <Text size="sm" fw={500} c="#10b981">
+                                  {correctAnswerDisplay}
+                                </Text>
+                              </Paper>
+                            )}
+
+                            {/* Penjelasan */}
+                            {answer.explanation && (
+                              <Paper withBorder p="xs" bg="gray.0">
+                                <Text size="xs" c="dimmed" mb={4}>
+                                  Penjelasan:
+                                </Text>
+                                <Text size="sm">{answer.explanation}</Text>
+                              </Paper>
+                            )}
+                          </Stack>
+                        </Timeline.Item>
+                      );
+                    })}
                   </Timeline>
                 </Stack>
               </Accordion.Panel>

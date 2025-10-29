@@ -27,26 +27,17 @@ export default function ForgotPasswordPage() {
     setSent(false);
     setLoading(true);
     try {
-      // Check email exists using a tiny API (protects disclosure via same response wording)
-      const res = await fetch("/api/auth/check-email", {
+      // Use custom forgot-password API with branded email
+      const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
       const json = await res.json();
-      if (!res.ok || !json.exists) {
-        setError(
-          "Email belum terdaftar. Silakan cek kembali atau daftar akun baru."
-        );
+      if (!res.ok || !json.success) {
+        setError(json.error || "Gagal mengirim email reset");
         return;
       }
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/reset-password`
-            : undefined,
-      });
-      if (error) throw error;
       setSent(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal mengirim email reset");

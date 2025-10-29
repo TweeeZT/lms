@@ -22,6 +22,7 @@ import {
   Avatar,
   Rating,
   Textarea,
+  Skeleton,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -92,7 +93,7 @@ const MODULE_LABELS = {
   quiz: "Quiz",
   tugas: "Tugas",
   live: "Live Session",
-  overview: "Overview",
+  overview: "Pengantar",
 };
 
 export default function CourseOverviewPage() {
@@ -270,58 +271,65 @@ export default function CourseOverviewPage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(255,255,255,0.98)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9999,
-        }}
-      >
-        <div style={{ display: "flex", gap: 24 }}>
-          {[0, 1, 2].map((i) => (
-            <svg
-              key={i}
-              width="64"
-              height="64"
-              viewBox="0 0 64 64"
-              style={{
-                animation: "spinDiamond 1.2s linear infinite",
-                animationDelay: `${i * 0.2}s`,
-              }}
-            >
-              <rect
-                x="12"
-                y="12"
-                width="40"
-                height="40"
-                fill="none"
-                stroke="url(#grad)"
-                strokeWidth="8"
-                rx="4"
-                ry="4"
-                transform="rotate(45 32 32)"
-              />
-              <defs>
-                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#f6d457" />
-                  <stop offset="100%" stopColor="#1e3769" />
-                </linearGradient>
-              </defs>
-            </svg>
-          ))}
-        </div>
-        <style>{`
-          @keyframes spinDiamond {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
+      <Container size="xl" py="xl">
+        <Stack gap="xl">
+          {/* Back Button Skeleton */}
+          <Skeleton height={40} width={150} />
+
+          {/* Course Header Skeleton */}
+          <Card padding="xl" radius="lg">
+            <Group align="flex-start" gap="xl">
+              <Skeleton height={200} width={300} radius="md" />
+              <Stack flex={1} gap="md">
+                <Group gap="sm">
+                  <Skeleton height={24} width={100} />
+                  <Skeleton height={24} width={80} />
+                </Group>
+                <Skeleton height={36} width="80%" />
+                <Skeleton height={16} width="100%" />
+                <Skeleton height={16} width="90%" />
+                <Group gap="lg">
+                  <Skeleton height={20} width={120} />
+                  <Skeleton height={20} width={100} />
+                  <Skeleton height={20} width={80} />
+                </Group>
+              </Stack>
+            </Group>
+          </Card>
+
+          {/* Progress Card Skeleton */}
+          <Card padding="lg" radius="md">
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Skeleton height={20} width={150} />
+                <Skeleton height={20} width={60} />
+              </Group>
+              <Skeleton height={8} />
+            </Stack>
+          </Card>
+
+          {/* Modules List Skeleton */}
+          <Card padding="lg" radius="md">
+            <Skeleton height={28} width={200} mb="md" />
+            <Stack gap="sm">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <Paper key={idx} p="md" withBorder radius="md">
+                  <Group justify="space-between">
+                    <Group gap="md">
+                      <Skeleton height={40} width={40} circle />
+                      <div>
+                        <Skeleton height={18} width={200} mb="xs" />
+                        <Skeleton height={14} width={150} />
+                      </div>
+                    </Group>
+                    <Skeleton height={24} width={24} circle />
+                  </Group>
+                </Paper>
+              ))}
+            </Stack>
+          </Card>
+        </Stack>
+      </Container>
     );
   }
 
@@ -504,7 +512,7 @@ export default function CourseOverviewPage() {
             <div>
               <Group mb="md">
                 <IconBook size={24} color="var(--mantine-color-cyan-6)" />
-                <Title order={3}>Overview Kursus</Title>
+                <Title order={3}>Pengantar Kursus</Title>
                 <Badge color="cyan" variant="light">
                   {overviewModules.filter((m) => m.isCompleted).length}/
                   {overviewModules.length}

@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
 import {
   Paper,
   PasswordInput,
@@ -21,92 +20,22 @@ export default function ResetPasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [tokenState, setTokenState] = useState<
-    "checking" | "valid" | "invalid"
-  >("checking");
+  const [tokenValid, setTokenValid] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
 
-  const recoveryOK = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem("recovery_ok") === "1";
-  }, [params]);
-
-  // On mount: If recovery hash present in URL (supabase appends to hash), finalize session
   useEffect(() => {
-    // Supabase sends recovery links to our redirectTo. The URL fragment contains access_token, type=recovery, etc.
-    if (typeof window === "undefined") return;
-    const hash = window.location.hash;
-    const finishWithRedirect = (notice: string) => {
-      setTokenState("invalid");
-      router.replace(`/login?notice=${encodeURIComponent(notice)}`);
-    };
-
-    // If already validated in this tab (page refresh), allow
-    if (!hash && sessionStorage.getItem("recovery_ok") === "1") {
-      setTokenState("valid");
+    const t = params?.get("token");
+    if (!t) {
+      router.replace("/login?notice=reset-required");
       return;
     }
-
-    if (!hash) {
-      finishWithRedirect("reset-required");
-      return;
-    }
-
-    const qs = new URLSearchParams(hash.replace(/^#/, ""));
-
-    // Handle error fragments from Supabase (expired/invalid)
-    const err = qs.get("error");
-    const errCode = qs.get("error_code");
-    if (err || errCode) {
-      const notice =
-        errCode === "otp_expired" ? "reset-expired" : "reset-invalid";
-      // Clean hash then redirect
-      window.history.replaceState({}, document.title, window.location.pathname);
-      finishWithRedirect(notice);
-      return;
-    }
-
-    const type = qs.get("type");
-    const access_token = qs.get("access_token");
-    const refresh_token = qs.get("refresh_token");
-
-    if (type !== "recovery" || !access_token || !refresh_token) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-      finishWithRedirect("reset-invalid");
-      return;
-    }
-
-    // Let supabase-js process the URL hash and set the session, then clear the hash
-    (async () => {
-      try {
-        const { error: setErr } = (await supabase.auth.setSession({
-          access_token,
-          refresh_token,
-        } as any)) as unknown as { error?: unknown };
-        if (setErr) throw setErr as any;
-        // Clean up hash to avoid leaking tokens in address bar
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname
-        );
-        sessionStorage.setItem("recovery_ok", "1");
-        setTokenState("valid");
-      } catch {
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname
-        );
-        finishWithRedirect("reset-invalid");
-      }
-    })();
-  }, [params]);
+    setToken(t);
+    setTokenValid(true);
+  }, [params, router]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setInfo(null);
     if (!password || password.length < 6) {
       setError("Password minimal 6 karakter");
       return;
@@ -115,16 +44,22 @@ export default function ResetPasswordPage() {
       setError("Konfirmasi password tidak sama");
       return;
     }
+    if (!token) {
+      setError("Token tidak valid");
+      return;
+    }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password,
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
       });
-      if (error) throw error;
-      // Clear gate and redirect to login with success notice
-      try {
-        sessionStorage.removeItem("recovery_ok");
-      } catch {}
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setError(json.error || "Gagal mengubah password");
+        return;
+      }
       router.replace("/login?notice=reset-success");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Gagal mengubah password");
@@ -133,8 +68,7 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // Gate: Only render form when token is validated
-  if (tokenState !== "valid" && !recoveryOK) {
+  if (!tokenValid) {
     return null;
   }
 
@@ -173,11 +107,6 @@ export default function ResetPasswordPage() {
                 variant="light"
               >
                 {error}
-              </Alert>
-            )}
-            {info && (
-              <Alert color="green" mb="md" variant="light">
-                {info}
               </Alert>
             )}
             <form onSubmit={onSubmit}>

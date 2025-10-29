@@ -20,6 +20,9 @@ export default function MaterialContent({
   onAutoComplete,
 }: MaterialContentProps) {
   const autoCompletedRef = useRef(false);
+  const textContentLoaded = useRef(false);
+  const driveContainerRef = useRef<HTMLDivElement | null>(null);
+  const fileContainerRef = useRef<HTMLDivElement | null>(null);
 
   const markCompleteAuto = () => {
     if (!autoCompletedRef.current && onAutoComplete) {
@@ -27,6 +30,14 @@ export default function MaterialContent({
       onAutoComplete();
     }
   };
+
+  // Text Content - auto mark when mounted
+  useEffect(() => {
+    if (content.type === "text" && content.text && !textContentLoaded.current) {
+      textContentLoaded.current = true;
+      markCompleteAuto();
+    }
+  }, [content.type, content.text]);
 
   // Text Content
   if (content.type === "text" && content.text) {
@@ -58,49 +69,60 @@ export default function MaterialContent({
     const isGoogleDrive = url.includes("drive.google.com");
 
     if (isYoutube) {
-      let embedUrl = url;
-      if (url.includes("watch?v=")) {
-        const videoId = url.split("watch?v=")[1]?.split("&")[0];
-        embedUrl = `https://www.youtube.com/embed/${videoId}`;
-      } else if (url.includes("youtu.be/")) {
-        const videoId = url.split("youtu.be/")[1]?.split("?")[0];
-        embedUrl = `https://www.youtube.com/embed/${videoId}`;
-      }
+      const extractVideoId = (input: string) => {
+        if (input.includes("watch?v=")) {
+          return input.split("watch?v=")[1]?.split("&")[0];
+        }
+        if (input.includes("youtu.be/")) {
+          return input.split("youtu.be/")[1]?.split("?")[0];
+        }
+        if (input.includes("embed/")) {
+          return input.split("embed/")[1]?.split("?")[0];
+        }
+        return undefined;
+      };
+
+      const videoId = extractVideoId(url);
+      const embedUrl = videoId
+        ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`
+        : url.replace("watch?v=", "embed/");
 
       return (
         <Card withBorder p="lg" radius="md">
-          <Group gap="xs" mb="md">
-            <IconFileText size={20} color="var(--primary-color)" />
-            <Text fw={600} size="lg">
-              Video Pembelajaran
-            </Text>
-          </Group>
-          <div
-            style={{
-              position: "relative",
-              paddingBottom: "56.25%",
-              height: 0,
-              overflow: "hidden",
-              borderRadius: 8,
-            }}
-          >
-            <iframe
-              src={embedUrl}
-              title="YouTube video"
+          <Stack gap="md">
+            <Group gap="xs">
+              <IconFileText size={20} color="var(--primary-color)" />
+              <Text fw={600} size="lg">
+                Video Pembelajaran
+              </Text>
+            </Group>
+            <div
               style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
+                position: "relative",
                 width: "100%",
-                height: "100%",
-                border: 0,
-                borderRadius: 8,
+                paddingTop: "56.25%",
+                borderRadius: 12,
+                overflow: "hidden",
+                background: "#000",
               }}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              onLoad={markCompleteAuto}
-            />
-          </div>
+            >
+              <iframe
+                src={embedUrl}
+                title="YouTube video player"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: 0,
+                }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                onLoad={markCompleteAuto}
+              />
+            </div>
+          </Stack>
         </Card>
       );
     }
@@ -118,6 +140,10 @@ export default function MaterialContent({
         embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
       }
 
+      embedUrl = embedUrl.includes("?")
+        ? `${embedUrl}&rm=minimal&embedded=true&pli=1`
+        : `${embedUrl}?rm=minimal&embedded=true&pli=1`;
+
       return (
         <Card withBorder p="lg" radius="md">
           <Group gap="xs" mb="md">
@@ -132,8 +158,11 @@ export default function MaterialContent({
               height: 700,
               border: "1px solid var(--border-color)",
               borderRadius: 8,
-              overflow: "hidden",
+              overflow: "auto",
+              position: "relative",
             }}
+            ref={driveContainerRef}
+            onContextMenu={(e) => e.preventDefault()}
           >
             <iframe
               src={embedUrl}
@@ -145,55 +174,92 @@ export default function MaterialContent({
               }}
               onLoad={markCompleteAuto}
               sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+              referrerPolicy="no-referrer"
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: "0 0 auto 0",
+                height: 72,
+                zIndex: 2,
+                cursor: "default",
+                background:
+                  "linear-gradient(180deg, rgba(246,248,252,1) 0%, rgba(246,248,252,0.92) 45%, rgba(246,248,252,0) 100%)",
+              }}
+              onClick={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
+              onContextMenu={(e) => e.preventDefault()}
+              onWheel={(event) => {
+                event.preventDefault();
+                driveContainerRef.current?.scrollBy({
+                  top: event.deltaY,
+                  behavior: "smooth",
+                });
+              }}
             />
           </div>
         </Card>
       );
     }
 
-    // Non-YouTube, Non-Google Drive: iframe + external link
+    // Non-YouTube, Non-Google Drive: Show button only (no iframe)
     return (
       <Card withBorder p="lg" radius="md">
-        <Group gap="xs" mb="md">
-          <IconFileText size={20} color="var(--primary-color)" />
-          <Text fw={600} size="lg">
-            Materi External
+        <Stack gap="md" align="center">
+          <Group gap="xs">
+            <IconFileText size={20} color="var(--primary-color)" />
+            <Text fw={600} size="lg">
+              Materi
+            </Text>
+          </Group>
+
+          <Text size="sm" c="dimmed" ta="center">
+            Silahkan buka materi ini di tab baru untuk melihat materinya.
           </Text>
-        </Group>
-        <div
-          style={{
-            width: "100%",
-            height: 600,
-            border: "1px solid var(--border-color)",
-            borderRadius: 8,
-            overflow: "hidden",
-            marginBottom: 16,
-          }}
-        >
-          <iframe
-            src={url}
-            title="External content"
+
+          <Button
+            component="a"
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            leftSection={<IconExternalLink size={18} />}
+            size="lg"
+            fullWidth
             style={{
-              width: "100%",
-              height: "100%",
-              border: 0,
+              background: "var(--primary-color)",
+              color: "white",
+              fontWeight: 600,
             }}
-            onLoad={markCompleteAuto}
-            sandbox="allow-same-origin allow-scripts allow-forms"
-          />
-        </div>
+            styles={{
+              root: {
+                "&:hover": {
+                  background: "var(--primary-color)",
+                  opacity: 0.9,
+                },
+              },
+            }}
+            onClick={markCompleteAuto}
+          >
+            Buka Materi di Tab Baru
+          </Button>
+        </Stack>
       </Card>
     );
   }
 
-  // PDF/File Content - Disable download
-  if (content.type === "file" && content.filePath) {
+  // PDF/File Content - Use URL from database (Supabase storage)
+  if (content.type === "file" && (content.url || content.filePath)) {
+    // Prioritize url field (from database), fallback to filePath
+    const fileUrl = content.url || content.filePath || "";
+    const isPdf = fileUrl.toLowerCase().endsWith(".pdf");
+
     return (
       <Card withBorder p="lg" radius="md">
         <Group gap="xs" mb="md">
           <IconFileText size={20} color="var(--primary-color)" />
           <Text fw={600} size="lg">
-            File Materi
+            {isPdf ? "Dokumen PDF" : "File Materi"}
           </Text>
         </Group>
         <div
@@ -202,11 +268,20 @@ export default function MaterialContent({
             height: 700,
             border: "1px solid var(--border-color)",
             borderRadius: 8,
-            overflow: "hidden",
+            overflow: "auto",
+            position: "relative",
           }}
+          ref={fileContainerRef}
+          onContextMenu={(e) => e.preventDefault()}
         >
           <iframe
-            src={content.filePath}
+            src={
+              isPdf
+                ? `${
+                    fileUrl.split("#")[0]
+                  }#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+                : fileUrl
+            }
             title="File content"
             style={{
               width: "100%",
@@ -214,8 +289,31 @@ export default function MaterialContent({
               border: 0,
             }}
             onLoad={markCompleteAuto}
-            sandbox="allow-same-origin allow-scripts"
+            onContextMenu={(e) => e.preventDefault()}
+            referrerPolicy="no-referrer"
           />
+          {isPdf && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: "0 0 auto 0",
+                height: 64,
+                zIndex: 2,
+                cursor: "not-allowed",
+              }}
+              onClick={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
+              onContextMenu={(e) => e.preventDefault()}
+              onWheel={(event) => {
+                event.preventDefault();
+                fileContainerRef.current?.scrollBy({
+                  top: event.deltaY,
+                  behavior: "smooth",
+                });
+              }}
+            />
+          )}
         </div>
       </Card>
     );
@@ -247,29 +345,55 @@ export default function MaterialContent({
             border: "1px solid var(--border-color)",
             borderRadius: 8,
             overflow: "hidden",
+            position: "relative",
           }}
         >
           {content.type === "image" ? (
-            <Image
-              src={content.url}
-              alt="Material"
-              width={800}
-              height={600}
-              style={{ width: "100%", height: "auto", borderRadius: 8 }}
-              onLoad={markCompleteAuto}
-            />
+            <div
+              style={{ position: "relative" }}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <Image
+                src={content.url}
+                alt="Material"
+                width={800}
+                height={600}
+                style={{
+                  width: "100%",
+                  height: "auto",
+                  borderRadius: 8,
+                  pointerEvents: "none",
+                }}
+                onLoad={markCompleteAuto}
+              />
+            </div>
           ) : (
-            <iframe
-              src={content.url}
-              title={`${content.type} content`}
-              style={{
-                width: "100%",
-                height: "100%",
-                border: 0,
-              }}
-              onLoad={markCompleteAuto}
-              sandbox="allow-same-origin allow-scripts"
-            />
+            <>
+              <iframe
+                src={`${content.url}${
+                  content.type === "pdf"
+                    ? "#toolbar=0&navpanes=0&scrollbar=0"
+                    : ""
+                }`}
+                title={`${content.type} content`}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: 0,
+                  pointerEvents: "none",
+                }}
+                onLoad={markCompleteAuto}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "transparent",
+                  pointerEvents: "all",
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+              />
+            </>
           )}
         </div>
       </Card>

@@ -109,6 +109,7 @@ export default function UserPostDetailPage() {
   const [editContent, setEditContent] = useState("");
   const [editTags, setEditTags] = useState<string[]>([]);
   const [editFiles, setEditFiles] = useState<File[]>([]);
+  const [editPreviews, setEditPreviews] = useState<string[]>([]);
   const [existingMedia, setExistingMedia] = useState<ApiPost["media"]>([]);
   const [mediaToDelete, setMediaToDelete] = useState<string[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -118,6 +119,29 @@ export default function UserPostDetailPage() {
   const [commentText, setCommentText] = useState("");
   const [editingComment, setEditingComment] = useState<ApiComment | null>(null);
   const [editText, setEditText] = useState("");
+  const [editTitleTouched, setEditTitleTouched] = useState(false);
+  const [editContentTouched, setEditContentTouched] = useState(false);
+
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  const MAX_WORDS = 1500;
+  const editWordCount = editContent.trim().split(/\s+/).filter(Boolean).length;
+  const editTitleError =
+    editTitleTouched && editTitle.trim().length === 0
+      ? "Judul harus diisi"
+      : editTitleTouched && editTitle.trim().length < 3
+      ? "Judul minimal 3 karakter"
+      : null;
+  const editContentError =
+    editContentTouched && editWordCount < 3
+      ? "Deskripsi minimal 3 kata"
+      : editContentTouched && editWordCount > MAX_WORDS
+      ? `Maksimal ${MAX_WORDS} kata`
+      : null;
+  const canSaveEdit =
+    editTitle.trim().length >= 3 &&
+    editWordCount >= 3 &&
+    editWordCount <= MAX_WORDS &&
+    !savingEdit;
 
   // Map backend role to human label and color
   const getRoleLabel = (r?: string | null) => {
@@ -185,6 +209,48 @@ export default function UserPostDetailPage() {
     if (user) loadMyOthers(user.id);
   }, [user, postId]);
 
+  useEffect(() => {
+    return () => {
+      editPreviews.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [editPreviews]);
+
+  const addEditFiles = (incoming: File[]) => {
+    const accepted: File[] = [];
+    const urls: string[] = [];
+    incoming.forEach((f) => {
+      if (!/^(image|video)\//i.test(f.type)) {
+        notifications.show({
+          title: "Format tidak didukung",
+          message: `${f.name} bukan gambar/video`,
+          color: "red",
+        });
+        return;
+      }
+      if (f.size > MAX_FILE_SIZE) {
+        notifications.show({
+          title: "File terlalu besar",
+          message: `${f.name} melebihi 10MB`,
+          color: "red",
+        });
+        return;
+      }
+      accepted.push(f);
+      urls.push(URL.createObjectURL(f));
+    });
+    if (accepted.length) {
+      setEditFiles((prev) => [...prev, ...accepted]);
+      setEditPreviews((prev) => [...prev, ...urls]);
+    }
+  };
+
+  const removeNewFile = (idx: number) => {
+    const url = editPreviews[idx];
+    if (url) URL.revokeObjectURL(url);
+    setEditFiles((prev) => prev.filter((_, i) => i !== idx));
+    setEditPreviews((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const toggleLike = async () => {
     if (!user || !post || likeLoading) return;
 
@@ -236,7 +302,11 @@ export default function UserPostDetailPage() {
     setEditTags(post.tags || []);
     setExistingMedia(post.media || []);
     setEditFiles([]);
+    editPreviews.forEach((url) => URL.revokeObjectURL(url));
+    setEditPreviews([]);
     setMediaToDelete([]);
+    setEditTitleTouched(false);
+    setEditContentTouched(false);
     setEditing(true);
   };
 
@@ -248,12 +318,20 @@ export default function UserPostDetailPage() {
   const cancelEdit = () => {
     setEditing(false);
     setEditFiles([]);
+    editPreviews.forEach((url) => URL.revokeObjectURL(url));
+    setEditPreviews([]);
     setMediaToDelete([]);
+    setEditTitleTouched(false);
+    setEditContentTouched(false);
   };
 
   const saveEdit = async () => {
     if (!user || !post) return;
-    if (!editTitle.trim() || !editContent.trim()) return;
+    if (!canSaveEdit) {
+      setEditTitleTouched(true);
+      setEditContentTouched(true);
+      return;
+    }
     setSavingEdit(true);
     try {
       // 1. Update post text
@@ -530,19 +608,41 @@ export default function UserPostDetailPage() {
               label="Judul"
               placeholder="Judul postingan"
               value={editTitle}
-              onChange={(e) => setEditTitle(e.currentTarget.value)}
+              onChange={(e) => {
+                setEditTitle(e.currentTarget.value);
+                if (!editTitleTouched) setEditTitleTouched(true);
+              }}
+              onBlur={() => setEditTitleTouched(true)}
+              error={editTitleError}
               required
               disabled={savingEdit}
             />
-            <Textarea
-              label="Konten"
-              placeholder="Isi postingan"
-              value={editContent}
-              onChange={(e) => setEditContent(e.currentTarget.value)}
-              minRows={5}
-              required
-              disabled={savingEdit}
-            />
+            <Stack gap={4}>
+              <Group justify="space-between">
+                <Text fw={500} size="sm">
+                  Deskripsi
+                </Text>
+                <Text
+                  size="xs"
+                  c={editContentTouched && editContentError ? "red" : "dimmed"}
+                >
+                  {editWordCount}/{MAX_WORDS} kata
+                </Text>
+              </Group>
+              <Textarea
+                placeholder="Isi postingan"
+                value={editContent}
+                onChange={(e) => {
+                  setEditContent(e.currentTarget.value);
+                  if (!editContentTouched) setEditContentTouched(true);
+                }}
+                onBlur={() => setEditContentTouched(true)}
+                error={editContentError}
+                minRows={5}
+                required
+                disabled={savingEdit}
+              />
+            </Stack>
 
             {/* Existing Media */}
             {existingMedia.length > 0 && (
@@ -588,32 +688,117 @@ export default function UserPostDetailPage() {
             {/* Upload New Media */}
             <Stack gap="xs">
               <Text size="sm" fw={500}>
-                Tambah Gambar/Video Baru (maks 10MB per file)
+                Tambah Gambar/Video Baru (opsional)
               </Text>
+              <label
+                htmlFor="edit-media-upload"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  gap: 6,
+                  border: "2px dashed var(--primary-color)",
+                  borderRadius: 12,
+                  padding: "20px",
+                  background: "var(--accent-color)",
+                  color: "var(--primary-color)",
+                  cursor: savingEdit ? "not-allowed" : "pointer",
+                  opacity: savingEdit ? 0.6 : 1,
+                }}
+                className="card-hover"
+              >
+                <span style={{ fontWeight: 500 }}>
+                  Klik untuk pilih file baru
+                </span>
+                <Text size="xs" c="dimmed">
+                  Format: gambar / video, maksimal 10MB per file
+                </Text>
+              </label>
               <input
+                id="edit-media-upload"
                 type="file"
                 multiple
                 accept="image/*,video/*"
+                hidden
                 disabled={savingEdit}
                 onChange={(e) => {
-                  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-                  const files = Array.from(e.currentTarget.files || []);
-                  const validated = files.filter((f) => {
-                    if (f.size > MAX_SIZE) {
-                      alert(`File ${f.name} terlalu besar. Maksimal 10MB.`);
-                      return false;
-                    }
-                    return true;
-                  });
-                  setEditFiles(validated);
-                }}
-                style={{
-                  padding: "8px",
-                  border: "1px solid #ced4da",
-                  borderRadius: "4px",
-                  width: "100%",
+                  const selected = Array.from(e.currentTarget.files || []);
+                  addEditFiles(selected);
+                  e.currentTarget.value = "";
                 }}
               />
+              {editPreviews.length > 0 && (
+                <SimpleGrid
+                  cols={Math.min(3, editPreviews.length)}
+                  spacing="xs"
+                >
+                  {editPreviews.map((src, idx) => {
+                    const file = editFiles[idx];
+                    const isVideo = file?.type?.startsWith("video/");
+                    return (
+                      <Card
+                        key={`${src}-${idx}`}
+                        p={0}
+                        radius="md"
+                        style={{ position: "relative", overflow: "hidden" }}
+                      >
+                        {isVideo ? (
+                          <div
+                            style={{
+                              position: "relative",
+                              width: "100%",
+                              height: 110,
+                              background: "#0f172a",
+                            }}
+                          >
+                            <video
+                              src={src}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                              }}
+                              muted
+                            />
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                background: "rgba(0,0,0,0.3)",
+                              }}
+                            >
+                              <IconVideo size={18} color="#fff" />
+                            </div>
+                          </div>
+                        ) : (
+                          <Image
+                            src={src}
+                            alt={`Media baru ${idx + 1}`}
+                            radius="md"
+                            height={110}
+                            fit="cover"
+                          />
+                        )}
+                        <ActionIcon
+                          color="red"
+                          size="sm"
+                          radius="xl"
+                          variant="filled"
+                          style={{ position: "absolute", top: 4, right: 4 }}
+                          onClick={() => removeNewFile(idx)}
+                          disabled={savingEdit}
+                        >
+                          <IconX size="1rem" />
+                        </ActionIcon>
+                      </Card>
+                    );
+                  })}
+                </SimpleGrid>
+              )}
             </Stack>
 
             <Group justify="flex-end" gap="sm" mt="md">
@@ -627,7 +812,15 @@ export default function UserPostDetailPage() {
               <Button
                 loading={savingEdit}
                 onClick={saveEdit}
-                disabled={!editTitle.trim() || !editContent.trim()}
+                disabled={!canSaveEdit}
+                styles={{
+                  root: {
+                    "&[dataDisabled]": {
+                      cursor: "not-allowed",
+                      pointerEvents: "all",
+                    },
+                  },
+                }}
               >
                 Simpan Perubahan
               </Button>
@@ -686,7 +879,11 @@ export default function UserPostDetailPage() {
                       {post.user?.full_name || "Pengguna"}
                     </Text>
                     {post.user?.role && (
-                      <Badge size="sm" variant="light" color={getRoleColor(post.user.role)}>
+                      <Badge
+                        size="sm"
+                        variant="light"
+                        color={getRoleColor(post.user.role)}
+                      >
                         {getRoleLabel(post.user.role)}
                       </Badge>
                     )}
@@ -815,7 +1012,11 @@ export default function UserPostDetailPage() {
                           {c.user?.full_name || "Pengguna"}
                         </Text>
                         {c.user?.role && (
-                          <Badge size="xs" variant="light" color={getRoleColor(c.user.role)}>
+                          <Badge
+                            size="xs"
+                            variant="light"
+                            color={getRoleColor(c.user.role)}
+                          >
                             {getRoleLabel(c.user.role)}
                           </Badge>
                         )}

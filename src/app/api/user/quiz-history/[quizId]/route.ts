@@ -102,13 +102,35 @@ export async function GET(
           }
         }
 
+        // Determine correct answer comparison
+        // If correct is an index, convert to actual answer text
+        let correctAnswerText = question?.correct || "";
+        const correctIndex = parseInt(question?.correct || "");
+        if (
+          !isNaN(correctIndex) &&
+          parsedOptions &&
+          parsedOptions[correctIndex]
+        ) {
+          correctAnswerText = parsedOptions[correctIndex];
+        }
+
+        // Normalize True/False
+        const normalizeAnswer = (ans: string) => {
+          if (ans === "True" || ans === "true") return "True";
+          if (ans === "False" || ans === "false") return "False";
+          return ans;
+        };
+
+        const normalizedUserAnswer = normalizeAnswer(ans.answer);
+        const normalizedCorrectAnswer = normalizeAnswer(correctAnswerText);
+
         return {
           questionId: ans.questionId,
           questionText: question?.question || "Unknown question",
           options: parsedOptions,
           userAnswer: ans.answer,
           correctAnswer: question?.correct || "",
-          isCorrect: ans.answer === question?.correct,
+          isCorrect: normalizedUserAnswer === normalizedCorrectAnswer,
           explanation: question?.explanation || "",
         };
       });

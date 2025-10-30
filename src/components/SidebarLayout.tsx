@@ -156,11 +156,11 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           href: "/school/students",
           icon: "IconUsers",
         },
-        {
-          label: "Leaderboard",
-          href: "/school/leaderboard",
-          icon: "IconAward",
-        },
+        // {
+        //   label: "Leaderboard",
+        //   href: "/school/leaderboard",
+        //   icon: "IconAward",
+        // },
         {
           label: "Jelajah Kursus",
           href: "/school/explore",

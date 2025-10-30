@@ -31,6 +31,7 @@ import {
   Progress,
   Skeleton,
   Center,
+  Table,
 } from "@mantine/core";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "../../../hooks/useAuth";
@@ -68,6 +69,7 @@ export default function UserProfilePage() {
       | "profile"
       | "achievements"
       | "purchases"
+      | "leaderboard"
       | "certificates"
       | "scratch-projects"
       | null;
@@ -198,16 +200,17 @@ export default function UserProfilePage() {
   const [coursesCompleted, setCoursesCompleted] = useState<number>(0);
   const [coins, setCoins] = useState(0);
 
-  const avgScore = useMemo(
-    () =>
-      Math.floor(
-        (Number(coins || 0) +
-          Number(points || 0) +
-          Number(coursesCompleted || 0)) /
-          3
-      ),
-    [coins, points, coursesCompleted]
-  );
+  // School score from leaderboard (for school role)
+  const [schoolScore, setSchoolScore] = useState<number>(0);
+
+  const avgScore = useMemo(() => {
+    if (user?.role === "school") {
+      // For school: use score from leaderboard calculation
+      return Math.floor(schoolScore);
+    }
+    // For user: calculate from own points and coins
+    return Math.floor((Number(points || 0) + Number(coins || 0)) / 2);
+  }, [user?.role, coins, points, schoolScore]);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,6 +246,23 @@ export default function UserProfilePage() {
   // Purchases and Certificates loading states
   const [purchasesLoading, setPurchasesLoading] = useState(false);
   const [certificatesLoading, setCertificatesLoading] = useState(false);
+
+  // Leaderboard state (for school role)
+  const [leaderboardItems, setLeaderboardItems] = useState<
+    {
+      rank: number;
+      userId: string;
+      name: string;
+      avatar: string | null;
+      score: number;
+    }[]
+  >([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [showAllLeaderboard, setShowAllLeaderboard] = useState(false);
+
+  // School score (calculated from students' total points + coins)
+  const [schoolTotalPoints, setSchoolTotalPoints] = useState(0);
+  const [schoolTotalCoins, setSchoolTotalCoins] = useState(0);
 
   // keep initial snapshot for reset
   const initialRef = useRef<{
@@ -643,6 +663,52 @@ export default function UserProfilePage() {
     load();
   }, [user?.id, user?.username, txPage]);
 
+  // Fetch leaderboard data for school role
+  useEffect(() => {
+    if (user?.role !== "school") return;
+
+    const fetchLeaderboard = async () => {
+      // Only show loading spinner if we're on the leaderboard tab
+      if (activeTab === "leaderboard") {
+        setLeaderboardLoading(true);
+      }
+
+      try {
+        const res = await fetch(`/api/school/leaderboard`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+          // Always set leaderboard items for the tab
+          if (activeTab === "leaderboard") {
+            setLeaderboardItems(data.items || []);
+          }
+
+          // Always find and set current school's score for the header
+          const currentSchool = (data.items || []).find(
+            (item: any) => item.userId === user.id
+          );
+          if (currentSchool) {
+            setSchoolScore(currentSchool.score);
+          }
+        } else {
+          if (activeTab === "leaderboard") {
+            setLeaderboardItems([]);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch leaderboard:", error);
+        if (activeTab === "leaderboard") {
+          setLeaderboardItems([]);
+        }
+      } finally {
+        if (activeTab === "leaderboard") {
+          setLeaderboardLoading(false);
+        }
+      }
+    };
+
+    fetchLeaderboard();
+  }, [user?.role, user?.id, activeTab]);
+
   if (!user) return null;
 
   const formatCurrency = (n: number) =>
@@ -815,15 +881,22 @@ export default function UserProfilePage() {
                   {fullName || user.fullName}
                 </Title>
                 <Stack gap="xs">
-                  <Badge
-                    bg="var(--secondary-color)"
-                    variant="filled"
-                    radius="xl"
-                    c="var(--primary-color)"
-                    style={{ width: "fit-content" }}
-                  >
-                    Tier {getTier(currentXP, points, coursesCompleted).toUpperCase()}
-                  </Badge>
+                  {user?.role === "user" && (
+                    <Badge
+                      bg="var(--secondary-color)"
+                      variant="filled"
+                      radius="xl"
+                      c="var(--primary-color)"
+                      style={{ width: "fit-content" }}
+                    >
+                      Tier{" "}
+                      {getTier(
+                        currentXP,
+                        points,
+                        coursesCompleted
+                      ).toUpperCase()}
+                    </Badge>
+                  )}
                   <Badge
                     color="var(--secondary-color)"
                     variant="light"
@@ -1032,7 +1105,11 @@ export default function UserProfilePage() {
                 <Skeleton height={300} radius="lg" />
 
                 {/* Leaderboard has its own loading state */}
-                {user?.role === "school" ? <SchoolLeaderboard /> : <Leaderboard />}
+                {user?.role === "school" ? (
+                  <SchoolLeaderboard />
+                ) : (
+                  <Leaderboard />
+                )}
               </Stack>
             ) : (
               <Stack gap="xl">
@@ -1074,11 +1151,17 @@ export default function UserProfilePage() {
                 <CoinBadgeGrid coins={coins} />
 
                 {user?.role !== "school" && (
-                  <TierCarouselCard stats={{ coins, points, coursesCompleted }} />
+                  <TierCarouselCard
+                    stats={{ coins, points, coursesCompleted }}
+                  />
                 )}
 
                 {/* Leaderboard Top 5 */}
-                {user?.role === "school" ? <SchoolLeaderboard /> : <Leaderboard />}
+                {user?.role === "school" ? (
+                  <SchoolLeaderboard />
+                ) : (
+                  <Leaderboard />
+                )}
               </Stack>
             )}
           </>
@@ -1152,9 +1235,6 @@ export default function UserProfilePage() {
                         <Text fw={700} size="lg" c="green">
                           {formatCurrency(t.amount)}
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          Metode: {displayMethod(t.method)}
-                        </Text>
                         <Badge color="green" variant="light" radius="xl">
                           {String(t.status).toLowerCase() === "completed"
                             ? "Berhasil"
@@ -1176,6 +1256,237 @@ export default function UserProfilePage() {
                 {latestPaid.length === 0 && (
                   <Text c="white" ta="center" py="xl">
                     Belum ada riwayat pembelian
+                  </Text>
+                )}
+              </>
+            )}
+          </Stack>
+        )}
+
+        {activeTab === "leaderboard" && user?.role === "school" && (
+          <Stack gap="lg">
+            <Title order={3} c="var(--primary-color)">
+              Leaderboard Sekolah
+            </Title>
+            {leaderboardLoading ? (
+              <Stack gap="md">
+                <Skeleton height={200} radius="md" />
+                <Skeleton height={300} radius="md" />
+              </Stack>
+            ) : (
+              <>
+                {/* Top 3 Podium - Proper positioning with alignItems */}
+                {leaderboardItems.length >= 3 && (
+                  <SimpleGrid
+                    cols={{ base: 1, md: 3 }}
+                    spacing="lg"
+                    mb="xl"
+                    style={{ alignItems: "end" }}
+                  >
+                    {/* 2nd Place (Silver) - Left, Lower */}
+                    <Card
+                      withBorder
+                      radius="xl"
+                      p="xl"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, rgba(192, 192, 192, 0.2) 0%, rgba(192, 192, 192, 0.05) 100%)",
+                        borderColor: "#C0C0C0",
+                        minHeight: "240px",
+                        marginTop: "2rem",
+                      }}
+                    >
+                      <Stack align="center" gap="md">
+                        <Badge
+                          size="xl"
+                          radius="xl"
+                          style={{
+                            background: "#C0C0C0",
+                            color: "#000",
+                          }}
+                        >
+                          #2
+                        </Badge>
+                        <Avatar
+                          src={leaderboardItems[1]?.avatar}
+                          size={80}
+                          radius="xl"
+                        />
+                        <div style={{ textAlign: "center" }}>
+                          <Text fw={700} size="lg" c="black">
+                            {leaderboardItems[1]?.name}
+                          </Text>
+                        </div>
+                        <Badge color="gray" variant="light" mt={8}>
+                          {leaderboardItems[1]?.score.toFixed(0)} Poin
+                        </Badge>
+                      </Stack>
+                    </Card>
+
+                    {/* 1st Place (Gold) - Center, Highest */}
+                    <Card
+                      withBorder
+                      radius="xl"
+                      p="xl"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, rgba(255, 215, 0, 0.3) 0%, rgba(255, 215, 0, 0.1) 100%)",
+                        borderColor: "#FFD700",
+                        minHeight: "280px",
+                      }}
+                    >
+                      <Stack align="center" gap="md">
+                        <IconCrown size={36} color="#FFD700" />
+                        <Badge
+                          size="xl"
+                          radius="xl"
+                          style={{
+                            background: "#FFD700",
+                            color: "#000",
+                          }}
+                        >
+                          #1
+                        </Badge>
+                        <Avatar
+                          src={leaderboardItems[0]?.avatar}
+                          size={100}
+                          radius="xl"
+                        />
+                        <div style={{ textAlign: "center" }}>
+                          <Text fw={700} size="xl" c="black">
+                            {leaderboardItems[0]?.name}
+                          </Text>
+                        </div>
+                        <Badge color="yellow" variant="light" mt={8}>
+                          {leaderboardItems[0]?.score.toFixed(0)} Poin
+                        </Badge>
+                      </Stack>
+                    </Card>
+
+                    {/* 3rd Place (Bronze) - Right, Lower */}
+                    <Card
+                      withBorder
+                      radius="xl"
+                      p="xl"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, rgba(205, 127, 50, 0.2) 0%, rgba(205, 127, 50, 0.05) 100%)",
+                        borderColor: "#CD7F32",
+                        minHeight: "240px",
+                        marginTop: "2rem",
+                      }}
+                    >
+                      <Stack align="center" gap="md">
+                        <Badge
+                          size="xl"
+                          radius="xl"
+                          style={{
+                            background: "#CD7F32",
+                            color: "#fff",
+                          }}
+                        >
+                          #3
+                        </Badge>
+                        <Avatar
+                          src={leaderboardItems[2]?.avatar}
+                          size={80}
+                          radius="xl"
+                        />
+                        <div style={{ textAlign: "center" }}>
+                          <Text fw={700} size="lg" c="black">
+                            {leaderboardItems[2]?.name}
+                          </Text>
+                        </div>
+                        <Badge color="orange" variant="light" mt={8}>
+                          {leaderboardItems[2]?.score.toFixed(0)} Poin
+                        </Badge>
+                      </Stack>
+                    </Card>
+                  </SimpleGrid>
+                )}
+
+                {/* Rest of Schools Table (from rank 4+) */}
+                {leaderboardItems.length > 3 && (
+                  <Card
+                    withBorder
+                    radius="lg"
+                    p="md"
+                    style={{ overflowX: "auto" }}
+                  >
+                    <Table striped highlightOnHover>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th style={{ minWidth: "100px" }}>
+                            Peringkat
+                          </Table.Th>
+                          <Table.Th style={{ minWidth: "250px" }}>
+                            Sekolah
+                          </Table.Th>
+                          <Table.Th
+                            style={{ textAlign: "right", minWidth: "100px" }}
+                          >
+                            Skor
+                          </Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {leaderboardItems
+                          .slice(3, showAllLeaderboard ? undefined : 8)
+                          .map((item) => (
+                            <Table.Tr key={item.userId}>
+                              <Table.Td>
+                                <Badge color="blue" variant="light" radius="xl">
+                                  #{item.rank}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td>
+                                <Group gap="sm" wrap="nowrap">
+                                  <Avatar
+                                    src={item.avatar}
+                                    size={40}
+                                    radius="xl"
+                                  />
+                                  <Text
+                                    fw={500}
+                                    style={{ wordBreak: "break-word" }}
+                                  >
+                                    {item.name}
+                                  </Text>
+                                </Group>
+                              </Table.Td>
+                              <Table.Td style={{ textAlign: "right" }}>
+                                <Text fw={600}>{item.score.toFixed(0)}</Text>
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                      </Table.Tbody>
+                    </Table>
+                    {leaderboardItems.length > 8 && !showAllLeaderboard && (
+                      <Button
+                        fullWidth
+                        variant="light"
+                        mt="md"
+                        onClick={() => setShowAllLeaderboard(true)}
+                      >
+                        Lihat Selengkapnya
+                      </Button>
+                    )}
+                    {showAllLeaderboard && leaderboardItems.length > 8 && (
+                      <Button
+                        fullWidth
+                        variant="light"
+                        mt="md"
+                        onClick={() => setShowAllLeaderboard(false)}
+                      >
+                        Tampilkan Lebih Sedikit
+                      </Button>
+                    )}
+                  </Card>
+                )}
+
+                {leaderboardItems.length === 0 && (
+                  <Text c="white" ta="center" py="xl">
+                    Belum ada data leaderboard
                   </Text>
                 )}
               </>
@@ -1940,7 +2251,9 @@ function SchoolLeaderboard() {
       setError(null);
       try {
         const res = await fetch(
-          `/api/school/leaderboard?schoolUserId=${user.id}&limit=${showAll ? 20 : 5}&page=1`
+          `/api/school/leaderboard?schoolUserId=${user.id}&limit=${
+            showAll ? 20 : 5
+          }&page=1`
         );
         const json = await res.json();
         if (!res.ok || !json.success)
@@ -1989,7 +2302,16 @@ function SchoolLeaderboard() {
   const rest = items.slice(3);
 
   return (
-    <Card withBorder radius="xl" p="lg" style={{ background: "var(--card-bg)", position: "relative", overflowX: "auto" }}>
+    <Card
+      withBorder
+      radius="xl"
+      p="lg"
+      style={{
+        background: "var(--card-bg)",
+        position: "relative",
+        overflowX: "auto",
+      }}
+    >
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="wrap">
           <div>
@@ -2000,21 +2322,50 @@ function SchoolLeaderboard() {
               Urutan berdasarkan rata-rata tiga kategori
             </Text>
           </div>
-          <Button size="xs" variant="light" onClick={() => setShowAll((v) => !v)}>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={() => setShowAll((v) => !v)}
+          >
             {showAll ? "Tampilkan Top 5" : "Lihat Semua"}
           </Button>
         </Group>
 
         {top3.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, alignItems: "end", marginBottom: 16, minWidth: 320 }} className="podium-grid">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 12,
+              alignItems: "end",
+              marginBottom: 16,
+              minWidth: 320,
+            }}
+            className="podium-grid"
+          >
             {top3[1] ? (
-              <PodiumItem rank={2} item={top3.find((i) => i.rank === 2) || top3[1]} height={120} align="end" />
+              <PodiumItem
+                rank={2}
+                item={top3.find((i) => i.rank === 2) || top3[1]}
+                height={120}
+                align="end"
+              />
             ) : (
               <div />
             )}
-            <PodiumItem rank={1} item={top3.find((i) => i.rank === 1) || top3[0]} height={160} highlight />
+            <PodiumItem
+              rank={1}
+              item={top3.find((i) => i.rank === 1) || top3[0]}
+              height={160}
+              highlight
+            />
             {top3[2] ? (
-              <PodiumItem rank={3} item={top3.find((i) => i.rank === 3) || top3[2]} height={110} align="start" />
+              <PodiumItem
+                rank={3}
+                item={top3.find((i) => i.rank === 3) || top3[2]}
+                height={110}
+                align="start"
+              />
             ) : (
               <div />
             )}
@@ -2023,14 +2374,34 @@ function SchoolLeaderboard() {
 
         <Stack gap="sm">
           {rest.map((it) => (
-            <Group key={it.userId} justify="space-between" wrap="wrap" style={{ border: "1px solid var(--border-color)", borderRadius: 12, padding: 12, background: "#fff", gap: 8 }}>
+            <Group
+              key={it.userId}
+              justify="space-between"
+              wrap="wrap"
+              style={{
+                border: "1px solid var(--border-color)",
+                borderRadius: 12,
+                padding: 12,
+                background: "#fff",
+                gap: 8,
+              }}
+            >
               <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
                 <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
                   {it.rank}
                 </Badge>
-                <Avatar src={it.avatar || undefined} radius="xl" size="md" style={{ flexShrink: 0 }} />
+                <Avatar
+                  src={it.avatar || undefined}
+                  radius="xl"
+                  size="md"
+                  style={{ flexShrink: 0 }}
+                />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <Text fw={600} lineClamp={1} style={{ wordBreak: "break-word" }}>
+                  <Text
+                    fw={600}
+                    lineClamp={1}
+                    style={{ wordBreak: "break-word" }}
+                  >
                     {it.fullName || it.username}
                   </Text>
                   <Text size="xs" c="dimmed" lineClamp={1}>
@@ -2040,14 +2411,21 @@ function SchoolLeaderboard() {
               </Group>
             </Group>
           ))}
-          {items.length === 0 && <Text c="white">Belum ada data leaderboard</Text>}
+          {items.length === 0 && (
+            <Text c="white">Belum ada data leaderboard</Text>
+          )}
         </Stack>
       </Stack>
 
       <style jsx>{`
         @media (max-width: 640px) {
-          .podium-grid { gap: 8px !important; min-width: 320px; }
-          .podium-item { min-width: 90px; }
+          .podium-grid {
+            gap: 8px !important;
+            min-width: 320px;
+          }
+          .podium-item {
+            min-width: 90px;
+          }
         }
       `}</style>
     </Card>

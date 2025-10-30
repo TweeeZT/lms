@@ -35,11 +35,12 @@ export default function SchoolLayout({
   // Show custom tab menu only on /school/profile
   const showProfileTabs = pathname?.startsWith("/school/profile");
   const ProfileTabsNavbar = showProfileTabs
-    ? require("../../components/ProfileTabsNavbar").default
+    ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("../../components/ProfileTabsNavbar").default
     : null;
 
   // Only show allowed tabs for school profile
-  const schoolTabs = ["profile", "purchases"];
+  const schoolTabs = ["profile", "purchases", "leaderboard"];
 
   return (
     <DashboardLayout

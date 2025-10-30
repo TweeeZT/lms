@@ -14,6 +14,7 @@ import {
   Center,
   Table,
   Space,
+  SimpleGrid,
 } from "@mantine/core";
 import { IconCrown } from "@tabler/icons-react";
 import Image from "next/image";
@@ -146,11 +147,10 @@ export default function SchoolLeaderboardPage() {
         <>
           {/* Podium top 3 - improved responsive design */}
           <div style={{ marginBottom: "3rem" }}>
-            <div
+            <SimpleGrid
+              cols={{ base: 1, md: 3 }}
+              spacing="xl"
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-                gap: "1.5rem",
                 alignItems: "end",
                 maxWidth: "900px",
                 margin: "0 auto",
@@ -263,7 +263,7 @@ export default function SchoolLeaderboardPage() {
                       </Card>
                     );
                   })}
-            </div>
+            </SimpleGrid>
           </div>
 
           {/* Table list */}

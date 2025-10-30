@@ -24,95 +24,91 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Find student user_ids under this school
+    // 1) Read school_students as the single source of truth (like Manage Students page)
     const { data: ssRows, error: ssErr } = await supabase
       .from("school_students")
-      .select("user_id")
+      .select("id, user_id, email, name, invited_at")
       .eq("school_user_id", schoolUserId)
-      .eq("status", "accepted");
+      .order("invited_at", { ascending: false });
     if (ssErr) throw ssErr;
-    const studentIds = (ssRows || []).map((r: any) => r.user_id).filter(Boolean);
 
-    if (!studentIds.length) {
+    const rows = ssRows || [];
+    if (!rows.length) {
       return NextResponse.json({ success: true, items: [], total: 0, page, limit });
     }
 
-    // Pull student stats
-    const { data: students, error: stErr } = await supabase
-      .from("students")
-      .select("user_id, level, points, balance, xp")
-      .in("user_id", studentIds);
-    if (stErr) throw stErr;
+  // 2) Enrich avatar (and fill missing user_id via email when possible)
+    const userIds = Array.from(new Set(rows.map((r: any) => r.user_id).filter(Boolean)));
+    const emails = Array.from(new Set(rows.map((r: any) => r.email).filter(Boolean)));
 
-    // Map user metadata
-    const { data: users, error: uErr } = await supabase
-      .from("users")
-      .select("id, username, full_name, avatar")
-      .in("id", studentIds);
-    if (uErr) throw uErr;
-    const usersMap = new Map((users || []).map((u: any) => [u.id, u]));
+    const [byId, byEmail] = await Promise.all([
+      userIds.length
+        ? supabase.from("users").select("id, avatar").in("id", userIds)
+        : Promise.resolve({ data: [] as any[], error: null } as any),
+      emails.length
+        ? supabase.from("users").select("id, email, avatar").in("email", emails)
+        : Promise.resolve({ data: [] as any[], error: null } as any),
+    ]);
+    if (byId.error) throw byId.error;
+    if (byEmail.error) throw byEmail.error;
 
-    // Progress for coursesCompleted
-    const { data: progresses } = await supabase
-      .from("user_progress")
-      .select("user_id, course_id, completed_modules")
-      .in("user_id", studentIds);
+    const avatarById = new Map<string, string | null>();
+    (byId.data || []).forEach((u: any) => avatarById.set(u.id, u.avatar ?? null));
 
-    const byUser: Record<string, Record<string, number>> = {};
-    const courseIds = new Set<string>();
-    (progresses || []).forEach((p: any) => {
-      let mods: unknown = p.completed_modules;
-      if (typeof mods === "string") {
-        try { mods = JSON.parse(mods as string); } catch { mods = []; }
-      }
-      const arr = Array.isArray(mods) ? (mods as unknown[]) : [];
-      courseIds.add(p.course_id);
-      if (!byUser[p.user_id]) byUser[p.user_id] = {};
-      byUser[p.user_id][p.course_id] = arr.length;
+    const userIdByEmail = new Map<string, string>();
+    const avatarByEmail = new Map<string, string | null>();
+    (byEmail.data || []).forEach((u: any) => {
+      if (u.email) userIdByEmail.set(u.email, u.id);
+      if (u.email) avatarByEmail.set(u.email, u.avatar ?? null);
     });
 
-    // Course totals to detect completion
-    const totals = new Map<string, number>();
-    if (courseIds.size) {
-      const { data: courses } = await supabase
-        .from("courses")
-        .select("id, total_modules")
-        .in("id", Array.from(courseIds));
-      (courses || []).forEach((c: any) => totals.set(c.id, c.total_modules || 0));
-    }
-
-    // Build items
-    const itemsRaw = (students || []).map((s: any) => {
-      const u = usersMap.get(s.user_id) || {};
-      const perCourse = byUser[s.user_id] || {};
-      let coursesCompleted = 0;
-      Object.entries(perCourse).forEach(([cid, done]) => {
-        const total = totals.get(cid) || 0;
-        if (total && done >= total) coursesCompleted += 1;
-      });
-      const xp = Number(s.xp || 0);
-      const points = Number(s.points || 0);
-      const score = (coursesCompleted + points + xp) / 3; // same metric as global
+    // 3) Build raw records and resolve points from students table
+    const records = rows.map((r: any, idx: number) => {
+      const resolvedUserId: string | undefined = r.user_id || (r.email ? userIdByEmail.get(r.email) : undefined);
+      const avatar: string | null = resolvedUserId
+        ? avatarById.get(resolvedUserId) ?? null
+        : (r.email ? avatarByEmail.get(r.email) ?? null : null);
       return {
-        userId: s.user_id,
-        username: u.username || "",
-        fullName: u.full_name || "",
-        avatar: u.avatar || null,
-        level: Number(s.level || 1),
-        points,
-        xp,
-        coursesCompleted,
-        score,
+        userId: resolvedUserId as string | undefined,
+        email: r.email as string | undefined,
+        name: (r.name || r.email || "Siswa") as string,
+        avatar,
+        invited_at: r.invited_at,
       };
     });
 
-    itemsRaw.sort((a, b) => b.score - a.score);
-    const paged = itemsRaw.slice(from, to + 1).map((it, idx) => ({
-      rank: from + idx + 1,
-      ...it,
+    const resolvedIds = records.map((r) => r.userId).filter(Boolean) as string[];
+    const { data: studentsStats, error: stErr } = resolvedIds.length
+      ? await supabase
+          .from("students")
+          .select("user_id, points")
+          .in("user_id", resolvedIds)
+      : { data: [] as any[], error: null } as any;
+    if (stErr) throw stErr;
+    const pointsById = new Map<string, number>();
+    (studentsStats || []).forEach((s: any) => pointsById.set(s.user_id, Number(s.points || 0)));
+
+    // 4) Sort by points descending (fallback 0) and then by name
+    records.sort((a, b) => {
+      const pa = a.userId ? pointsById.get(a.userId) || 0 : 0;
+      const pb = b.userId ? pointsById.get(b.userId) || 0 : 0;
+      if (pb !== pa) return pb - pa;
+      return a.name.localeCompare(b.name);
+    });
+
+    // 5) Rank + paginate
+    const itemsAll = records.map((r, idx) => ({
+      rank: idx + 1,
+      userId: r.userId || r.email || `school_student_${idx}`,
+      name: r.name,
+      avatar: r.avatar,
+      points: r.userId ? pointsById.get(r.userId) || 0 : 0,
     }));
 
-    return NextResponse.json({ success: true, items: paged, total: itemsRaw.length, page, limit });
+    const totalAll = itemsAll.length;
+    const paged = itemsAll.slice(from, to + 1);
+
+    return NextResponse.json({ success: true, items: paged, total: totalAll, page, limit });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Gagal memuat leaderboard sekolah";
     return NextResponse.json({ success: false, error: msg }, { status: 500 });

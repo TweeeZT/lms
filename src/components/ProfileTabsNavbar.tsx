@@ -20,12 +20,10 @@ const tabs = [
   { id: "scratch-projects", label: "Proyek Scratch", Icon: IconCode },
 ] as const;
 
-export default function ProfileTabsNavbar() {
+  export default function ProfileTabsNavbar({ base = "/user/profile" }: { base?: string }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const active = params?.get("tab") ?? "profile";
-
-  const base = "/user/profile";
 
   return (
     <Card

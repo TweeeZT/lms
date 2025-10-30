@@ -811,16 +811,18 @@ export default function UserProfilePage() {
                   {fullName || user.fullName}
                 </Title>
                 <Stack gap="xs">
-                  <Badge
-                    bg="var(--secondary-color)"
-                    variant="filled"
-                    radius="xl"
-                    c="var(--primary-color)"
-                    style={{ width: "fit-content" }}
-                  >
-                    Tier{" "}
-                    {getTier(currentXP, points, coursesCompleted).toUpperCase()}
-                  </Badge>
+                  {user?.role !== "school" && (
+                    <Badge
+                      bg="var(--secondary-color)"
+                      variant="filled"
+                      radius="xl"
+                      c="var(--primary-color)"
+                      style={{ width: "fit-content" }}
+                    >
+                      Tier{" "}
+                      {getTier(currentXP, points, coursesCompleted).toUpperCase()}
+                    </Badge>
+                  )}
                   <Badge
                     color="var(--secondary-color)"
                     variant="light"
@@ -1029,7 +1031,7 @@ export default function UserProfilePage() {
                 <Skeleton height={300} radius="lg" />
 
                 {/* Leaderboard has its own loading state */}
-                <Leaderboard />
+                {user?.role === "school" ? <SchoolLeaderboard /> : <Leaderboard />}
               </Stack>
             ) : (
               <Stack gap="xl">
@@ -1070,10 +1072,12 @@ export default function UserProfilePage() {
 
                 <CoinBadgeGrid coins={coins} />
 
-                <TierCarouselCard stats={{ coins, points, coursesCompleted }} />
+                {user?.role !== "school" && (
+                  <TierCarouselCard stats={{ coins, points, coursesCompleted }} />
+                )}
 
                 {/* Leaderboard Top 5 */}
-                <Leaderboard />
+                {user?.role === "school" ? <SchoolLeaderboard /> : <Leaderboard />}
               </Stack>
             )}
           </>
@@ -1907,6 +1911,147 @@ function Leaderboard() {
   );
 }
 
+// School-only leaderboard (scoped to the school's students, no tier display)
+function SchoolLeaderboard() {
+  const { user } = useAuth();
+  const [items, setItems] = useState<
+    {
+      rank: number;
+      userId: string;
+      fullName: string;
+      username: string;
+      avatar: string | null;
+      level: number;
+      points: number;
+      xp: number;
+      coursesCompleted: number;
+      score: number;
+    }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!user?.id) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(
+          `/api/school/leaderboard?schoolUserId=${user.id}&limit=${showAll ? 20 : 5}&page=1`
+        );
+        const json = await res.json();
+        if (!res.ok || !json.success)
+          throw new Error(json.error || "Gagal memuat leaderboard sekolah");
+        setItems(json.items || []);
+      } catch (e: unknown) {
+        setError(
+          e instanceof Error ? e.message : "Gagal memuat leaderboard sekolah"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+    run();
+  }, [user?.id, showAll]);
+
+  if (loading) {
+    return (
+      <Card withBorder radius="lg" p="lg">
+        <Stack gap="md">
+          <Title order={3} c="var(--primary-color)">
+            Leaderboard Siswa Sekolah
+          </Title>
+          <Text size="sm" c="dimmed">
+            Urutan berdasarkan rata-rata tiga kategori
+          </Text>
+          <Stack gap="sm">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} height={80} radius="md" />
+            ))}
+          </Stack>
+        </Stack>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card withBorder radius="lg" p="lg">
+        <Text c="red">{error}</Text>
+      </Card>
+    );
+  }
+
+  const top3 = items.slice(0, 3);
+  const rest = items.slice(3);
+
+  return (
+    <Card withBorder radius="xl" p="lg" style={{ background: "var(--card-bg)", position: "relative", overflowX: "auto" }}>
+      <Stack gap="md">
+        <Group justify="space-between" mb="xs" wrap="wrap">
+          <div>
+            <Title order={4} c="var(--primary-color)">
+              Leaderboard Siswa Sekolah
+            </Title>
+            <Text size="sm" c="dimmed">
+              Urutan berdasarkan rata-rata tiga kategori
+            </Text>
+          </div>
+          <Button size="xs" variant="light" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Tampilkan Top 5" : "Lihat Semua"}
+          </Button>
+        </Group>
+
+        {top3.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, alignItems: "end", marginBottom: 16, minWidth: 320 }} className="podium-grid">
+            {top3[1] ? (
+              <PodiumItem rank={2} item={top3.find((i) => i.rank === 2) || top3[1]} height={120} align="end" />
+            ) : (
+              <div />
+            )}
+            <PodiumItem rank={1} item={top3.find((i) => i.rank === 1) || top3[0]} height={160} highlight />
+            {top3[2] ? (
+              <PodiumItem rank={3} item={top3.find((i) => i.rank === 3) || top3[2]} height={110} align="start" />
+            ) : (
+              <div />
+            )}
+          </div>
+        )}
+
+        <Stack gap="sm">
+          {rest.map((it) => (
+            <Group key={it.userId} justify="space-between" wrap="wrap" style={{ border: "1px solid var(--border-color)", borderRadius: 12, padding: 12, background: "#fff", gap: 8 }}>
+              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
+                  {it.rank}
+                </Badge>
+                <Avatar src={it.avatar || undefined} radius="xl" size="md" style={{ flexShrink: 0 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Text fw={600} lineClamp={1} style={{ wordBreak: "break-word" }}>
+                    {it.fullName || it.username}
+                  </Text>
+                  <Text size="xs" c="dimmed" lineClamp={1}>
+                    Skor {Math.floor(it.score)}
+                  </Text>
+                </div>
+              </Group>
+            </Group>
+          ))}
+          {items.length === 0 && <Text c="white">Belum ada data leaderboard</Text>}
+        </Stack>
+      </Stack>
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .podium-grid { gap: 8px !important; min-width: 320px; }
+          .podium-item { min-width: 90px; }
+        }
+      `}</style>
+    </Card>
+  );
+}
 function PodiumItem({
   rank,
   item,

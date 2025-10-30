@@ -83,6 +83,7 @@ export default function SchoolStudentsPage() {
     fetchStudents();
   }, [user?.id, page, search, statusFilter]);
 
+
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter]);

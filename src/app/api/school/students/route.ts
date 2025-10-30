@@ -43,7 +43,7 @@ export async function GET(req: Request) {
 
     const studentsData = data || [];
 
-    // Enrich student rows with avatar from users table when possible
+    // Always join users table to get latest name and avatar
     if (studentsData.length > 0) {
       const userIds = studentsData
         .map((s: any) => s.user_id)
@@ -52,19 +52,20 @@ export async function GET(req: Request) {
       if (userIds.length > 0) {
         const { data: users, error: usersErr } = await supabase
           .from("users")
-          .select("id, avatar")
+          .select("id, full_name, avatar")
           .in("id", userIds);
 
         if (usersErr) throw usersErr;
 
-        const avatarMap: Record<string, string | null> = {};
+        const userMap: Record<string, { full_name: string | null, avatar: string | null }> = {};
         (users || []).forEach((u: any) => {
-          avatarMap[u.id] = u.avatar ?? null;
+          userMap[u.id] = { full_name: u.full_name ?? null, avatar: u.avatar ?? null };
         });
 
         const enriched = studentsData.map((s: any) => ({
           ...s,
-          avatar: avatarMap[s.user_id] ?? null,
+          name: userMap[s.user_id]?.full_name ?? s.name ?? "-",
+          avatar: userMap[s.user_id]?.avatar ?? null,
         }));
 
         return NextResponse.json({

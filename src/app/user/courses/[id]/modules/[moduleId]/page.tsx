@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Container,
@@ -163,6 +163,8 @@ export default function ModuleDetailPage() {
   const [rewardModalOpened, setRewardModalOpened] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [rewardCoins, setRewardCoins] = useState(0);
+  const [redirectAfterReward, setRedirectAfterReward] = useState<string | null>(null);
+  const autoCompleteRef = useRef(false);
 
   // Load module detail
   useEffect(() => {
@@ -456,6 +458,53 @@ export default function ModuleDetailPage() {
     }
   }, [user, moduleId, courseId, router]);
 
+  // Silent auto-complete used when leaving the page (no modal, no redirect)
+  const handleMaterialCompleteSilent = useCallback(async () => {
+    if (!user || !moduleId || !courseId) return;
+    if (autoCompleteRef.current) return; // prevent duplicate calls
+    autoCompleteRef.current = true;
+    try {
+      await fetch(`/api/user/modules/${moduleId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          courseId,
+          action: "auto-complete",
+        }),
+        // ensure request can finish during page unload
+        keepalive: true,
+      });
+    } catch (err) {
+      // ignore errors on silent completion when navigating away
+      console.warn("Silent auto-complete failed (ignored):", err);
+    }
+  }, [user, moduleId, courseId]);
+
+  // For text materials: auto-complete when user leaves the page (back/close)
+  useEffect(() => {
+    if (!detail) return;
+    const moduleDataLocal = detail.module;
+    const isTextMaterial =
+      moduleDataLocal.kind === "materi" && moduleDataLocal.content?.type === "text";
+    const orderedCompletedLocal = new Set(detail.progress.completedModules);
+    const isCompletedLocal = orderedCompletedLocal.has(moduleId);
+    if (!isTextMaterial || isCompletedLocal) return;
+
+    const onLeave = () => {
+      void handleMaterialCompleteSilent();
+    };
+
+    window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("pagehide", onLeave);
+    window.addEventListener("popstate", onLeave);
+    return () => {
+      window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("pagehide", onLeave);
+      window.removeEventListener("popstate", onLeave);
+    };
+  }, [detail, moduleId, handleMaterialCompleteSilent]);
+
   // Handle live session complete
   const handleLiveComplete = useCallback(async () => {
     if (!user || !moduleId || !courseId) return;
@@ -600,13 +649,14 @@ export default function ModuleDetailPage() {
   const orderedCompleted = new Set(detail.progress.completedModules);
   const isCompleted = orderedCompleted.has(moduleId);
 
+
   return (
     <Container size="lg" py="xl">
       <RewardModal
         opened={rewardModalOpened}
         onClose={() => {
           setRewardModalOpened(false);
-          router.push(`/user/courses/${courseId}`);
+          router.push(redirectAfterReward || `/user/courses/${courseId}`);
         }}
         points={rewardPoints}
         coins={rewardCoins}
@@ -618,11 +668,74 @@ export default function ModuleDetailPage() {
           <Button
             variant="subtle"
             leftSection={<IconArrowLeft size={20} />}
-            onClick={() => router.push(`/user/courses/${courseId}`)}
+            onClick={async () => {
+              const target = `/user/courses/${courseId}`;
+              if (
+                moduleData.kind === "materi" &&
+                moduleData.content?.type === "text" &&
+                !isCompleted
+              ) {
+                try {
+                  const res = await fetch(`/api/user/modules/${moduleId}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      userId: user!.id,
+                      courseId,
+                      action: "auto-complete",
+                    }),
+                  });
+                  const json = await res.json();
+                  if (res.ok && json.success && json.rewards) {
+                    setRewardPoints(json.rewards.points || 0);
+                    setRewardCoins(json.rewards.coins || 0);
+                    setRedirectAfterReward(target);
+                    setRewardModalOpened(true);
+                    return;
+                  }
+                } catch (e) {
+                  // ignore and fallback to navigate
+                }
+              }
+              router.push(target);
+            }}
           >
             Kembali ke Kursus
           </Button>
-          <Button variant="light" onClick={() => router.push(`/user/courses`)}>
+          <Button
+            variant="light"
+            onClick={async () => {
+              const target = `/user/courses`;
+              if (
+                moduleData.kind === "materi" &&
+                moduleData.content?.type === "text" &&
+                !isCompleted
+              ) {
+                try {
+                  const res = await fetch(`/api/user/modules/${moduleId}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      userId: user!.id,
+                      courseId,
+                      action: "auto-complete",
+                    }),
+                  });
+                  const json = await res.json();
+                  if (res.ok && json.success && json.rewards) {
+                    setRewardPoints(json.rewards.points || 0);
+                    setRewardCoins(json.rewards.coins || 0);
+                    setRedirectAfterReward(target);
+                    setRewardModalOpened(true);
+                    return;
+                  }
+                } catch (e) {
+                  // ignore and fallback
+                }
+              }
+              router.push(target);
+            }}
+          >
             Kembali ke Kursus Saya
           </Button>
         </Group>
@@ -682,11 +795,9 @@ export default function ModuleDetailPage() {
           {/* MATERI */}
           {moduleData.kind === "materi" && moduleData.content && (
             <>
-              <MaterialContent
-                content={moduleData.content}
-                onAutoComplete={() => {}} // Disabled auto-complete
-              />
-              {!isCompleted && (
+              <MaterialContent content={moduleData.content} />
+              {/* For text materials, hide the manual complete button. */}
+              {!isCompleted && moduleData.content?.type !== "text" && (
                 <>
                   <Divider my="lg" />
                   <Button

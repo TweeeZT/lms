@@ -85,6 +85,10 @@ export default function NewModulePage() {
   const [liveJoinUrl, setLiveJoinUrl] = useState("");
   const [livePasscode, setLivePasscode] = useState("");
 
+  // Rewards
+  const [coins, setCoins] = useState<number | "">(0);
+  const [points, setPoints] = useState<number | "">(0);
+
   // addQuestion logic now inline in button handler
   const removeQuestion = (idx: number) => {
     setQuestions((qs) => qs.filter((_, i) => i !== idx));
@@ -116,6 +120,9 @@ export default function NewModulePage() {
         if (textContent) fd.set("text_content", textContent);
         fd.set("file", file);
         fd.set("filename", file.name);
+        // rewards
+        fd.set("coins", String(coins || 0));
+        fd.set("points", String(points || 0));
         res = await fetch(
           `/api/instructor/courses/${id}/modules?instructorId=${user.id}`,
           {
@@ -130,6 +137,9 @@ export default function NewModulePage() {
           module_kind: safeKind,
           is_published: isPublished,
         };
+        // rewards in JSON
+        payload.coins = Number(coins || 0);
+        payload.points = Number(points || 0);
         if (safeKind === "materi") {
           payload.content = {
             content_type: contentType,
@@ -590,6 +600,22 @@ export default function NewModulePage() {
                   required
                 />
               )}
+              {/* Rewards inputs */}
+              <Divider label="Reward" />
+              <SimpleGrid cols={2} mt="md">
+                <NumberInput
+                  label="Koin (coins)"
+                  value={coins}
+                  onChange={(v) => setCoins(typeof v === "number" ? v : "")}
+                  min={0}
+                />
+                <NumberInput
+                  label="Poin (points)"
+                  value={points}
+                  onChange={(v) => setPoints(typeof v === "number" ? v : "")}
+                  min={0}
+                />
+              </SimpleGrid>
               <Group justify="flex-end" mt="md">
                 <Button
                   type="submit"

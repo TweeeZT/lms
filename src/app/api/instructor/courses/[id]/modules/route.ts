@@ -118,6 +118,9 @@ export async function POST(
     let description: string | null = null;
     let module_kind: "materi" | "quiz" | "tugas" | "live" = "materi";
     let is_published = true;
+  // rewards
+  let coins: number | undefined;
+  let points: number | undefined;
 
     // Materi specifics
     let content_type: string | undefined; // 'video','pdf','ppt','image','link','file','text'
@@ -167,6 +170,15 @@ export async function POST(
         module_kind = kindVal;
       }
       is_published = String(form.get("is_published") || "true") === "true";
+      // rewards
+      if (form.get("coins") !== null) {
+        const v = Number(form.get("coins"));
+        coins = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
+      if (form.get("points") !== null) {
+        const v = Number(form.get("points"));
+        points = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
 
       content_type = (form.get("content_type") as string) || undefined;
       url = (form.get("url") as string) || undefined;
@@ -202,6 +214,15 @@ export async function POST(
       is_published = Boolean(
         typeof body.is_published === "boolean" ? body.is_published : true
       );
+      // rewards
+      if (Object.prototype.hasOwnProperty.call(body, "coins")) {
+        const v = Number((body as any).coins);
+        coins = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "points")) {
+        const v = Number((body as any).points);
+        points = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
 
       if (module_kind === "materi") {
         const content = body.content as
@@ -299,6 +320,8 @@ export async function POST(
       description,
       module_kind,
       is_published,
+      coins: coins ?? 0,
+      points: points ?? 0,
     });
     if (modErr) {
       return NextResponse.json(

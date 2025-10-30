@@ -13,6 +13,8 @@ import {
   Radio,
   FileInput,
   NumberInput,
+  Divider,
+  SimpleGrid,
   Alert,
   Text,
 } from "@mantine/core";
@@ -72,6 +74,9 @@ export default function EditModulePage() {
   const [liveStartAt, setLiveStartAt] = useState<Date | null>(null);
   const [liveJoinUrl, setLiveJoinUrl] = useState("");
   const [livePasscode, setLivePasscode] = useState("");
+  // Rewards
+  const [coins, setCoins] = useState<number | "">(0);
+  const [points, setPoints] = useState<number | "">(0);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -94,12 +99,16 @@ export default function EditModulePage() {
           order_index: number;
           is_published: boolean | null;
           module_kind: "materi" | "quiz" | "tugas" | "live";
+          coins?: number | null;
+          points?: number | null;
         };
         setTitle(m.title || "");
         setDescription(m.description || "");
         setOrderIndex(m.order_index || 0);
         setIsPublished(Boolean(m.is_published));
         setModuleKind(m.module_kind);
+        setCoins(typeof m.coins === "number" ? m.coins : 0);
+        setPoints(typeof m.points === "number" ? m.points : 0);
         if (m.module_kind === "materi") {
           const contentArr = json.detail as Array<{
             id: string;
@@ -229,6 +238,9 @@ export default function EditModulePage() {
         if (textContent) fd.set("text_content", textContent);
         fd.set("file", file);
         fd.set("filename", file.name);
+        // rewards
+        fd.set("coins", String(coins || 0));
+        fd.set("points", String(points || 0));
         const res = await fetch(baseUrl, { method: "PATCH", body: fd });
         const json = await res.json();
         if (!res.ok || !json.success)
@@ -240,6 +252,8 @@ export default function EditModulePage() {
           order_index: orderIndex,
           is_published: isPublished,
         };
+        payload.coins = Number(coins || 0);
+        payload.points = Number(points || 0);
         if (moduleKind === "materi") {
           payload.content = {
             content_type: contentType,
@@ -344,8 +358,8 @@ export default function EditModulePage() {
                 strokeWidth="8"
                 rx="4"
                 ry="4"
-                transform="rotate(45 32 32)"
-              />
+                transform="rotate(45 32 32)" />
+
               <defs>
                 <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#f6d457" />
@@ -808,6 +822,23 @@ export default function EditModulePage() {
                   </Stack>
                 </Paper>
               )}
+
+              {/* Rewards inputs */}
+              <Divider label="Reward" />
+              <SimpleGrid cols={2} mt="md">
+                <NumberInput
+                  label="Koin (coins)"
+                  value={coins}
+                  onChange={(v) => setCoins(typeof v === "number" ? v : "")}
+                  min={0}
+                />
+                <NumberInput
+                  label="Poin (points)"
+                  value={points}
+                  onChange={(v) => setPoints(typeof v === "number" ? v : "")}
+                  min={0}
+                />
+              </SimpleGrid>
 
               {error && (
                 <TextInput

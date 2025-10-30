@@ -24,7 +24,7 @@ export async function GET(
     // Load module and ensure ownership via course
     const { data: mod, error: mErr } = await supabase
       .from("modules")
-      .select("id, course_id, title, description, module_kind, is_published")
+      .select("id, course_id, title, description, module_kind, is_published, coins, points")
       .eq("id", moduleId)
       .maybeSingle();
     if (mErr) throw mErr;
@@ -139,7 +139,7 @@ export async function PATCH(
       );
     }
 
-    const contentType = req.headers.get("content-type") || "";
+  const contentType = req.headers.get("content-type") || "";
     const allowed: Record<string, unknown> = {};
     let newFilePath: string | undefined;
 
@@ -152,6 +152,15 @@ export async function PATCH(
       if (title) allowed.title = title;
       if (description) allowed.description = description;
       allowed.is_published = is_published;
+      // rewards via multipart
+      if (form.get("coins") !== null) {
+        const v = Number(form.get("coins"));
+        allowed.coins = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
+      if (form.get("points") !== null) {
+        const v = Number(form.get("points"));
+        allowed.points = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
 
       // For materi file replacement
       const f = form.get("file");
@@ -248,6 +257,14 @@ export async function PATCH(
         if (Object.prototype.hasOwnProperty.call(body, f)) {
           allowed[f] = body[f] as unknown;
         }
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "coins")) {
+        const v = Number((body as any).coins);
+        allowed.coins = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "points")) {
+        const v = Number((body as any).points);
+        allowed.points = Number.isFinite(v) && v >= 0 ? v : 0;
       }
       // Handle materi content via JSON (no file upload) e.g. text/link update
       if (

@@ -1,4 +1,6 @@
 "use client";
+
+
 import dynamic from "next/dynamic";
 
 const UserProfilePage = dynamic(() => import("../../user/profile/page"), {

@@ -12,18 +12,23 @@ import {
   IconCode,
 } from "@tabler/icons-react";
 
-const tabs = [
+
+type TabId = "profile" | "achievements" | "purchases" | "certificates" | "scratch-projects";
+const allTabs: { id: TabId; label: string; Icon: any }[] = [
   { id: "profile", label: "Profil", Icon: IconUser },
   { id: "achievements", label: "Pencapaian", Icon: IconTrophy },
   { id: "purchases", label: "Pembelian", Icon: IconReceipt2 },
   { id: "certificates", label: "Sertifikat", Icon: IconCertificate },
   { id: "scratch-projects", label: "Proyek Scratch", Icon: IconCode },
-] as const;
+];
 
-  export default function ProfileTabsNavbar({ base = "/user/profile" }: { base?: string }) {
+export default function ProfileTabsNavbar({ base = "/user/profile", visibleTabs }: { base?: string; visibleTabs?: TabId[] }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const active = params?.get("tab") ?? "profile";
+  const tabs = visibleTabs
+    ? allTabs.filter((tab) => visibleTabs.includes(tab.id))
+    : allTabs;
 
   return (
     <Card

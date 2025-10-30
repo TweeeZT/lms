@@ -249,7 +249,7 @@ export default function SchoolDashboard() {
                 size="xs"
                 variant="light"
                 component="a"
-                href="/school/transactions"
+                href="/school/profile?tab=purchases"
                 style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}
               >
                 Lihat Selengkapnya

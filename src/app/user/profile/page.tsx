@@ -514,9 +514,13 @@ export default function UserProfilePage() {
 
         // transactions (latest, prefer completed/paid)
         setPurchasesLoading(true);
-        const tr = await fetch(
-          `/api/user/transactions?userId=${user.id}&page=${txPage}&limit=${txLimit}&sortBy=date&sortDir=desc`
-        );
+        let txUrl = "";
+        if (user?.role === "school") {
+          txUrl = `/api/school/transactions?schoolId=${user.id}&page=${txPage}&limit=${txLimit}&sortBy=date&sortDir=desc`;
+        } else {
+          txUrl = `/api/user/transactions?userId=${user.id}&page=${txPage}&limit=${txLimit}&sortBy=date&sortDir=desc`;
+        }
+        const tr = await fetch(txUrl);
         const tj = await tr.json();
         if (tr.ok && tj.success) {
           type ApiTx = {
@@ -811,18 +815,15 @@ export default function UserProfilePage() {
                   {fullName || user.fullName}
                 </Title>
                 <Stack gap="xs">
-                  {user?.role !== "school" && (
-                    <Badge
-                      bg="var(--secondary-color)"
-                      variant="filled"
-                      radius="xl"
-                      c="var(--primary-color)"
-                      style={{ width: "fit-content" }}
-                    >
-                      Tier{" "}
-                      {getTier(currentXP, points, coursesCompleted).toUpperCase()}
-                    </Badge>
-                  )}
+                  <Badge
+                    bg="var(--secondary-color)"
+                    variant="filled"
+                    radius="xl"
+                    c="var(--primary-color)"
+                    style={{ width: "fit-content" }}
+                  >
+                    Tier {getTier(currentXP, points, coursesCompleted).toUpperCase()}
+                  </Badge>
                   <Badge
                     color="var(--secondary-color)"
                     variant="light"

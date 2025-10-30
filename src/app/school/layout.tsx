@@ -32,11 +32,25 @@ export default function SchoolLayout({
     return null;
   }
 
+  // Show custom tab menu only on /school/profile
+  const showProfileTabs = pathname?.startsWith("/school/profile");
+  const ProfileTabsNavbar = showProfileTabs
+    ? require("../../components/ProfileTabsNavbar").default
+    : null;
+
+  // Only show allowed tabs for school profile
+  const schoolTabs = ["profile", "purchases"];
+
   return (
     <DashboardLayout
       user={user}
       onLogout={logout}
-      hideNavbar={Boolean(pathname?.startsWith("/school/profile"))}
+      hideNavbar={false}
+      customNavbar={
+        showProfileTabs && ProfileTabsNavbar ? (
+          <ProfileTabsNavbar base="/school/profile" visibleTabs={schoolTabs} />
+        ) : undefined
+      }
     >
       {children}
     </DashboardLayout>

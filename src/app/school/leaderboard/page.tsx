@@ -24,7 +24,7 @@ type LeaderboardItem = {
   userId: string;
   name: string;
   avatar: string | null;
-  points?: number;
+  score?: number;
 };
 
 function normalizeAvatar(url?: string | null): string | undefined {
@@ -51,10 +51,10 @@ export default function SchoolLeaderboardPage() {
   useEffect(() => {
     const load = async () => {
       if (!user?.id) return;
+
       setLoading(true);
       try {
         const qs = new URLSearchParams({
-          schoolUserId: user.id,
           limit: String(limit),
           page: String(page),
         }).toString();
@@ -72,7 +72,7 @@ export default function SchoolLeaderboardPage() {
       }
     };
     load();
-  }, [user?.id, page, limit]);
+  }, [user?.id, user?.role, page, limit]);
 
   const top3 = useMemo(() => {
     const arr = items.slice(0, 3);
@@ -98,135 +98,260 @@ export default function SchoolLeaderboardPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6">
-      <Group justify="space-between" mb="lg">
+    <div className="container mx-auto px-4 py-6" style={{ maxWidth: "1200px" }}>
+      <Group justify="space-between" mb="xl">
         <div>
-          <Text fw={700} size="lg">
-            Leaderboard Siswa
+          <Text fw={700} size="xl" mb={4}>
+            Leaderboard Sekolah
           </Text>
           <Text size="sm" c="dimmed">
-            Urutan berdasarkan rata-rata tiga kategori
+            Peringkat sekolah berdasarkan total skor siswa: (Total Poin + Total
+            Koin) ÷ 2
           </Text>
         </div>
       </Group>
 
-      {/* Empty state */}
-      {!loading && items.length === 0 && (
+      {/* Access denied for non-school users */}
+      {!loading && user?.role !== "school" && (
         <Card withBorder radius="lg" p="xl" mt="md">
           <Center>
             <Stack gap={6} align="center">
-              <Text fw={600}>Belum ada data leaderboard</Text>
+              <Text fw={600} c="red">
+                Akses Ditolak
+              </Text>
               <Text size="sm" c="dimmed" ta="center">
-                Pastikan sudah menambahkan siswa ke sekolah ini dan siswa memiliki progres/poin.
+                Halaman ini hanya dapat diakses oleh akun sekolah.
               </Text>
             </Stack>
           </Center>
         </Card>
       )}
 
-  {/* Podium top 3 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-16">
-        {loading
-          ? [0, 1, 2].map((i) => (
-              <Card key={i} radius="lg" withBorder>
-                <Skeleton height={120} />
-              </Card>
-            ))
-          : top3.map((item, idx) => (
-              <Card
-                key={item.userId}
-                radius="lg"
-                withBorder
-                style={{
-                  background:
-                    idx === 1
-                      ? "linear-gradient(180deg,#ffe082,#fff8e1)"
-                      : idx === 0
-                      ? "linear-gradient(180deg,#eceff1,#ffffff)"
-                      : "linear-gradient(180deg,#f8e1c7,#fff)",
-                }}
+      {/* Empty state */}
+      {!loading && user?.role === "school" && items.length === 0 && (
+        <Card withBorder radius="lg" p="xl" mt="md">
+          <Center>
+            <Stack gap={6} align="center">
+              <Text fw={600}>Belum ada data leaderboard</Text>
+              <Text size="sm" c="dimmed" ta="center">
+                Belum ada sekolah yang memiliki siswa dengan poin/koin.
+              </Text>
+            </Stack>
+          </Center>
+        </Card>
+      )}
+
+      {/* Only show content for school role */}
+      {user?.role === "school" && items.length > 0 && (
+        <>
+          {/* Podium top 3 - improved responsive design */}
+          <div style={{ marginBottom: "3rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                gap: "1.5rem",
+                alignItems: "end",
+                maxWidth: "900px",
+                margin: "0 auto",
+              }}
+            >
+              {loading
+                ? [0, 1, 2].map((i) => (
+                    <Card key={i} radius="lg" withBorder>
+                      <Skeleton height={180} />
+                    </Card>
+                  ))
+                : top3.map((item, idx) => {
+                    // Visual order: [2nd, 1st, 3rd]
+                    const actualRank = idx === 1 ? 1 : idx === 0 ? 2 : 3;
+                    const isFirst = actualRank === 1;
+                    const isSecond = actualRank === 2;
+                    const isThird = actualRank === 3;
+
+                    return (
+                      <Card
+                        key={item.userId}
+                        radius="lg"
+                        withBorder
+                        p="xl"
+                        style={{
+                          background: isFirst
+                            ? "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)"
+                            : isSecond
+                            ? "linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%)"
+                            : "linear-gradient(135deg, #CD7F32 0%, #B8860B 100%)",
+                          minHeight: isFirst ? "280px" : "240px",
+                          marginTop: isFirst ? "0" : "2rem",
+                          transform: isFirst ? "scale(1.05)" : "scale(1)",
+                          transition: "all 0.3s ease",
+                          boxShadow: isFirst
+                            ? "0 10px 30px rgba(255, 215, 0, 0.4)"
+                            : "0 4px 12px rgba(0,0,0,0.1)",
+                        }}
+                      >
+                        <Stack align="center" gap="md">
+                          {isFirst && (
+                            <IconCrown
+                              size={36}
+                              color="#FFF"
+                              style={{
+                                filter:
+                                  "drop-shadow(0 2px 4px rgba(0,0,0,0.3))",
+                              }}
+                            />
+                          )}
+                          <Badge
+                            size="xl"
+                            variant="filled"
+                            style={{
+                              backgroundColor: "rgba(255,255,255,0.9)",
+                              color: isFirst
+                                ? "#FFD700"
+                                : isSecond
+                                ? "#A8A8A8"
+                                : "#CD7F32",
+                              fontWeight: 700,
+                              fontSize: "1.1rem",
+                              padding: "0.5rem 1rem",
+                            }}
+                          >
+                            #{actualRank}
+                          </Badge>
+                          <Avatar
+                            size={isFirst ? 90 : 70}
+                            radius="xl"
+                            src={normalizeAvatar(item.avatar)}
+                            style={{
+                              border: "5px solid white",
+                              boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+                            }}
+                          >
+                            {item.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .toUpperCase()}
+                          </Avatar>
+                          <div style={{ textAlign: "center" }}>
+                            <Text
+                              fw={700}
+                              size={isFirst ? "xl" : "lg"}
+                              c="white"
+                              style={{
+                                textShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                                marginBottom: "0.5rem",
+                              }}
+                            >
+                              {item.name}
+                            </Text>
+                            {typeof item.score === "number" && (
+                              <Badge
+                                variant="light"
+                                size="lg"
+                                style={{
+                                  backgroundColor: "rgba(255,255,255,0.95)",
+                                  fontWeight: 600,
+                                  fontSize: isFirst ? "1rem" : "0.9rem",
+                                }}
+                              >
+                                {Math.round(item.score)} skor
+                              </Badge>
+                            )}
+                          </div>
+                        </Stack>
+                      </Card>
+                    );
+                  })}
+            </div>
+          </div>
+
+          {/* Table list */}
+          <Card
+            withBorder
+            radius="lg"
+            p={0}
+            style={{ overflow: "hidden" }}
+            mt="md"
+          >
+            <Table
+              striped
+              highlightOnHover
+              verticalSpacing="md"
+              horizontalSpacing="md"
+            >
+              <Table.Thead
+                style={{ background: "var(--mantine-color-gray-0)" }}
               >
-                <Stack align="center" gap={8}>
-                  {idx === 1 && <IconCrown size={22} color="#f1b821" />}
-                  <Avatar
-                    size={64}
-                    radius="xl"
-                    src={normalizeAvatar(item.avatar)}
-                  >
-                    {item.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .toUpperCase()}
-                  </Avatar>
-                  <Text fw={700} ta="center">
-                    {item.name}
-                  </Text>
-                  {typeof item.points === "number" && (
-                    <Badge variant="light">{item.points} poin</Badge>
-                  )}
-                </Stack>
-              </Card>
-            ))}
-      </div>
+                <Table.Tr>
+                  <Table.Th style={{ width: 92 }}>Peringkat</Table.Th>
+                  <Table.Th>Sekolah</Table.Th>
+                  <Table.Th style={{ width: 120, textAlign: "right" }}>
+                    Total Skor
+                  </Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {loading
+                  ? Array.from({ length: 5 }).map((_, i) => (
+                      <Table.Tr key={i}>
+                        <Table.Td>
+                          <Skeleton height={24} w={56} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={28} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={24} />
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
+                  : items.map((item) => (
+                      <Table.Tr key={item.userId}>
+                        <Table.Td>
+                          <Badge
+                            variant="filled"
+                            style={getRankBadgeStyle(item.rank)}
+                          >
+                            {item.rank}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap={12}>
+                            <Avatar
+                              src={normalizeAvatar(item.avatar)}
+                              radius="xl"
+                            >
+                              {item.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()}
+                            </Avatar>
+                            <Text fw={600}>{item.name}</Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text fw={600}>
+                            {typeof item.score === "number"
+                              ? Math.round(item.score)
+                              : 0}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+              </Table.Tbody>
+            </Table>
+          </Card>
 
-      {/* Table list */}
-      <Card withBorder radius="lg" p={0} style={{ overflow: "hidden" }} mt="md">
-        <Table striped highlightOnHover verticalSpacing="md" horizontalSpacing="md">
-          <Table.Thead style={{ background: "var(--mantine-color-gray-0)" }}>
-            <Table.Tr>
-              <Table.Th style={{ width: 92 }}>Peringkat</Table.Th>
-              <Table.Th>Siswa</Table.Th>
-              <Table.Th style={{ width: 120, textAlign: "right" }}>Poin</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {loading
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <Table.Tr key={i}>
-                    <Table.Td>
-                      <Skeleton height={24} w={56} />
-                    </Table.Td>
-                    <Table.Td>
-                      <Skeleton height={28} />
-                    </Table.Td>
-                    <Table.Td>
-                      <Skeleton height={24} />
-                    </Table.Td>
-                  </Table.Tr>
-                ))
-              : items.map((item) => (
-                  <Table.Tr key={item.userId}>
-                    <Table.Td>
-                      <Badge variant="filled" style={getRankBadgeStyle(item.rank)}>
-                        {item.rank}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap={12}>
-                        <Avatar src={normalizeAvatar(item.avatar)} radius="xl">
-                          {item.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")
-                            .toUpperCase()}
-                        </Avatar>
-                        <Text fw={600}>{item.name}</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td style={{ textAlign: "right" }}>
-                      <Text fw={600}>{typeof item.points === "number" ? item.points : 0}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-          </Table.Tbody>
-        </Table>
-      </Card>
-
-      {/* Pagination */}
-      <Group justify="center" mt="lg">
-        <Pagination value={page} onChange={setPage} total={totalPages} />
-      </Group>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <Group justify="center" mt="xl">
+              <Pagination value={page} onChange={setPage} total={totalPages} />
+            </Group>
+          )}
+        </>
+      )}
     </div>
   );
 }

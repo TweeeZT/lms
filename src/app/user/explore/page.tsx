@@ -348,20 +348,6 @@ export default function UserExplorePage() {
           </SimpleGrid>
         )}
 
-        {items.length === 0 && !loading && (
-          <Card padding="xl" radius="md">
-            <Stack align="center" gap="md">
-              <IconBook size="3rem" color="gray" />
-              <Text size="lg" c="dimmed">
-                Tidak ada kursus ditemukan
-              </Text>
-              <Text size="sm" c="dimmed" ta="center">
-                Coba ubah filter atau kata kunci pencarian Anda
-              </Text>
-            </Stack>
-          </Card>
-        )}
-
         {total > limit && (
           <Group justify="center" mt="lg">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

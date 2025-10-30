@@ -105,11 +105,14 @@ export async function POST(
 
     const contentTypeHeader = req.headers.get("content-type") || "";
 
-    // Normalized core fields
+  // Normalized core fields
     let title = "";
     let description: string | null = null;
     let module_kind: "materi" | "quiz" | "tugas" | "live" = "materi";
     let is_published = true;
+  // Rewards
+  let coins: number | undefined;
+  let points: number | undefined;
 
     // Materi
     let content_type: string | undefined;
@@ -160,6 +163,15 @@ export async function POST(
         module_kind = "materi";
       }
       is_published = String(form.get("is_published") || "true") === "true";
+      // rewards (optional)
+      if (form.get("coins") !== null) {
+        const v = Number(form.get("coins"));
+        if (Number.isFinite(v) && v >= 0) coins = v; else coins = 0;
+      }
+      if (form.get("points") !== null) {
+        const v = Number(form.get("points"));
+        if (Number.isFinite(v) && v >= 0) points = v; else points = 0;
+      }
       if (module_kind === "materi") {
         content_type = (form.get("content_type") as string) || undefined;
         url = (form.get("url") as string) || undefined;
@@ -206,6 +218,15 @@ export async function POST(
       description = (body.description || "").trim() || null;
       module_kind = body.module_kind || "materi";
       is_published = body.is_published !== false;
+      // rewards (optional)
+      if (Object.prototype.hasOwnProperty.call(body, "coins")) {
+        const v = Number(body.coins);
+        coins = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "points")) {
+        const v = Number(body.points);
+        points = Number.isFinite(v) && v >= 0 ? v : 0;
+      }
       if (module_kind === "materi") {
         const c = body.content || {};
         content_type = c.content_type;
@@ -267,6 +288,8 @@ export async function POST(
       description,
       module_kind,
       is_published,
+      coins: coins ?? 0,
+      points: points ?? 0,
     });
     if (modErr) {
       const meta = extractPgError(modErr);

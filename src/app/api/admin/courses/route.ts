@@ -260,7 +260,8 @@ export async function POST(req: NextRequest) {
       .from("courses")
       .insert(insertPayload)
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, total_modules, points, enrolled_count, rating, is_published, created_at, updated_at"
+        // removed total_modules from select (column no longer exists)
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, points, enrolled_count, rating, is_published, created_at, updated_at"
       )
       .single();
     if (error) {

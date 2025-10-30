@@ -19,7 +19,8 @@ async function fetchModule(moduleId: string) {
   const { data: mod, error: modErr } = await supabaseAdmin
     .from("modules")
     .select(
-      "id, course_id, title, description, module_kind, is_published, created_at, updated_at"
+      // include reward fields coins and points
+      "id, course_id, title, description, module_kind, is_published, coins, points, created_at, updated_at"
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -196,6 +197,14 @@ export async function PATCH(
     if ("title" in body) baseUpdate.title = body.title;
     if ("description" in body) baseUpdate.description = body.description;
     if ("is_published" in body) baseUpdate.is_published = body.is_published;
+    if (Object.prototype.hasOwnProperty.call(body, "coins")) {
+      const v = Number(body.coins);
+      baseUpdate.coins = Number.isFinite(v) && v >= 0 ? v : 0;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "points")) {
+      const v = Number(body.points);
+      baseUpdate.points = Number.isFinite(v) && v >= 0 ? v : 0;
+    }
 
     if (Object.keys(baseUpdate).length) {
       const { error: modUpErr } = await supabaseAdmin

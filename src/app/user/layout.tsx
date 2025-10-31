@@ -35,6 +35,21 @@ export default function UserLayout({
     return <PrimeLoader />;
   }
 
+  // User tabs (exclude leaderboard - only for school)
+  const userTabs: (
+    | "profile"
+    | "achievements"
+    | "purchases"
+    | "certificates"
+    | "scratch-projects"
+  )[] = [
+    "profile",
+    "achievements",
+    "purchases",
+    "certificates",
+    "scratch-projects",
+  ];
+
   return (
     <DashboardLayout
       user={user}
@@ -46,7 +61,7 @@ export default function UserLayout({
       }
       customNavbar={
         pathname?.startsWith("/user/profile") ? (
-          <ProfileTabsNavbar />
+          <ProfileTabsNavbar visibleTabs={userTabs} />
         ) : undefined
       }
     >

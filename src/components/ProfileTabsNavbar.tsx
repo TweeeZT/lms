@@ -10,19 +10,32 @@ import {
   IconReceipt2,
   IconCertificate,
   IconCode,
+  IconAward,
 } from "@tabler/icons-react";
 
-
-type TabId = "profile" | "achievements" | "purchases" | "certificates" | "scratch-projects";
+type TabId =
+  | "profile"
+  | "achievements"
+  | "purchases"
+  | "leaderboard"
+  | "certificates"
+  | "scratch-projects";
 const allTabs: { id: TabId; label: string; Icon: any }[] = [
   { id: "profile", label: "Profil", Icon: IconUser },
   { id: "achievements", label: "Pencapaian", Icon: IconTrophy },
   { id: "purchases", label: "Pembelian", Icon: IconReceipt2 },
+  { id: "leaderboard", label: "Leaderboard", Icon: IconAward },
   { id: "certificates", label: "Sertifikat", Icon: IconCertificate },
   { id: "scratch-projects", label: "Proyek Scratch", Icon: IconCode },
 ];
 
-export default function ProfileTabsNavbar({ base = "/user/profile", visibleTabs }: { base?: string; visibleTabs?: TabId[] }) {
+export default function ProfileTabsNavbar({
+  base = "/user/profile",
+  visibleTabs,
+}: {
+  base?: string;
+  visibleTabs?: TabId[];
+}) {
   const pathname = usePathname();
   const params = useSearchParams();
   const active = params?.get("tab") ?? "profile";

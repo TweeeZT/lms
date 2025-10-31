@@ -13,6 +13,20 @@ export async function GET(req: Request) {
     const level = searchParams.get("level") || "";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "12");
+    const userId = searchParams.get("userId") || "";
+
+    // First, get courses that user has already purchased (in school_progress)
+    let purchasedCourseIds: string[] = [];
+    if (userId) {
+      const { data: progressData } = await supabase
+        .from("school_progress")
+        .select("course_id")
+        .eq("user_id", userId);
+
+      if (progressData && progressData.length > 0) {
+        purchasedCourseIds = progressData.map((p: any) => p.course_id);
+      }
+    }
 
     // Get all published courses and join instructor user (instructor_id -> users)
     let query = supabase
@@ -23,6 +37,11 @@ export async function GET(req: Request) {
         { count: "exact" }
       )
       .eq("is_published", true);
+
+    // Exclude courses that user has already purchased
+    if (purchasedCourseIds.length > 0) {
+      query = query.not("id", "in", `(${purchasedCourseIds.join(",")})`);
+    }
 
     if (search) {
       query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);

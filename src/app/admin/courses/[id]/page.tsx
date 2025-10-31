@@ -53,7 +53,7 @@ interface ModuleItem {
   course_id: string;
   title: string;
   description: string | null;
-  module_kind: "materi" | "quiz" | "tugas" | "live";
+  module_kind: "materi" | "quiz" | "tugas" | "live" | "overview";
   is_published: boolean | null;
   created_at?: string;
   updated_at?: string;
@@ -64,6 +64,7 @@ const kindLabels: Record<string, string> = {
   quiz: "Kuis",
   tugas: "Tugas",
   live: "Kelas Live",
+  overview: "Pengantar",
 };
 
 const levelLabels: Record<string, string> = {
@@ -246,7 +247,11 @@ export default function AdminCourseDetailPage() {
                                         ? "grape"
                                         : m.module_kind === "tugas"
                                         ? "orange"
-                                        : "pink"
+                                        : m.module_kind === "live"
+                                        ? "pink"
+                                        : m.module_kind === "overview"
+                                        ? "cyan"
+                                        : "gray"
                                     }
                                   >
                                     {kindLabels[m.module_kind] || m.module_kind}
@@ -268,32 +273,34 @@ export default function AdminCourseDetailPage() {
                                 )}
                               </Stack>
                             </Group>
-                            <Group gap={6}>
-                              <Tooltip label="Edit Modul">
-                                <ActionIcon
-                                  variant="light"
-                                  color="blue"
-                                  size="lg"
-                                  onClick={() =>
-                                    router.push(
-                                      `/admin/courses/${course.id}/modules/${m.id}/edit`
-                                    )
-                                  }
-                                >
-                                  <IconPencil size="1.1rem" />
-                                </ActionIcon>
-                              </Tooltip>
-                              <Tooltip label="Hapus Modul">
-                                <ActionIcon
-                                  variant="light"
-                                  color="red"
-                                  size="lg"
-                                  onClick={() => setShowDelete(m)}
-                                >
-                                  <IconTrash size="1.1rem" />
-                                </ActionIcon>
-                              </Tooltip>
-                            </Group>
+                            {m.module_kind !== "overview" && (
+                              <Group gap={6}>
+                                <Tooltip label="Edit Modul">
+                                  <ActionIcon
+                                    variant="light"
+                                    color="blue"
+                                    size="lg"
+                                    onClick={() =>
+                                      router.push(
+                                        `/admin/courses/${course.id}/modules/${m.id}/edit`
+                                      )
+                                    }
+                                  >
+                                    <IconPencil size="1.1rem" />
+                                  </ActionIcon>
+                                </Tooltip>
+                                <Tooltip label="Hapus Modul">
+                                  <ActionIcon
+                                    variant="light"
+                                    color="red"
+                                    size="lg"
+                                    onClick={() => setShowDelete(m)}
+                                  >
+                                    <IconTrash size="1.1rem" />
+                                  </ActionIcon>
+                                </Tooltip>
+                              </Group>
+                            )}
                           </Group>
                         </Card>
                       );

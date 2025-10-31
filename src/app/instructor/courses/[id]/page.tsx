@@ -53,7 +53,7 @@ interface ModuleItem {
   course_id: string;
   title: string;
   description: string | null;
-  module_kind: "materi" | "quiz" | "tugas" | "live";
+  module_kind: "materi" | "quiz" | "tugas" | "live" | "overview";
   is_published: boolean | null;
   created_at?: string;
   updated_at?: string;
@@ -64,6 +64,7 @@ const kindLabels: Record<string, string> = {
   quiz: "Kuis",
   tugas: "Tugas",
   live: "Kelas Live",
+  overview: "Pengantar",
 };
 
 const levelLabels: Record<string, string> = {
@@ -162,6 +163,8 @@ export default function InstructorCourseDetailPage() {
         return "orange";
       case "live":
         return "pink";
+      case "overview":
+        return "cyan";
       default:
         return "gray";
     }
@@ -402,33 +405,35 @@ export default function InstructorCourseDetailPage() {
                       </Stack>
                     </Group>
 
-                    {/* Actions */}
-                    <Group gap="xs">
-                      <Tooltip label="Edit Modul">
-                        <ActionIcon
-                          variant="light"
-                          color="blue"
-                          size="lg"
-                          onClick={() =>
-                            router.push(
-                              `/instructor/courses/${courseId}/modules/${mod.id}/edit`
-                            )
-                          }
-                        >
-                          <IconPencil size="1.1rem" />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Tooltip label="Hapus Modul">
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          size="lg"
-                          onClick={() => setShowDelete(mod)}
-                        >
-                          <IconTrash size="1.1rem" />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    {/* Actions (hidden for overview module) */}
+                    {mod.module_kind !== "overview" && (
+                      <Group gap="xs">
+                        <Tooltip label="Edit Modul">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            size="lg"
+                            onClick={() =>
+                              router.push(
+                                `/instructor/courses/${courseId}/modules/${mod.id}/edit`
+                              )
+                            }
+                          >
+                            <IconPencil size="1.1rem" />
+                          </ActionIcon>
+                        </Tooltip>
+                        <Tooltip label="Hapus Modul">
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            size="lg"
+                            onClick={() => setShowDelete(mod)}
+                          >
+                            <IconTrash size="1.1rem" />
+                          </ActionIcon>
+                        </Tooltip>
+                      </Group>
+                    )}
                   </Group>
                 </Card>
               );

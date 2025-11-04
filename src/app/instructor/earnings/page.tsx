@@ -840,153 +840,155 @@ export default function InstructorEarningsPage() {
               miw={260}
             />
           </Group>
-          <Table highlightOnHover withTableBorder withRowBorders>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>
-                  <Group gap={6} wrap="nowrap">
-                    <span>Tanggal</span>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      onClick={() => toggleSort("date")}
-                    >
-                      <IconArrowsSort size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Th>
-                <Table.Th>
-                  <Group gap={6} wrap="nowrap">
-                    <span>Kursus</span>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      onClick={() => toggleSort("course_title")}
-                    >
-                      <IconArrowsSort size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Th>
-                <Table.Th>
-                  <Group gap={6} wrap="nowrap">
-                    <span>Nama Siswa</span>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      onClick={() => toggleSort("user_name")}
-                    >
-                      <IconArrowsSort size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Th>
-                <Table.Th>
-                  <Group gap={6} wrap="nowrap">
-                    <span>Status</span>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      onClick={() => toggleSort("status")}
-                    >
-                      <IconArrowsSort size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Th>
-                <Table.Th ta="right">
-                  <Group gap={6} justify="right" wrap="nowrap">
-                    <span>Jumlah</span>
-                    <ActionIcon
-                      size="sm"
-                      variant="subtle"
-                      onClick={() => toggleSort("amount")}
-                    >
-                      <IconArrowsSort size={16} />
-                    </ActionIcon>
-                  </Group>
-                </Table.Th>
-                <Table.Th ta="right">Aksi</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {loading && tx.items.length === 0 && (
-                <Table.Tr>
-                  <Table.Td colSpan={6}>
-                    <Skeleton height={24} />
-                  </Table.Td>
-                </Table.Tr>
-              )}
-              {tx.items.map((t) => (
-                <Table.Tr key={t.id}>
-                  <Table.Td>{formatDate(t.date)}</Table.Td>
-                  <Table.Td>
-                    <Text size="sm" fw={600}>
-                      {t.course_title}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{t.user_name}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      color={
-                        t.status === "completed"
-                          ? "green"
-                          : t.status === "pending"
-                          ? "orange"
-                          : "red"
-                      }
-                      variant="light"
-                    >
-                      {statusLabelUI(t.status)}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Text fw={700}>{formatCurrency(t.amount)}</Text>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Group gap={6} justify="right">
-                      <ActionIcon
-                        size="sm"
-                        variant="light"
-                        color="blue"
-                        onClick={() => printThermalReceipt(t)}
-                        title="Print Thermal"
-                      >
-                        <IconPrinter size={14} />
-                      </ActionIcon>
-                      <ActionIcon
-                        size="sm"
-                        variant="light"
-                        onClick={() => {
-                          setActiveTx(t);
-                          setOpened(true);
-                        }}
-                        title="Lihat Detail"
-                      >
-                        <IconEye size={14} />
-                      </ActionIcon>
-                      <ActionIcon
-                        size="sm"
-                        variant="subtle"
-                        onClick={() => downloadSingleCSV(t)}
-                        title="Download CSV"
-                      >
-                        <IconDownload size={14} />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-              {tx.items.length === 0 && !loading && (
-                <Table.Tr>
-                  <Table.Td colSpan={6}>
-                    <Text size="sm" c="dimmed">
-                      Belum ada transaksi.
-                    </Text>
-                  </Table.Td>
-                </Table.Tr>
-              )}
-            </Table.Tbody>
-          </Table>
+          <div className="responsive-table" style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
+            <Table highlightOnHover withTableBorder withRowBorders style={{ minWidth: 760 }}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>
+                      <Group gap={6} wrap="nowrap">
+                        <span>Tanggal</span>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => toggleSort("date")}
+                        >
+                          <IconArrowsSort size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>
+                      <Group gap={6} wrap="nowrap">
+                        <span>Kursus</span>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => toggleSort("course_title")}
+                        >
+                          <IconArrowsSort size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>
+                      <Group gap={6} wrap="nowrap">
+                        <span>Nama Siswa</span>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => toggleSort("user_name")}
+                        >
+                          <IconArrowsSort size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>
+                      <Group gap={6} wrap="nowrap">
+                        <span>Status</span>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => toggleSort("status")}
+                        >
+                          <IconArrowsSort size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Th>
+                    <Table.Th ta="right">
+                      <Group gap={6} justify="right" wrap="nowrap">
+                        <span>Jumlah</span>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => toggleSort("amount")}
+                        >
+                          <IconArrowsSort size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Th>
+                    <Table.Th ta="right">Aksi</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {loading && tx.items.length === 0 && (
+                    <Table.Tr>
+                      <Table.Td colSpan={6}>
+                        <Skeleton height={24} />
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
+                  {tx.items.map((t) => (
+                    <Table.Tr key={t.id}>
+                      <Table.Td>{formatDate(t.date)}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm" fw={600}>
+                          {t.course_title}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{t.user_name}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          color={
+                            t.status === "completed"
+                              ? "green"
+                              : t.status === "pending"
+                              ? "orange"
+                              : "red"
+                          }
+                          variant="light"
+                        >
+                          {statusLabelUI(t.status)}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <Text fw={700}>{formatCurrency(t.amount)}</Text>
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        <Group gap={6} justify="right">
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            color="blue"
+                            onClick={() => printThermalReceipt(t)}
+                            title="Print Thermal"
+                          >
+                            <IconPrinter size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            variant="light"
+                            onClick={() => {
+                              setActiveTx(t);
+                              setOpened(true);
+                            }}
+                            title="Lihat Detail"
+                          >
+                            <IconEye size={14} />
+                          </ActionIcon>
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            onClick={() => downloadSingleCSV(t)}
+                            title="Download CSV"
+                          >
+                            <IconDownload size={14} />
+                          </ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                  {tx.items.length === 0 && !loading && (
+                    <Table.Tr>
+                      <Table.Td colSpan={6}>
+                        <Text size="sm" c="dimmed">
+                          Belum ada transaksi.
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
+                </Table.Tbody>
+              </Table>
+            </div>
           <Group justify="space-between" mt="md">
             <Text size="xs" c="dimmed">
               Hal {tx.page} dari {totalPages}

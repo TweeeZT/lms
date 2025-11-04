@@ -589,25 +589,21 @@ export default function AdminDashboard() {
   const totalUsers = stats?.totalUsers || 0;
   const totalCourses = stats?.totalCourses || 0;
   const totalRevenue = stats?.revenue.totalRevenue || 0;
-  const activeStudents = stats?.activeEnrollments || 0;
-  const donutData = distribution.map((r) => ({
-    label:
-      r.role === "admin"
-        ? "Admin"
-        : r.role === "instructor"
-        ? "Instruktur"
-        : r.role === "school"
-        ? "Sekolah"
-        : r.role === "user"
-        ? "Siswa"
-        : r.role || "",
-    value: r.value,
-    color:
-      r.role === "admin"
-        ? "#093569"
-        : r.role === "instructor"
-        ? "#4b7d90"
-        : "#fcac0f",
+  // Total siswa dihitung dari jumlah user dengan role "user" (bukan activeEnrollments)
+  const activeStudents = distribution.find((r) => r.role === "user")?.value ?? 0;
+
+  // Pastikan semua role utama tampil di donut (Admin, Instruktur, Sekolah, Siswa)
+  const rolesConfig = [
+    { role: "admin" as const, label: "Admin", color: "#093569" },
+    { role: "instructor" as const, label: "Instruktur", color: "#4b7d90" },
+    { role: "school" as const, label: "Sekolah", color: "#fcac0f" },
+    { role: "user" as const, label: "Siswa", color: "#2f9e44" },
+  ];
+
+  const donutData = rolesConfig.map((cfg) => ({
+    label: cfg.label,
+    value: distribution.find((r) => r.role === cfg.role)?.value ?? 0,
+    color: cfg.color,
   }));
 
   if (loading) {
@@ -646,7 +642,7 @@ export default function AdminDashboard() {
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
-            <StatCard label="Siswa Aktif" value={activeStudents} Icon={IconChartBar} />
+            <StatCard label="Total Siswa" value={activeStudents} Icon={IconChartBar} />
           </Grid.Col>
         </Grid>
 

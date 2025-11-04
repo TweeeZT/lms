@@ -67,9 +67,11 @@ export async function GET(req: NextRequest) {
     let adminCount = 0;
     let instructorCount = 0;
     let userCount = 0;
+    let schoolCount = 0;
     userRows.forEach((u) => {
       if (u.role === "admin") adminCount++;
       else if (u.role === "instructor") instructorCount++;
+      else if (u.role === "school") schoolCount++;
       else userCount++;
     });
 
@@ -105,6 +107,7 @@ export async function GET(req: NextRequest) {
       { role: "admin", value: adminCount },
       { role: "instructor", value: instructorCount },
       { role: "user", value: userCount },
+      { role: "school", value: schoolCount },
     ];
 
     // Placeholder revenue metrics: derive from transactions if table exists

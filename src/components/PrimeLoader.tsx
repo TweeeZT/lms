@@ -1,7 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 
-export default function PrimeLoader() {
+type Props = {
+  force?: boolean;
+};
+
+export default function PrimeLoader({ force = false }: Props) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export default function PrimeLoader() {
     };
   }, []);
 
-  if (!visible) return null;
+  if (!visible && !force) return null;
 
   return (
     <div
@@ -72,7 +76,7 @@ export default function PrimeLoader() {
         zIndex: 9999,
       }}
     >
-      <div style={{ display: "flex", gap: 24 }}>
+  <div style={{ display: "flex", gap: 24 }}>
         {[0, 1, 2].map((i) => (
           <svg
             key={i}

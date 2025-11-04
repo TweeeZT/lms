@@ -610,6 +610,11 @@ export default function AdminDashboard() {
         : "#fcac0f",
   }));
 
+  if (loading) {
+    // Let AdminLayout show the global PrimeLoader overlay; avoid rendering partial content
+    return null;
+  }
+
   return (
     <Container size="xl">
       <Stack gap="xl">
@@ -617,11 +622,7 @@ export default function AdminDashboard() {
           <Title order={1} mb="md">
             Dashboard Admin
           </Title>
-          <Text size="lg" c="dimmed">
-            {loading
-              ? "Memuat data..."
-              : "Overview dan manajemen platform AfterSchola"}
-          </Text>
+          <Text size="lg" c="dimmed">Overview dan manajemen platform AfterSchola</Text>
           {error && (
             <Text size="sm" c="red" mt={4}>
               {error}
@@ -635,11 +636,7 @@ export default function AdminDashboard() {
             <StatCard label="Total Users" value={totalUsers} Icon={IconUsers} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
-            <StatCard
-              label="Total Kursus"
-              value={totalCourses}
-              Icon={IconBook}
-            />
+            <StatCard label="Total Kursus" value={totalCourses} Icon={IconBook} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
             <StatCard
@@ -649,11 +646,7 @@ export default function AdminDashboard() {
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
-            <StatCard
-              label="Siswa Aktif"
-              value={activeStudents}
-              Icon={IconChartBar}
-            />
+            <StatCard label="Siswa Aktif" value={activeStudents} Icon={IconChartBar} />
           </Grid.Col>
         </Grid>
 
@@ -771,26 +764,26 @@ export default function AdminDashboard() {
                           {user.email}
                         </Text>
                       </div>
-                          <Badge
-                            variant="light"
-                            color={
-                              user.role === "admin"
-                                ? "red"
-                                : user.role === "instructor"
-                                ? "blue"
-                                : "green"
-                            }
-                          >
-                            {user.role === "admin"
-                              ? "Admin"
-                              : user.role === "instructor"
-                              ? "Instruktur"
-                              : user.role === "school"
-                              ? "Sekolah"
-                              : user.role === "user"
-                              ? "Siswa"
-                              : user.role}
-                          </Badge>
+                      <Badge
+                        variant="light"
+                        color={
+                          user.role === "admin"
+                            ? "red"
+                            : user.role === "instructor"
+                            ? "blue"
+                            : "green"
+                        }
+                      >
+                        {user.role === "admin"
+                          ? "Admin"
+                          : user.role === "instructor"
+                          ? "Instruktur"
+                          : user.role === "school"
+                          ? "Sekolah"
+                          : user.role === "user"
+                          ? "Siswa"
+                          : user.role}
+                      </Badge>
                     </Group>
                   ))}
                 </Stack>

@@ -22,7 +22,7 @@
     "blockly": "^12.3.1",
     "dayjs": "^1.11.18",
     "next": "^15.5.2",
-    "nodemailer": "^6.9.13",
+    "nodemailer": "^7.0.9",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "postcss": "^8.5.6",

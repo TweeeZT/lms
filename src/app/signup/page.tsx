@@ -85,7 +85,6 @@ export function SignupForm() {
     control,
     formState: { errors },
   } = useForm<SignupData & { confirmPassword: string }>({
-    resolver: zodResolver(schema),
     defaultValues: {
       email: "",
       username: "",
@@ -112,7 +111,6 @@ export function SignupForm() {
       password: "",
       confirmPassword: "",
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onSubmit = async (data: SignupData & { confirmPassword: string }) => {

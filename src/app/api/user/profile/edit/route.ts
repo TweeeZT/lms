@@ -31,14 +31,19 @@ export async function PATCH(req: Request) {
         { status: 500 }
       );
     }
-    // verify actor exists and is allowed (user or instructor)
+    // verify actor exists and is allowed (user, instructor, or school)
     const { data: actor, error: aErr } = await supabase
       .from("users")
       .select("id, role")
       .eq("id", userId)
       .maybeSingle();
     if (aErr) throw aErr;
-    if (!actor || (actor.role !== "user" && actor.role !== "instructor"))
+    if (
+      !actor ||
+      (actor.role !== "user" &&
+        actor.role !== "instructor" &&
+        actor.role !== "school")
+    )
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 403 }
@@ -115,7 +120,9 @@ export async function PATCH(req: Request) {
         for (const marker of markers) {
           const idx = oldUrl.indexOf(marker);
           if (idx >= 0) {
-            oldPath = oldUrl.substring(idx + marker.length);
+            // Extract path and remove query parameters (e.g., ?t=timestamp)
+            const rawPath = oldUrl.substring(idx + marker.length);
+            oldPath = rawPath.split("?")[0]; // Remove query params
             break;
           }
         }

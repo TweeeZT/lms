@@ -65,7 +65,7 @@ export default function LoginPage() {
 export function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const { login, loading } = useAuth();
+  const { user, login, loading } = useAuth();
   const [loginError, setLoginError] = useState<string | null>(null);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
   const [providerLoading, setProviderLoading] = useState<
@@ -73,6 +73,22 @@ export function LoginForm() {
   >(null);
   const [isProcessingOAuth, setIsProcessingOAuth] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
+
+  // Guard: Redirect if already logged in
+  useEffect(() => {
+    if (loading || isProcessingOAuth) return;
+    if (user?.role) {
+      const path =
+        user.role === "admin"
+          ? "/admin/dashboard"
+          : user.role === "instructor"
+          ? "/instructor/dashboard"
+          : user.role === "school"
+          ? "/school/dashboard"
+          : "/user/dashboard";
+      router.replace(path);
+    }
+  }, [user, loading, isProcessingOAuth, router]);
 
   const {
     register,
@@ -237,7 +253,7 @@ export function LoginForm() {
     }
   };
 
-  // Auto finalize jika user kembali dari redirect OAuth dan sudah punya session tapi belum terset local storage
+  // Auto finalize OAuth callback
   useEffect(() => {
     let cancelled = false;
 
@@ -246,7 +262,8 @@ export function LoginForm() {
         typeof window === "undefined" ||
         isProcessingOAuth ||
         cancelled ||
-        hasRedirected
+        hasRedirected ||
+        loading
       )
         return;
 
@@ -345,16 +362,14 @@ export function LoginForm() {
             window.location.pathname + window.location.search
           );
 
-          // Redirect sesuai role - HANYA SEKALI
+          // Redirect sesuai role
           setHasRedirected(true);
           const redirectPath = getRedirectPath(mapped.role);
-          router.push(redirectPath);
-          setIsProcessingOAuth(false);
+
+          // Force reload untuk trigger useAuth context update
+          window.location.href = redirectPath;
           return;
         }
-
-        // HAPUS pengecekan existingRole di sini karena ini yang bikin redirect loop
-        // Kalau user sudah login, authProvider akan handle redirect otomatis
       } catch (err) {
         console.error("OAuth finalize error:", err);
         setIsProcessingOAuth(false);
@@ -366,7 +381,7 @@ export function LoginForm() {
     return () => {
       cancelled = true;
     };
-  }, [router, isProcessingOAuth, hasRedirected]);
+  }, [router, isProcessingOAuth, hasRedirected, loading]);
 
   // Map notice query to a friendly alert
   useEffect(() => {

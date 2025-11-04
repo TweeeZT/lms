@@ -7,6 +7,8 @@ type Props = {
 
 export default function PrimeLoader({ force = false }: Props) {
   const [visible, setVisible] = useState(false);
+  // Manual override counter for app-driven loading phases
+  const [manualCount, setManualCount] = useState(0);
 
   useEffect(() => {
     // Schedule updates outside of the current React commit to avoid
@@ -52,16 +54,26 @@ export default function PrimeLoader({ force = false }: Props) {
     history.pushState = patchedPushState;
     history.replaceState = patchedReplaceState;
 
+    // Listen to global app events to force show/hide loader
+    const onManualShow = () => setManualCount((c) => c + 1);
+    const onManualHide = () =>
+      setManualCount((c) => (c > 0 ? c - 1 : 0));
+    window.addEventListener("prime-loader:show", onManualShow as any);
+    window.addEventListener("prime-loader:hide", onManualHide as any);
+
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       window.removeEventListener("popstate", onPopState);
       // restore originals
       history.pushState = origPush;
       history.replaceState = origReplace;
+      window.removeEventListener("prime-loader:show", onManualShow as any);
+      window.removeEventListener("prime-loader:hide", onManualHide as any);
     };
   }, []);
 
-  if (!visible && !force) return null;
+  const forced = force || manualCount > 0;
+  if (!visible && !forced) return null;
 
   return (
     <div

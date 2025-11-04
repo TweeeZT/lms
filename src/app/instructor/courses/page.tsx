@@ -18,7 +18,6 @@ import {
   FileInput,
   Switch,
   Pagination,
-  Skeleton,
   Textarea,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -36,6 +35,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { useAuth } from "../../../hooks/useAuth";
 import Link from "next/link";
 import RichTextEditor from "../../../components/RichTextEditor";
+import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 
 export default function InstructorCoursesPage() {
   const { user } = useAuth();
@@ -211,6 +211,7 @@ export default function InstructorCoursesPage() {
   const fetchCourses = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
+    showGlobalLoader();
     try {
       const params = new URLSearchParams({
         instructorId: user.id,
@@ -230,6 +231,7 @@ export default function InstructorCoursesPage() {
       notifications.show({ color: "red", title: "Gagal", message: msg });
     } finally {
       setLoading(false);
+      hideGlobalLoader();
     }
   }, [user?.id, search, statusFilter, page, limit]);
 
@@ -473,6 +475,9 @@ export default function InstructorCoursesPage() {
       ).toFixed(1)
     : "0";
 
+  // Saat loading awal, gunakan global loader dari layout dengan tidak merender konten halaman
+  if (loading && courses.length === 0) return null;
+
   return (
     <Container size="xl">
       <Stack gap="xl">
@@ -546,142 +551,132 @@ export default function InstructorCoursesPage() {
               {total} hasil
             </Text>
           </Group>
-          {/* Grid cards instead of table */}
-          {loading ? (
-            <Grid gutter="xl">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4 }}>
-                  <Skeleton height={160} radius="md" />
-                </Grid.Col>
-              ))}
-            </Grid>
-          ) : (
-            <Grid gutter="xl">
-              {filteredCourses.map((course) => (
-                <Grid.Col
-                  key={course.id}
-                  span={{ base: 12, sm: 6, md: 6, lg: 4 }}
+          {/* Grid cards */}
+          <Grid gutter="xl">
+            {filteredCourses.map((course) => (
+              <Grid.Col
+                key={course.id}
+                span={{ base: 12, sm: 6, md: 6, lg: 4 }}
+              >
+                <Card
+                  withBorder
+                  padding="lg"
+                  radius="lg"
+                  className="card-hover"
                 >
-                  <Card
-                    withBorder
-                    padding="lg"
-                    radius="lg"
-                    className="card-hover"
-                  >
-                    <Stack gap={12}>
-                      {course.thumbnail ? (
-                        <div
+                  <Stack gap={12}>
+                    {course.thumbnail ? (
+                      <div
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          aspectRatio: "16/9",
+                          overflow: "hidden",
+                          borderRadius: 8,
+                        }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={course.thumbnail}
+                          alt={course.title}
                           style={{
-                            position: "relative",
                             width: "100%",
-                            aspectRatio: "16/9",
-                            overflow: "hidden",
-                            borderRadius: 8,
+                            height: "100%",
+                            objectFit: "cover",
                           }}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={course.thumbnail}
-                            alt={course.title}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                            onError={(e) => {
-                              const el = e.currentTarget as HTMLImageElement;
-                              el.style.display = "none";
-                              const parent = el.parentElement;
-                              if (parent)
-                                parent.innerHTML = `<div style=\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#f1f5f9;color:#64748b;font-weight:600;\">Thumbnail tidak tersedia</div>`;
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            position: "relative",
-                            width: "100%",
-                            aspectRatio: "16/9",
-                            overflow: "hidden",
-                            borderRadius: 8,
-                            background: "#f1f5f9",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#64748b",
-                            fontWeight: 600,
+                          onError={(e) => {
+                            const el = e.currentTarget as HTMLImageElement;
+                            el.style.display = "none";
+                            const parent = el.parentElement;
+                            if (parent)
+                              parent.innerHTML = `<div style=\"display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#f1f5f9;color:#64748b;font-weight:600;\">Thumbnail tidak tersedia</div>`;
                           }}
-                        >
-                          Thumbnail tidak tersedia
-                        </div>
-                      )}
-                      <Group justify="space-between" align="flex-start">
-                        <Text fw={700} lineClamp={2}>
-                          {course.title}
-                        </Text>
-                        <Badge
-                          variant="light"
-                          color={course.is_published ?? false ? "teal" : "gray"}
-                        >
-                          {course.is_published ?? false ? "Tayang" : "Draf"}
-                        </Badge>
-                      </Group>
-                      <Group gap={8}>
-                        <Badge size="sm" variant="light">
-                          {course.total_modules ?? 0} modul
-                        </Badge>
-                        <Badge size="sm" variant="light" color="grape">
-                          {Math.round((course.duration_min ?? 0) / 60)} jam
-                        </Badge>
-                      </Group>
-                      <Group justify="space-between" align="center">
-                        <Text fw={700} c="green">
-                          Rp {(course.price ?? 0).toLocaleString("id-ID")}
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {course.enrolled_count ?? 0} siswa
-                        </Text>
-                      </Group>
-                      <Group justify="space-between">
-                        <Button
-                          component={Link}
-                          href={`/instructor/courses/${course.id}`}
-                          variant="light"
-                          size="xs"
-                          leftSection={<IconEye size="1rem" />}
-                        >
-                          Detail
-                        </Button>
-                        <Group gap="xs">
-                          <ActionIcon
-                            variant="light"
-                            color="yellow"
-                            onClick={() => openEdit(course.id)}
-                          >
-                            <IconEdit size="1rem" />
-                          </ActionIcon>
-                          <ActionIcon
-                            variant="light"
-                            color="red"
-                            onClick={() => confirmDelete(course.id)}
-                          >
-                            <IconTrash size="1rem" />
-                          </ActionIcon>
-                        </Group>
-                      </Group>
-                      <Text size="xs" c="dimmed">
-                        Dibuat{" "}
-                        {new Date(course.created_at).toLocaleDateString(
-                          "id-ID"
-                        )}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          position: "relative",
+                          width: "100%",
+                          aspectRatio: "16/9",
+                          overflow: "hidden",
+                          borderRadius: 8,
+                          background: "#f1f5f9",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#64748b",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Thumbnail tidak tersedia
+                      </div>
+                    )}
+                    <Group justify="space-between" align="flex-start">
+                      <Text fw={700} lineClamp={2}>
+                        {course.title}
                       </Text>
-                    </Stack>
-                  </Card>
-                </Grid.Col>
-              ))}
-            </Grid>
-          )}
+                      <Badge
+                        variant="light"
+                        color={course.is_published ?? false ? "teal" : "gray"}
+                      >
+                        {course.is_published ?? false ? "Tayang" : "Draf"}
+                      </Badge>
+                    </Group>
+                    <Group gap={8}>
+                      <Badge size="sm" variant="light">
+                        {course.total_modules ?? 0} modul
+                      </Badge>
+                      <Badge size="sm" variant="light" color="grape">
+                        {Math.round((course.duration_min ?? 0) / 60)} jam
+                      </Badge>
+                    </Group>
+                    <Group justify="space-between" align="center">
+                      <Text fw={700} c="green">
+                        Rp {(course.price ?? 0).toLocaleString("id-ID")}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {course.enrolled_count ?? 0} siswa
+                      </Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Button
+                        component={Link}
+                        href={`/instructor/courses/${course.id}`}
+                        variant="light"
+                        size="xs"
+                        leftSection={<IconEye size="1rem" />}
+                      >
+                        Detail
+                      </Button>
+                      <Group gap="xs">
+                        <ActionIcon
+                          variant="light"
+                          color="yellow"
+                          onClick={() => openEdit(course.id)}
+                        >
+                          <IconEdit size="1rem" />
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          onClick={() => confirmDelete(course.id)}
+                        >
+                          <IconTrash size="1rem" />
+                        </ActionIcon>
+                      </Group>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      Dibuat{" "}
+                      {new Date(course.created_at).toLocaleDateString(
+                        "id-ID"
+                      )}
+                    </Text>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            ))}
+          </Grid>
           {filteredCourses.length === 0 && (
             <Stack align="center" py="xl" gap={6}>
               <IconBook size="3rem" color="gray" />

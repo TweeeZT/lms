@@ -32,6 +32,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
 import { notifications } from "@mantine/notifications";
+import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 
 type TxRow = {
   id: string;
@@ -237,6 +238,7 @@ export default function InstructorEarningsPage() {
   const fetchData = async (page = 1, limit = tx.limit || 10) => {
     if (!user) return;
     setLoading(true);
+    showGlobalLoader();
     setError(null);
     try {
       const params = new URLSearchParams({
@@ -265,6 +267,7 @@ export default function InstructorEarningsPage() {
       setError(e instanceof Error ? e.message : "Terjadi kesalahan");
     } finally {
       setLoading(false);
+      hideGlobalLoader();
     }
   };
 
@@ -715,6 +718,9 @@ export default function InstructorEarningsPage() {
     w.document.close();
   };
 
+  // Saat loading awal, tampilkan global loader (via layout) dengan tidak merender konten halaman
+  if (loading && tx.items.length === 0 && !error) return null;
+
   return (
     <Container size="lg" py="xl">
       <Stack gap="lg">
@@ -908,13 +914,6 @@ export default function InstructorEarningsPage() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {loading && tx.items.length === 0 && (
-                    <Table.Tr>
-                      <Table.Td colSpan={6}>
-                        <Skeleton height={24} />
-                      </Table.Td>
-                    </Table.Tr>
-                  )}
                   {tx.items.map((t) => (
                     <Table.Tr key={t.id}>
                       <Table.Td>{formatDate(t.date)}</Table.Td>

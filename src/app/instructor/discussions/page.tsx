@@ -24,6 +24,7 @@ import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
 import { useCallback, useEffect, useState } from "react";
+import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 
 type ApiPost = {
   id: string;
@@ -69,6 +70,7 @@ export default function InstructorDiscussionsFeed() {
   const fetchItems = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    showGlobalLoader();
     try {
       const params = new URLSearchParams({
         instructorId: user.id,
@@ -86,6 +88,7 @@ export default function InstructorDiscussionsFeed() {
       }
     } finally {
       setLoading(false);
+      hideGlobalLoader();
     }
   }, [user, sort, page, limit, q, filter]);
 
@@ -165,6 +168,9 @@ export default function InstructorDiscussionsFeed() {
     });
   }
 
+  // Saat loading awal, biarkan layout global menampilkan loader dengan tidak merender konten
+  if (loading && items.length === 0) return null;
+
   return (
     <Container size="lg">
       <Stack gap="lg">
@@ -216,14 +222,7 @@ export default function InstructorDiscussionsFeed() {
         />
 
         {/* Twitter-like feed */}
-        {loading && items.length === 0 ? (
-          <Stack gap="md">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} height={120} radius="md" />
-            ))}
-          </Stack>
-        ) : (
-          <Stack gap="md">
+        <Stack gap="md">
             {items.map((post) => {
               const cover =
                 post.media && post.media.length > 0 ? post.media[0] : null;
@@ -432,8 +431,7 @@ export default function InstructorDiscussionsFeed() {
                 </div>
               );
             })}
-          </Stack>
-        )}
+        </Stack>
 
         <Group justify="space-between" align="center" mt="md">
           <Text size="xs" c="dimmed">

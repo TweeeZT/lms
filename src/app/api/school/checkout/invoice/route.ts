@@ -21,11 +21,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Get school info
+    // 1. Get school info from users table
     const { data: schoolData, error: schoolError } = await supabase
-      .from("schools")
-      .select("school_name")
-      .eq("user_id", schoolUserId)
+      .from("users")
+      .select("id, full_name, email, role")
+      .eq("id", schoolUserId)
+      .eq("role", "school")
       .single();
 
     if (schoolError || !schoolData) {
@@ -76,26 +77,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Get school user email
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("email, full_name")
-      .eq("id", schoolUserId)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
-      );
-    }
-
-    // 5. Create Xendit invoice
+    // 4. Create Xendit invoice
     const invoicePayload = {
       // Use same pattern as user invoices so webhook can parse on fallback
       external_id: `inv:${courseId}:${schoolUserId}:${Date.now()}`,
-      payer_email: userData.email,
-      description: `Pembelian kursus "${courseData.title}" untuk ${finalParticipants} peserta - ${schoolData.school_name}`,
+      payer_email: schoolData.email,
+      description: `Pembelian kursus "${courseData.title}" untuk ${finalParticipants} peserta - ${schoolData.full_name}`,
       amount: totalAmount,
       currency: "IDR",
       invoice_duration: 86400, // 24 hours
@@ -154,7 +141,7 @@ export async function POST(req: NextRequest) {
       id: xenditData.id,
       date: new Date().toISOString(),
       user_id: schoolUserId,
-      user_name: schoolData.school_name,
+      user_name: schoolData.full_name,
       course_id: courseId,
       course_title: courseData.title,
       amount: totalAmount,

@@ -263,9 +263,18 @@ export async function GET(
     .eq("module_id", moduleId)
     .maybeSingle();
 
-  // Progress for gating
+  // Check user role to determine which progress table to query
+  const { data: userRoleData } = await supabaseAdmin
+    .from("users")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  const isSchoolUser = userRoleData?.role === "school";
+  const progressTable = isSchoolUser ? "school_progress" : "user_progress";
+
+  // Progress for gating - use correct table based on user role
   const { data: prog } = await supabaseAdmin
-    .from("user_progress")
+    .from(progressTable)
     .select("id, completed_modules, current_module_id, course_id")
     .eq("user_id", userId)
     .eq("course_id", mod.course_id)
@@ -621,7 +630,7 @@ export async function POST(
       completedModules: updated,
       progressPercentage: progressPct,
       courseCompleted,
-      pointsAwarded: pointsAwarded > 0 ? pointsAwarded : undefined,
+      pointsAwarded: !isSchool && pointsAwarded > 0 ? pointsAwarded : undefined,
       certificateAvailable: certificateGenerated,
       auto: action === "auto-complete",
       rewards:
@@ -880,6 +889,7 @@ export async function POST(
     let certificateGenerated = false;
     let moduleCoins = 0;
     let modulePoints = 0;
+    let isSchool = false; // Declare at function scope
 
     if (passed) {
       // Get module coins and points
@@ -892,7 +902,13 @@ export async function POST(
       moduleCoins = moduleMod?.coins || 0;
       modulePoints = moduleMod?.points || 0;
 
-      const { prog, completed, error, isSchool } = await loadProgress();
+      const {
+        prog,
+        completed,
+        error,
+        isSchool: schoolFlag,
+      } = await loadProgress();
+      isSchool = schoolFlag; // Assign to outer scope variable
       if (error)
         return NextResponse.json(
           { success: false, error: error.message },
@@ -929,32 +945,35 @@ export async function POST(
 
         const coursePoints = course?.points || 100;
 
-        try {
-          const { data: student } = await supabaseAdmin
-            .from("students")
-            .select("points")
-            .eq("user_id", userId)
-            .maybeSingle();
-
-          const currentPoints = student?.points || 0;
-          const newPoints = currentPoints + coursePoints;
-
-          if (student) {
-            await supabaseAdmin
+        // Award course completion points ONLY for non-school users
+        if (!isSchool) {
+          try {
+            const { data: student } = await supabaseAdmin
               .from("students")
-              .update({ points: newPoints })
-              .eq("user_id", userId);
-          } else {
-            await supabaseAdmin.from("students").insert({
-              user_id: userId,
-              points: coursePoints,
-              xp: 0,
-            });
-          }
+              .select("points")
+              .eq("user_id", userId)
+              .maybeSingle();
 
-          pointsAwarded = coursePoints;
-        } catch (pointsErr) {
-          console.error("Error awarding points:", pointsErr);
+            const currentPoints = student?.points || 0;
+            const newPoints = currentPoints + coursePoints;
+
+            if (student) {
+              await supabaseAdmin
+                .from("students")
+                .update({ points: newPoints })
+                .eq("user_id", userId);
+            } else {
+              await supabaseAdmin.from("students").insert({
+                user_id: userId,
+                points: coursePoints,
+                xp: 0,
+              });
+            }
+
+            pointsAwarded = coursePoints;
+          } catch (pointsErr) {
+            console.error("Error awarding points:", pointsErr);
+          }
         }
 
         // Check and generate certificate if not exists
@@ -981,24 +1000,24 @@ export async function POST(
 
       if (prog?.id) {
         const { error: updErr } = await supabaseAdmin
-          .from("user_progress")
+          .from(isSchool ? "school_progress" : "user_progress")
           .update({
             completed_modules: updated,
             current_module_id: moduleId,
             progress_percentage: progressPct,
           })
-          .eq("id", prog.id)
-          .eq("user_id", userId)
-          .eq("course_id", courseId);
+          .eq("id", prog.id);
         if (updErr)
           return NextResponse.json(
             { success: false, error: updErr.message },
             { status: 500 }
           );
       } else {
+        const newId = `${isSchool ? "sp" : "up"}-${randomUUID()}`;
         const { error: insErr } = await supabaseAdmin
-          .from("user_progress")
+          .from(isSchool ? "school_progress" : "user_progress")
           .insert({
+            id: newId,
             user_id: userId,
             course_id: courseId,
             completed_modules: updated,
@@ -1024,10 +1043,10 @@ export async function POST(
       attemptAnswers,
       progressPercentage: progressPct,
       courseCompleted,
-      pointsAwarded: pointsAwarded > 0 ? pointsAwarded : undefined,
+      pointsAwarded: !isSchool && pointsAwarded > 0 ? pointsAwarded : undefined,
       certificateAvailable: certificateGenerated,
       rewards:
-        (passed && moduleCoins > 0) || modulePoints > 0
+        !isSchool && passed && (moduleCoins > 0 || modulePoints > 0)
           ? { coins: moduleCoins, points: modulePoints }
           : undefined,
     });

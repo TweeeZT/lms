@@ -17,6 +17,7 @@ import {
   IconUpload,
   IconLink,
   IconSend,
+  IconX,
 } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -338,6 +339,7 @@ export default function AssignmentSection({
                         variant="light"
                         color="red"
                         mt="xs"
+                        leftSection={<IconX size={14} />}
                         onClick={(e) => {
                           e.stopPropagation();
                           e.preventDefault();

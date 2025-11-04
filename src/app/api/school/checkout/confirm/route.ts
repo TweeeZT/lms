@@ -138,21 +138,40 @@ export async function POST(req: NextRequest) {
     const [{ data: courseMeta }, { data: schoolMeta }] = await Promise.all([
       supabase
         .from("courses")
-        .select("id,title,price,instructor_id")
+        .select("id,title,price,instructor_id,enrolled_count")
         .eq("id", courseId)
         .maybeSingle(),
       supabase
-        .from("schools")
-        .select("school_name")
-        .eq("user_id", schoolUserId)
+        .from("users")
+        .select("full_name")
+        .eq("id", schoolUserId)
+        .eq("role", "school")
         .maybeSingle(),
     ]);
 
     const courseTitle = courseMeta?.title || null;
     const instructorId = (courseMeta as any)?.instructor_id || null;
-    const schoolName = schoolMeta?.school_name || null;
+    const schoolName = schoolMeta?.full_name || null;
+    const currentEnrolledCount = courseMeta?.enrolled_count || 0;
 
-    // 5. If it's free course, create transaction record
+    // 5. Update enrolled_count in courses table
+    const enrolledIncrement =
+      insertedStudents + (includeSchool && !hasSchoolProgress ? 1 : 0);
+    if (enrolledIncrement > 0) {
+      const { error: enrolledCountError } = await supabase
+        .from("courses")
+        .update({ enrolled_count: currentEnrolledCount + enrolledIncrement })
+        .eq("id", courseId);
+
+      if (enrolledCountError) {
+        console.error(
+          "[school/checkout/confirm] enrolled_count update error:",
+          enrolledCountError
+        );
+      }
+    }
+
+    // 6. If it's free course, create transaction record
     if (isFree) {
       // Ensure students FK row exists for school user
       try {
@@ -192,7 +211,7 @@ export async function POST(req: NextRequest) {
         console.error("[school/checkout/confirm] Transaction error:", txError);
       }
     } else {
-      // Paid flow: update transaction to completed and set method from Xendit if possible
+      // 7. Paid flow: update transaction to completed and set method from Xendit if possible
       let methodFromXendit: string | null = null;
       if (invoiceId && process.env.XENDIT_SECRET_KEY) {
         try {

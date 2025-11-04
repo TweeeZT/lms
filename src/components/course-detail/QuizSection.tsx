@@ -14,6 +14,8 @@ import {
   Divider,
   Box,
   Paper,
+  Center,
+  Loader,
 } from "@mantine/core";
 import {
   IconListCheck,
@@ -84,13 +86,6 @@ export default function QuizSection({
   const [selectedAttempt, setSelectedAttempt] = useState<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch quiz history on mount
-  useEffect(() => {
-    if (quiz.id && userId) {
-      fetchHistory();
-    }
-  }, [quiz.id, userId]);
-
   const fetchHistory = async () => {
     if (!userId || !quiz.id) return;
     setLoadingHistory(true);
@@ -108,6 +103,13 @@ export default function QuizSection({
       setLoadingHistory(false);
     }
   };
+
+  // Fetch quiz history on mount
+  useEffect(() => {
+    if (quiz.id && userId) {
+      fetchHistory();
+    }
+  }, [quiz.id, userId]);
 
   useEffect(() => {
     if (started && quiz.timeLimit && timeLeft === null) {
@@ -410,7 +412,11 @@ export default function QuizSection({
             </Group>
 
             {/* Riwayat Quiz History */}
-            {historyAttempts.length > 0 && (
+            {loadingHistory ? (
+              <Center py="xl">
+                <Loader size="md" />
+              </Center>
+            ) : historyAttempts.length > 0 ? (
               <>
                 <Divider
                   my="md"
@@ -466,7 +472,7 @@ export default function QuizSection({
                   ))}
                 </Stack>
               </>
-            )}
+            ) : null}
           </Stack>
         </Card>
 

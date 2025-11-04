@@ -172,6 +172,8 @@ export default function ModuleDetailPage() {
         if (!res.ok || !json.success) {
           throw new Error(json.error || "Gagal memuat detail modul");
         }
+        // Small delay to ensure all data is ready
+        await new Promise((resolve) => setTimeout(resolve, 300));
         setDetail(json);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Gagal memuat detail modul");
@@ -549,6 +551,11 @@ export default function ModuleDetailPage() {
 
   const orderedCompleted = new Set(detail.progress.completedModules);
   const isCompleted = orderedCompleted.has(moduleId);
+
+  // Log untuk debugging
+  console.log("Module ID:", moduleId);
+  console.log("Completed Modules:", detail.progress.completedModules);
+  console.log("Is Completed:", isCompleted);
 
   return (
     <Container size="lg" py="xl">

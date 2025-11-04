@@ -163,7 +163,9 @@ export default function ModuleDetailPage() {
   const [rewardModalOpened, setRewardModalOpened] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [rewardCoins, setRewardCoins] = useState(0);
-  const [redirectAfterReward, setRedirectAfterReward] = useState<string | null>(null);
+  const [redirectAfterReward, setRedirectAfterReward] = useState<string | null>(
+    null
+  );
   const autoCompleteRef = useRef(false);
 
   // Load module detail
@@ -181,6 +183,8 @@ export default function ModuleDetailPage() {
         if (!res.ok || !json.success) {
           throw new Error(json.error || "Gagal memuat detail modul");
         }
+        // Small delay to ensure all data is ready
+        await new Promise((resolve) => setTimeout(resolve, 300));
         setDetail(json);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Gagal memuat detail modul");
@@ -486,7 +490,8 @@ export default function ModuleDetailPage() {
     if (!detail) return;
     const moduleDataLocal = detail.module;
     const isTextMaterial =
-      moduleDataLocal.kind === "materi" && moduleDataLocal.content?.type === "text";
+      moduleDataLocal.kind === "materi" &&
+      moduleDataLocal.content?.type === "text";
     const orderedCompletedLocal = new Set(detail.progress.completedModules);
     const isCompletedLocal = orderedCompletedLocal.has(moduleId);
     if (!isTextMaterial || isCompletedLocal) return;
@@ -648,7 +653,6 @@ export default function ModuleDetailPage() {
 
   const orderedCompleted = new Set(detail.progress.completedModules);
   const isCompleted = orderedCompleted.has(moduleId);
-
 
   return (
     <Container size="lg" py="xl">

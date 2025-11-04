@@ -16,7 +16,6 @@ import {
   Badge,
   Button,
   Alert,
-  Skeleton,
   Modal,
   TextInput,
   Textarea,
@@ -498,99 +497,110 @@ export default function UserDashboard() {
     <DatesProvider
       settings={{ locale: "id", firstDayOfWeek: 0, weekendDays: [0] }}
     >
-      <Container size="xl">
-        <Stack gap="xl">
-          <div>
-            {loading ? (
-              <>
-                <Skeleton height={36} width={250} mb="md" />
-                <Skeleton height={24} width={350} />
-              </>
-            ) : (
-              <>
-                <Title order={1} mb="md">
-                  Dashboard Belajar
-                </Title>
-                <Text size="lg" c="dimmed">
-                  {data?.user?.fullName
-                    ? `Selamat datang kembali, ${data.user.fullName}!`
-                    : ""}
-                </Text>
-              </>
-            )}
+      {loading ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(255,255,255,0.98)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div style={{ display: "flex", gap: 24 }}>
+            {[0, 1, 2].map((i) => (
+              <svg
+                key={i}
+                width="64"
+                height="64"
+                viewBox="0 0 64 64"
+                style={{
+                  animation: "spinDiamond 1.2s linear infinite",
+                  animationDelay: `${i * 0.2}s`,
+                }}
+              >
+                <rect
+                  x="12"
+                  y="12"
+                  width="40"
+                  height="40"
+                  fill="none"
+                  stroke="url(#grad)"
+                  strokeWidth="8"
+                  rx="4"
+                  ry="4"
+                  transform="rotate(45 32 32)"
+                />
+                <defs>
+                  <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#f6d457" />
+                    <stop offset="100%" stopColor="#1e3769" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            ))}
           </div>
-          {error && (
-            <Alert color="red" icon={<IconAlertCircle size={16} />}>
-              {error}
-            </Alert>
-          )}
-          <Grid gutter="xl">
-            {loading
-              ? // Skeleton untuk 4 stat cards
-                Array.from({ length: 4 }).map((_, idx) => (
-                  <Grid.Col key={idx} span={{ base: 12, md: 6, lg: 3 }}>
-                    <Card
-                      withBorder
-                      padding="lg"
-                      radius="md"
-                      shadow="sm"
-                      style={{
-                        textAlign: "center",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        minHeight: 170,
-                      }}
-                    >
-                      <Skeleton height={12} width={100} mb="sm" />
-                      <Skeleton height={56} width={56} circle mb="md" />
-                      <Skeleton height={32} width={80} />
-                    </Card>
-                  </Grid.Col>
-                ))
-              : [
-                  {
-                    label: "Kursus Aktif",
-                    value: String(stats?.activeCourses || 0),
-                    Icon: IconBook,
-                  },
-                  {
-                    label: "Total Koin",
-                    value: String(stats?.coins || 0),
-                    Icon: IconReceipt2,
-                  },
-                  {
-                    label: "Poin",
-                    value: String(stats?.points || 0),
-                    Icon: IconSum,
-                  },
-                  {
-                    label: "Tier",
-                    value: String(stats?.tier || "newbie").toUpperCase(),
-                    Icon: IconAward,
-                  },
-                ].map(({ label, value, Icon }) => (
-                  <Grid.Col key={label} span={{ base: 12, md: 6, lg: 3 }}>
-                    <StatCard label={label} value={value} Icon={Icon} />
-                  </Grid.Col>
-                ))}
-          </Grid>
-          {/* Row 1 */}
-          <Grid gutter="xl" align="stretch">
-            <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card padding="lg" radius="md" withBorder>
-                <Stack gap="md">
-                  {loading ? (
-                    <>
-                      <Group justify="space-between">
-                        <div>
-                          <Skeleton height={24} width={150} mb="xs" />
-                          <Skeleton height={16} width={220} />
-                        </div>
-                        <Skeleton height={30} width={150} />
-                      </Group>
-                    </>
-                  ) : (
+          <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+        </div>
+      ) : (
+        <Container size="xl">
+          <Stack gap="xl">
+            <div>
+              <Title order={1} mb="md">
+                Dashboard Belajar
+              </Title>
+              <Text size="lg" c="dimmed">
+                {data?.user?.fullName
+                  ? `Selamat datang kembali, ${data.user.fullName}!`
+                  : ""}
+              </Text>
+            </div>
+            {error && (
+              <Alert color="red" icon={<IconAlertCircle size={16} />}>
+                {error}
+              </Alert>
+            )}
+            <Grid gutter="xl">
+              {[
+                {
+                  label: "Kursus Aktif",
+                  value: String(stats?.activeCourses || 0),
+                  Icon: IconBook,
+                },
+                {
+                  label: "Total Koin",
+                  value: String(stats?.coins || 0),
+                  Icon: IconReceipt2,
+                },
+                {
+                  label: "Poin",
+                  value: String(stats?.points || 0),
+                  Icon: IconSum,
+                },
+                {
+                  label: "Tier",
+                  value: String(stats?.tier || "newbie").toUpperCase(),
+                  Icon: IconAward,
+                },
+              ].map(({ label, value, Icon }) => (
+                <Grid.Col key={label} span={{ base: 12, md: 6, lg: 3 }}>
+                  <StatCard label={label} value={value} Icon={Icon} />
+                </Grid.Col>
+              ))}
+            </Grid>
+            {/* Row 1 */}
+            <Grid gutter="xl" align="stretch">
+              <Grid.Col span={{ base: 12, lg: 8 }}>
+                <Card padding="lg" radius="md" withBorder>
+                  <Stack gap="md">
                     <Group justify="space-between">
                       <div>
                         <Title order={4}>Kursus Aktif</Title>
@@ -611,377 +621,360 @@ export default function UserDashboard() {
                         Lihat Selengkapnya
                       </Button>
                     </Group>
-                  )}
 
-                  <Grid gutter="md">
-                    {(() => {
-                      const courses = data?.courses || [];
-                      const total = courses.length;
-                      const MAX_SHOW_WITHOUT_PLACEHOLDER = 6;
-                      const MAX_SHOW_WITH_PLACEHOLDER = 5;
-                      const shouldUsePlaceholder =
-                        total > MAX_SHOW_WITHOUT_PLACEHOLDER;
-                      const visibleCourses = shouldUsePlaceholder
-                        ? courses.slice(0, MAX_SHOW_WITH_PLACEHOLDER)
-                        : courses.slice(0, MAX_SHOW_WITHOUT_PLACEHOLDER);
+                    <Grid gutter="md">
+                      {(() => {
+                        const courses = data?.courses || [];
+                        const total = courses.length;
+                        const MAX_SHOW_WITHOUT_PLACEHOLDER = 6;
+                        const MAX_SHOW_WITH_PLACEHOLDER = 5;
+                        const shouldUsePlaceholder =
+                          total > MAX_SHOW_WITHOUT_PLACEHOLDER;
+                        const visibleCourses = shouldUsePlaceholder
+                          ? courses.slice(0, MAX_SHOW_WITH_PLACEHOLDER)
+                          : courses.slice(0, MAX_SHOW_WITHOUT_PLACEHOLDER);
 
-                      return (
-                        <>
-                          {visibleCourses.map((course) => {
-                            const done = course.progress >= 100;
-                            return (
-                              <Grid.Col
-                                key={course.id}
-                                span={{ base: 12, sm: 6, md: 4 }}
-                              >
+                        return (
+                          <>
+                            {visibleCourses.map((course) => {
+                              const done = course.progress >= 100;
+                              return (
+                                <Grid.Col
+                                  key={course.id}
+                                  span={{ base: 12, sm: 6, md: 4 }}
+                                >
+                                  <Paper
+                                    shadow="sm"
+                                    radius="lg"
+                                    p="lg"
+                                    style={{
+                                      background: done
+                                        ? "var(--secondary-color)"
+                                        : "var(--primary-color)",
+                                      color: "white",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      justifyContent: "space-between",
+                                      minHeight: 160,
+                                    }}
+                                  >
+                                    <div>
+                                      <Text fw={700} size="sm" lineClamp={2}>
+                                        {course.title}
+                                      </Text>
+                                      <Text size="xs" c="white" opacity={0.8}>
+                                        {course.totalModules} modul
+                                      </Text>
+                                    </div>
+
+                                    <div>
+                                      <Group justify="space-between" mb={6}>
+                                        <Text size="xs" fw={600}>
+                                          {Math.round(course.progress)}%
+                                        </Text>
+                                      </Group>
+                                      <MantineProgress
+                                        value={course.progress}
+                                        size="sm"
+                                        radius="xl"
+                                        color="white"
+                                        style={{
+                                          background: "rgba(255,255,255,0.3)",
+                                        }}
+                                      />
+                                    </div>
+
+                                    <Button
+                                      fullWidth
+                                      size="xs"
+                                      radius="xl"
+                                      component={Link}
+                                      href={`/user/courses/${course.id}`}
+                                      style={{
+                                        marginTop: 12,
+                                        background: "white",
+                                        color: done
+                                          ? "var(--secondary-color)"
+                                          : "var(--primary-color)",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {done ? "Review" : "Lanjutkan"}
+                                    </Button>
+                                  </Paper>
+                                </Grid.Col>
+                              );
+                            })}
+
+                            {shouldUsePlaceholder && (
+                              <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
                                 <Paper
-                                  shadow="sm"
+                                  withBorder
                                   radius="lg"
                                   p="lg"
                                   style={{
-                                    background: done
-                                      ? "var(--secondary-color)"
-                                      : "var(--primary-color)",
-                                    color: "white",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    justifyContent: "space-between",
                                     minHeight: 160,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    background: "var(--mantine-color-gray-0)",
                                   }}
+                                  component={Link}
+                                  href="/user/courses"
                                 >
-                                  <div>
-                                    <Text fw={700} size="sm" lineClamp={2}>
-                                      {course.title}
-                                    </Text>
-                                    <Text size="xs" c="white" opacity={0.8}>
-                                      {course.totalModules} modul
+                                  <div style={{ textAlign: "center" }}>
+                                    <Title order={2}>
+                                      +
+                                      {Math.max(
+                                        0,
+                                        total - MAX_SHOW_WITH_PLACEHOLDER
+                                      )}
+                                    </Title>
+                                    <Text size="xs" c="dimmed">
+                                      Lihat kursus lainnya
                                     </Text>
                                   </div>
-
-                                  <div>
-                                    <Group justify="space-between" mb={6}>
-                                      <Text size="xs" fw={600}>
-                                        {Math.round(course.progress)}%
-                                      </Text>
-                                    </Group>
-                                    <MantineProgress
-                                      value={course.progress}
-                                      size="sm"
-                                      radius="xl"
-                                      color="white"
-                                      style={{
-                                        background: "rgba(255,255,255,0.3)",
-                                      }}
-                                    />
-                                  </div>
-
-                                  <Button
-                                    fullWidth
-                                    size="xs"
-                                    radius="xl"
-                                    component={Link}
-                                    href={`/user/courses/${course.id}`}
-                                    style={{
-                                      marginTop: 12,
-                                      background: "white",
-                                      color: done
-                                        ? "var(--secondary-color)"
-                                        : "var(--primary-color)",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {done ? "Review" : "Lanjutkan"}
-                                  </Button>
                                 </Paper>
                               </Grid.Col>
-                            );
-                          })}
+                            )}
+                          </>
+                        );
+                      })()}
 
-                          {shouldUsePlaceholder && (
-                            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-                              <Paper
-                                withBorder
-                                radius="lg"
-                                p="lg"
-                                style={{
-                                  minHeight: 160,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  cursor: "pointer",
-                                  background: "var(--mantine-color-gray-0)",
-                                }}
-                                component={Link}
-                                href="/user/courses"
-                              >
-                                <div style={{ textAlign: "center" }}>
-                                  <Title order={2}>
-                                    +
-                                    {Math.max(
-                                      0,
-                                      total - MAX_SHOW_WITH_PLACEHOLDER
-                                    )}
-                                  </Title>
-                                  <Text size="xs" c="dimmed">
-                                    Lihat kursus lainnya
-                                  </Text>
-                                </div>
-                              </Paper>
-                            </Grid.Col>
-                          )}
-                        </>
-                      );
-                    })()}
-
-                    {!loading && (data?.courses || []).length === 0 && (
-                      <Grid.Col span={12}>
-                        <Text c="dimmed" size="sm">
-                          Belum ada kursus yang diikuti.
-                        </Text>
-                      </Grid.Col>
-                    )}
-                    {loading &&
-                      Array.from({ length: 6 }).map((_, i) => (
-                        <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4 }}>
-                          <Skeleton height={160} radius="lg" />
-                        </Grid.Col>
-                      ))}
-                  </Grid>
-                </Stack>
-              </Card>
-            </Grid.Col>
-
-            <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card p={0} radius="md" style={{ height: "100%" }}>
-                {loading ? (
-                  <Stack gap="md" p="md">
-                    <Skeleton height={200} />
-                    <Skeleton height={300} />
-                  </Stack>
-                ) : (
-                  <>
-                    <Stack gap={0}>
-                      <Box
-                        px="md"
-                        py="xs"
-                        style={{
-                          borderBottom: "1px solid var(--mantine-color-gray-2)",
-                        }}
-                      >
-                        <Group justify="space-between" align="center">
-                          <Group gap={6} align="center">
-                            <IconCalendarPlus
-                              size={16}
-                              style={{ color: "var(--mantine-color-blue-6)" }}
-                            />
-                            <Text fw={600} size="sm">
-                              Jadwal Belajar
-                            </Text>
-                          </Group>
-                          <Button
-                            size="xs"
-                            variant="subtle"
-                            color="blue"
-                            leftSection={<IconCalendarPlus size={14} />}
-                            onClick={() => setAddOpen(true)}
-                            px="xs"
-                          >
-                            Tambah
-                          </Button>
-                        </Group>
-                      </Box>
-                      <Box
-                        px="md"
-                        py="xs"
-                        style={{
-                          borderBottom: "1px solid var(--mantine-color-gray-2)",
-                          backgroundColor: "var(--mantine-color-gray-0)",
-                        }}
-                      >
-                        <Group justify="center" align="center">
-                          <ActionIcon
-                            size="sm"
-                            variant="subtle"
-                            onClick={() =>
-                              setCalendarMonth((m) => m.subtract(1, "month"))
-                            }
-                          >
-                            <IconChevronLeft size={16} />
-                          </ActionIcon>
-                          <Text
-                            size="sm"
-                            fw={500}
-                            style={{ width: "80px", textAlign: "center" }}
-                          >
-                            {calendarMonth.locale("id").format("MMM YYYY")}
+                      {(data?.courses || []).length === 0 && (
+                        <Grid.Col span={12}>
+                          <Text c="dimmed" size="sm">
+                            Belum ada kursus yang diikuti.
                           </Text>
-                          <ActionIcon
-                            size="sm"
-                            variant="subtle"
-                            onClick={() =>
-                              setCalendarMonth((m) => m.add(1, "month"))
-                            }
-                          >
-                            <IconChevronRight size={16} />
-                          </ActionIcon>
-                        </Group>
-                      </Box>
-                    </Stack>
-                    <Divider />
-                    <Box p="md">
-                      <Calendar
-                        defaultDate={calendarMonth.toDate()}
-                        onDateChange={(date) => setCalendarMonth(dayjs(date))}
-                        getDayProps={(date) => ({
-                          style: { height: "32px" },
-                        })}
-                        size="xs"
-                        firstDayOfWeek={1}
-                        renderDay={(date) => {
-                          const d = dayjs(date);
-                          const dateStr = d.format("YYYY-MM-DD");
-                          const evs = eventsByDay[dateStr] || [];
-                          const isToday = d.isSame(dayjs(), "day");
+                        </Grid.Col>
+                      )}
+                    </Grid>
+                  </Stack>
+                </Card>
+              </Grid.Col>
 
-                          return (
-                            <Box
-                              p={0}
-                              style={{
-                                cursor: evs.length > 0 ? "pointer" : "default",
-                                height: "32px",
-                                backgroundColor: isToday
-                                  ? "var(--mantine-color-blue-0)"
+              <Grid.Col span={{ base: 12, lg: 4 }}>
+                <Card p={0} radius="md" style={{ height: "100%" }}>
+                  <Stack gap={0}>
+                    <Box
+                      px="md"
+                      py="xs"
+                      style={{
+                        borderBottom: "1px solid var(--mantine-color-gray-2)",
+                      }}
+                    >
+                      <Group justify="space-between" align="center">
+                        <Group gap={6} align="center">
+                          <IconCalendarPlus
+                            size={16}
+                            style={{ color: "var(--mantine-color-blue-6)" }}
+                          />
+                          <Text fw={600} size="sm">
+                            Jadwal Belajar
+                          </Text>
+                        </Group>
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          color="blue"
+                          leftSection={<IconCalendarPlus size={14} />}
+                          onClick={() => setAddOpen(true)}
+                          px="xs"
+                        >
+                          Tambah
+                        </Button>
+                      </Group>
+                    </Box>
+                    <Box
+                      px="md"
+                      py="xs"
+                      style={{
+                        borderBottom: "1px solid var(--mantine-color-gray-2)",
+                        backgroundColor: "var(--mantine-color-gray-0)",
+                      }}
+                    >
+                      <Group justify="center" align="center">
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() =>
+                            setCalendarMonth((m) => m.subtract(1, "month"))
+                          }
+                        >
+                          <IconChevronLeft size={16} />
+                        </ActionIcon>
+                        <Text
+                          size="sm"
+                          fw={500}
+                          style={{ width: "80px", textAlign: "center" }}
+                        >
+                          {calendarMonth.locale("id").format("MMM YYYY")}
+                        </Text>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() =>
+                            setCalendarMonth((m) => m.add(1, "month"))
+                          }
+                        >
+                          <IconChevronRight size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Box>
+                  </Stack>
+                  <Divider />
+                  <Box p="md">
+                    <Calendar
+                      defaultDate={calendarMonth.toDate()}
+                      onDateChange={(date) => setCalendarMonth(dayjs(date))}
+                      getDayProps={(date) => ({
+                        style: { height: "32px" },
+                      })}
+                      size="xs"
+                      firstDayOfWeek={1}
+                      renderDay={(date) => {
+                        const d = dayjs(date);
+                        const dateStr = d.format("YYYY-MM-DD");
+                        const evs = eventsByDay[dateStr] || [];
+                        const isToday = d.isSame(dayjs(), "day");
+
+                        return (
+                          <Box
+                            p={0}
+                            style={{
+                              cursor: evs.length > 0 ? "pointer" : "default",
+                              height: "32px",
+                              backgroundColor: isToday
+                                ? "var(--mantine-color-blue-0)"
+                                : undefined,
+                              transition: "background-color 0.2s",
+                              "&:hover":
+                                evs.length > 0
+                                  ? {
+                                      backgroundColor:
+                                        "var(--mantine-color-gray-0)",
+                                    }
                                   : undefined,
-                                transition: "background-color 0.2s",
-                                "&:hover":
-                                  evs.length > 0
-                                    ? {
-                                        backgroundColor:
-                                          "var(--mantine-color-gray-0)",
-                                      }
-                                    : undefined,
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                              onClick={() => {
-                                if (evs.length > 0) {
-                                  setSelectedDate(d.toDate());
-                                  setSelectedDateEvents(evs);
-                                }
-                              }}
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                            onClick={() => {
+                              if (evs.length > 0) {
+                                setSelectedDate(d.toDate());
+                                setSelectedDateEvents(evs);
+                              }
+                            }}
+                          >
+                            <Stack
+                              gap={2}
+                              align="center"
+                              justify="center"
+                              style={{ height: "100%", padding: "4px 0" }}
                             >
-                              <Stack
-                                gap={2}
-                                align="center"
-                                justify="center"
-                                style={{ height: "100%", padding: "4px 0" }}
+                              <Text
+                                size="xs"
+                                fw={500}
+                                style={{
+                                  color: isToday
+                                    ? "var(--mantine-color-blue-7)"
+                                    : undefined,
+                                }}
                               >
-                                <Text
-                                  size="xs"
-                                  fw={500}
-                                  style={{
-                                    color: isToday
-                                      ? "var(--mantine-color-blue-7)"
-                                      : undefined,
-                                  }}
-                                >
-                                  {d.date()}
-                                </Text>
-                                {evs.length > 0 && (
-                                  <Group gap={3} justify="center">
-                                    {Object.entries(
-                                      evs.reduce(
-                                        (
-                                          acc: Record<string, number>,
-                                          ev: ScheduleEvent
-                                        ) => {
-                                          acc[ev.category] =
-                                            (acc[ev.category] || 0) + 1;
-                                          return acc;
-                                        },
-                                        {} as Record<string, number>
-                                      )
+                                {d.date()}
+                              </Text>
+                              {evs.length > 0 && (
+                                <Group gap={3} justify="center">
+                                  {Object.entries(
+                                    evs.reduce(
+                                      (
+                                        acc: Record<string, number>,
+                                        ev: ScheduleEvent
+                                      ) => {
+                                        acc[ev.category] =
+                                          (acc[ev.category] || 0) + 1;
+                                        return acc;
+                                      },
+                                      {} as Record<string, number>
                                     )
-                                      .slice(0, 3)
-                                      .map(
-                                        ([category, count]: [
-                                          string,
-                                          number
-                                        ]) => (
-                                          <Box
-                                            key={category}
-                                            style={{
-                                              width: 5,
-                                              height: 5,
-                                              borderRadius: "50%",
-                                              backgroundColor: `var(--mantine-color-${
-                                                categoryColor[
-                                                  category as ScheduleEvent["category"]
-                                                ]
-                                              }-6)`,
-                                              boxShadow:
-                                                "0 1px 2px rgba(0,0,0,0.1)",
-                                            }}
-                                            title={`${count} jadwal ${category}`}
-                                          />
-                                        )
-                                      )}
-                                  </Group>
-                                )}
-                              </Stack>
-                            </Box>
-                          );
-                        }}
-                        weekdayFormat={(date) =>
-                          weekdayLabels[new Date(date).getDay()]
-                        }
-                        styles={(theme) => ({
-                          weekday: {
-                            fontSize: 11,
-                            padding: "8px 0",
-                            fontWeight: 600,
-                            color: theme.colors.gray[6],
-                            textAlign: "center",
-                            backgroundColor: theme.colors.gray[0],
-                            borderBottom: `1px solid ${theme.colors.gray[2]}`,
+                                  )
+                                    .slice(0, 3)
+                                    .map(
+                                      ([category, count]: [string, number]) => (
+                                        <Box
+                                          key={category}
+                                          style={{
+                                            width: 5,
+                                            height: 5,
+                                            borderRadius: "50%",
+                                            backgroundColor: `var(--mantine-color-${
+                                              categoryColor[
+                                                category as ScheduleEvent["category"]
+                                              ]
+                                            }-6)`,
+                                            boxShadow:
+                                              "0 1px 2px rgba(0,0,0,0.1)",
+                                          }}
+                                          title={`${count} jadwal ${category}`}
+                                        />
+                                      )
+                                    )}
+                                </Group>
+                              )}
+                            </Stack>
+                          </Box>
+                        );
+                      }}
+                      weekdayFormat={(date) =>
+                        weekdayLabels[new Date(date).getDay()]
+                      }
+                      styles={(theme) => ({
+                        weekday: {
+                          fontSize: 11,
+                          padding: "8px 0",
+                          fontWeight: 600,
+                          color: theme.colors.gray[6],
+                          textAlign: "center",
+                          backgroundColor: theme.colors.gray[0],
+                          borderBottom: `1px solid ${theme.colors.gray[2]}`,
+                        },
+                        monthCell: {
+                          border: `1px solid ${theme.colors.gray[2]}`,
+                          borderRadius: 0,
+                          padding: 0,
+                          maxWidth: "100%",
+                        },
+                        calendarHeader: {
+                          display: "none",
+                        },
+                        monthThead: {
+                          marginTop: 0,
+                        },
+                        cell: {
+                          padding: 0,
+                          borderRadius: 0,
+                          minHeight: "32px !important",
+                          height: "32px !important",
+                          "&[data-weekend]": {
+                            color: theme.colors.red[6],
                           },
-                          monthCell: {
-                            border: `1px solid ${theme.colors.gray[2]}`,
-                            borderRadius: 0,
-                            padding: 0,
-                            maxWidth: "100%",
+                          "&[data-outside]": {
+                            color: theme.colors.gray[5],
                           },
-                          calendarHeader: {
-                            display: "none",
-                          },
-                          monthThead: {
-                            marginTop: 0,
-                          },
-                          cell: {
-                            padding: 0,
-                            borderRadius: 0,
-                            minHeight: "32px !important",
-                            height: "32px !important",
-                            "&[data-weekend]": {
-                              color: theme.colors.red[6],
-                            },
-                            "&[data-outside]": {
-                              color: theme.colors.gray[5],
-                            },
-                          },
-                          month: {
-                            borderRadius: 0,
-                            backgroundColor: "white",
-                            width: "100%",
-                          },
-                        })}
-                        classNames={{
-                          day: "mantine-calendar-day-cell",
-                        }}
-                      />
-                      <style>{`
+                        },
+                        month: {
+                          borderRadius: 0,
+                          backgroundColor: "white",
+                          width: "100%",
+                        },
+                      })}
+                      classNames={{
+                        day: "mantine-calendar-day-cell",
+                      }}
+                    />
+                    <style>{`
                   .mantine-calendar-day-cell {
                     min-height: 60px;
                     padding: 0;
@@ -1010,56 +1003,26 @@ export default function UserDashboard() {
                     background-color: var(--mantine-color-blue-0);
                   }
                 `}</style>
-                    </Box>
-                  </>
-                )}
-              </Card>
-            </Grid.Col>
-          </Grid>
-          {/* Row 2 */}
-          <Grid gutter="xl" mt="md">
-            <Grid.Col span={{ base: 12, lg: 6 }}>
-              <Card padding="lg" radius="md" style={{ height: "100%" }}>
-                {loading ? (
-                  <>
-                    <Group justify="space-between" mb="xs">
-                      <Skeleton height={24} width={180} />
-                      <Skeleton height={30} width={150} />
-                    </Group>
-                    <Divider my={8} />
-                  </>
-                ) : (
-                  <>
-                    <Group justify="space-between" mb="xs">
-                      <Title order={3}>Transaksi Terbaru</Title>
-                      <Button
-                        variant="light"
-                        size="xs"
-                        component={Link}
-                        href="/user/transactions"
-                      >
-                        Lihat Selengkapnya
-                      </Button>
-                    </Group>
-                    <Divider my={8} />
-                  </>
-                )}
-                {loading ? (
-                  <Stack gap="sm">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <Group key={i} justify="space-between">
-                        <Group gap={6}>
-                          <Skeleton height={16} width={16} circle />
-                          <Stack gap={4}>
-                            <Skeleton height={14} width={180} />
-                            <Skeleton height={12} width={120} />
-                          </Stack>
-                        </Group>
-                        <Skeleton height={14} width={80} />
-                      </Group>
-                    ))}
-                  </Stack>
-                ) : (
+                  </Box>
+                </Card>
+              </Grid.Col>
+            </Grid>
+            {/* Row 2 */}
+            <Grid gutter="xl" mt="md">
+              <Grid.Col span={{ base: 12, lg: 6 }}>
+                <Card padding="lg" radius="md" style={{ height: "100%" }}>
+                  <Group justify="space-between" mb="xs">
+                    <Title order={3}>Transaksi Terbaru</Title>
+                    <Button
+                      variant="light"
+                      size="xs"
+                      component={Link}
+                      href="/user/transactions"
+                    >
+                      Lihat Selengkapnya
+                    </Button>
+                  </Group>
+                  <Divider my={8} />
                   <Stack gap="sm">
                     {(data?.transactions || []).map((t) => (
                       <Group
@@ -1094,51 +1057,28 @@ export default function UserDashboard() {
                         </Text>
                       </Group>
                     ))}
-                    {!loading && (data?.transactions || []).length === 0 && (
+                    {(data?.transactions || []).length === 0 && (
                       <Text c="dimmed" size="sm">
                         Belum ada transaksi.
                       </Text>
                     )}
                   </Stack>
-                )}
-              </Card>
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, lg: 6 }}>
-              <Card padding="lg" radius="md" style={{ height: "100%" }}>
-                {loading ? (
-                  <>
-                    <Group justify="space-between" mb="xs">
-                      <Skeleton height={24} width={180} />
-                      <Skeleton height={30} width={150} />
-                    </Group>
-                    <Divider my={8} />
-                  </>
-                ) : (
-                  <>
-                    <Group justify="space-between" mb="xs">
-                      <Title order={3}>Diskusi Terbaru</Title>
-                      <Button
-                        variant="light"
-                        size="xs"
-                        component={Link}
-                        href="/user/discussions"
-                      >
-                        Lihat Selengkapnya
-                      </Button>
-                    </Group>
-                    <Divider my={8} />
-                  </>
-                )}
-                {loading ? (
-                  <Stack gap="sm">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <Stack key={i} gap={4}>
-                        <Skeleton height={14} width="80%" />
-                        <Skeleton height={12} width="100%" />
-                      </Stack>
-                    ))}
-                  </Stack>
-                ) : (
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, lg: 6 }}>
+                <Card padding="lg" radius="md" style={{ height: "100%" }}>
+                  <Group justify="space-between" mb="xs">
+                    <Title order={3}>Diskusi Terbaru</Title>
+                    <Button
+                      variant="light"
+                      size="xs"
+                      component={Link}
+                      href="/user/discussions"
+                    >
+                      Lihat Selengkapnya
+                    </Button>
+                  </Group>
+                  <Divider my={8} />
                   <Stack gap="sm">
                     {(data?.discussions || []).map((d) => (
                       <div key={d.id}>
@@ -1150,217 +1090,28 @@ export default function UserDashboard() {
                         </Text>
                       </div>
                     ))}
-                    {!loading && (data?.discussions || []).length === 0 && (
+                    {(data?.discussions || []).length === 0 && (
                       <Text c="dimmed" size="sm">
                         Belum ada diskusi terbaru.
                       </Text>
                     )}
                   </Stack>
-                )}
-              </Card>
-            </Grid.Col>
-          </Grid>
-        </Stack>
-        <Modal
-          opened={addOpen}
-          onClose={() => setAddOpen(false)}
-          title="Tambah Jadwal"
-          centered
-        >
-          <Stack gap="sm">
-            <TextInput
-              label="Judul"
-              placeholder="Belajar Scratch"
-              value={evTitle}
-              onChange={(e) => setEvTitle(e.currentTarget.value)}
-              required
-            />
-            <Select
-              label="Kategori"
-              data={[
-                { value: "belajar", label: "Belajar" },
-                { value: "tugas", label: "Tugas" },
-                { value: "live", label: "Live Calls" },
-              ]}
-              value={evCategory}
-              onChange={(v) => setEvCategory(v as ScheduleEvent["category"])}
-            />
-            <Textarea
-              label="Deskripsi"
-              minRows={2}
-              value={evDesc}
-              onChange={(e) => setEvDesc(e.currentTarget.value)}
-              placeholder="Catatan tambahan"
-            />
-            <Group grow>
-              <DateInput
-                label="Mulai"
-                value={evStart ? new Date(evStart) : null}
-                onChange={(date) =>
-                  setEvStart(date ? dayjs(date).format("YYYY-MM-DD") : "")
-                }
-                placeholder="Pilih tanggal mulai"
-                clearable
-                weekdayFormat="ddd"
-                firstDayOfWeek={1}
-                locale="id"
-                valueFormat="DD MMMM, YYYY"
-                styles={(theme) => ({
-                  weekday: {
-                    fontSize: "0.875rem",
-                  },
-                })}
-              />
-              <DateInput
-                label="Selesai (opsional)"
-                value={evEnd ? new Date(evEnd) : null}
-                onChange={(date) =>
-                  setEvEnd(date ? dayjs(date).format("YYYY-MM-DD") : "")
-                }
-                placeholder="Pilih tanggal selesai"
-                clearable
-                minDate={evStart ? new Date(evStart) : undefined}
-                weekdayFormat="ddd"
-                firstDayOfWeek={1}
-                locale="id"
-                valueFormat="DD MMMM, YYYY"
-                styles={(theme) => ({
-                  weekday: {
-                    fontSize: "0.875rem",
-                  },
-                })}
-              />
-            </Group>
-            <Button onClick={addEvent} disabled={!evTitle}>
-              Simpan
-            </Button>
-            <Text size="xs" c="dimmed">
-              Rentang tanggal akan menghasilkan event berulang harian di
-              kalender (setiap hari dalam rentang). Klik badge untuk detail, dan
-              hapus dari modal detail.
-            </Text>
+                </Card>
+              </Grid.Col>
+            </Grid>
           </Stack>
-        </Modal>
-
-        <Modal
-          opened={!!selectedEvent}
-          onClose={() => setSelectedEvent(null)}
-          title={selectedEvent ? `Detail Jadwal: ${selectedEvent.title}` : ""}
-          centered
-        >
-          {selectedEvent && (
-            <Stack gap="sm">
-              <Badge color={categoryColor[selectedEvent.category]}>
-                {selectedEvent.category}
-              </Badge>
-              <Text fw={600}>{selectedEvent.title}</Text>
-              <Text size="sm" c="dimmed">
-                {selectedEvent.description || "-"}
-              </Text>
-              <Text size="sm">
-                Mulai:{" "}
-                {dayjs(selectedEvent.start).locale("id").format("DD MMMM YYYY")}
-              </Text>
-              {selectedEvent.end && (
-                <Text size="sm">
-                  Selesai:{" "}
-                  {dayjs(selectedEvent.end).locale("id").format("DD MMMM YYYY")}
-                </Text>
-              )}
-              <Group justify="flex-end" gap={8}>
-                <Button size="xs" variant="default" onClick={openEditModal}>
-                  Edit
-                </Button>
-                <Button
-                  color="red"
-                  size="xs"
-                  onClick={() => confirmDelete(selectedEvent.id)}
-                >
-                  Hapus
-                </Button>
-              </Group>
-            </Stack>
-          )}
-        </Modal>
-
-        {/* Modal Daftar Jadwal per Tanggal */}
-        <Modal
-          opened={!!selectedDate}
-          onClose={() => {
-            setSelectedDate(null);
-            setSelectedDateEvents([]);
-          }}
-          title={
-            selectedDate
-              ? `Jadwal: ${dayjs(selectedDate)
-                  .locale("id")
-                  .format("DD MMMM YYYY")}`
-              : ""
-          }
-          centered
-          size="sm"
-        >
-          <Stack gap="md">
-            {selectedDateEvents.length > 0 ? (
-              selectedDateEvents.map((ev) => (
-                <Paper key={ev.id} p="sm" withBorder>
-                  <Stack gap="xs">
-                    <Group justify="space-between">
-                      <Badge
-                        color={categoryColor[ev.category]}
-                        variant="light"
-                        size="sm"
-                      >
-                        {ev.category}
-                      </Badge>
-                      <ActionIcon
-                        size="sm"
-                        variant="subtle"
-                        onClick={() => {
-                          setSelectedEvent(ev);
-                          setSelectedDate(null);
-                          setSelectedDateEvents([]);
-                        }}
-                      >
-                        <IconListDetails size={16} />
-                      </ActionIcon>
-                    </Group>
-                    <Text size="sm" fw={500}>
-                      {ev.title}
-                    </Text>
-                    {ev.description && (
-                      <Text size="xs" c="dimmed" lineClamp={2}>
-                        {ev.description}
-                      </Text>
-                    )}
-                  </Stack>
-                </Paper>
-              ))
-            ) : (
-              <Text c="dimmed" size="sm" ta="center">
-                Tidak ada jadwal pada tanggal ini
-              </Text>
-            )}
-          </Stack>
-        </Modal>
-
-        {/* Modal Edit Jadwal */}
-        <Modal
-          opened={!!editOpen}
-          onClose={closeEditModal}
-          title={
-            selectedEvent
-              ? `Edit Jadwal: ${selectedEvent.title}`
-              : "Edit Jadwal"
-          }
-          centered
-        >
-          {selectedEvent && (
+          <Modal
+            opened={addOpen}
+            onClose={() => setAddOpen(false)}
+            title="Tambah Jadwal"
+            centered
+          >
             <Stack gap="sm">
               <TextInput
                 label="Judul"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.currentTarget.value)}
+                placeholder="Belajar Scratch"
+                value={evTitle}
+                onChange={(e) => setEvTitle(e.currentTarget.value)}
                 required
               />
               <Select
@@ -1370,24 +1121,22 @@ export default function UserDashboard() {
                   { value: "tugas", label: "Tugas" },
                   { value: "live", label: "Live Calls" },
                 ]}
-                value={editCategory}
-                onChange={(v) =>
-                  setEditCategory(v as ScheduleEvent["category"])
-                }
+                value={evCategory}
+                onChange={(v) => setEvCategory(v as ScheduleEvent["category"])}
               />
               <Textarea
                 label="Deskripsi"
                 minRows={2}
-                value={editDesc}
-                onChange={(e) => setEditDesc(e.currentTarget.value)}
+                value={evDesc}
+                onChange={(e) => setEvDesc(e.currentTarget.value)}
                 placeholder="Catatan tambahan"
               />
               <Group grow>
                 <DateInput
                   label="Mulai"
-                  value={editStart ? new Date(editStart) : null}
+                  value={evStart ? new Date(evStart) : null}
                   onChange={(date) =>
-                    setEditStart(date ? dayjs(date).format("YYYY-MM-DD") : "")
+                    setEvStart(date ? dayjs(date).format("YYYY-MM-DD") : "")
                   }
                   placeholder="Pilih tanggal mulai"
                   clearable
@@ -1403,13 +1152,13 @@ export default function UserDashboard() {
                 />
                 <DateInput
                   label="Selesai (opsional)"
-                  value={editEnd ? new Date(editEnd) : null}
+                  value={evEnd ? new Date(evEnd) : null}
                   onChange={(date) =>
-                    setEditEnd(date ? dayjs(date).format("YYYY-MM-DD") : "")
+                    setEvEnd(date ? dayjs(date).format("YYYY-MM-DD") : "")
                   }
                   placeholder="Pilih tanggal selesai"
                   clearable
-                  minDate={editStart ? new Date(editStart) : undefined}
+                  minDate={evStart ? new Date(evStart) : undefined}
                   weekdayFormat="ddd"
                   firstDayOfWeek={1}
                   locale="id"
@@ -1421,48 +1170,243 @@ export default function UserDashboard() {
                   })}
                 />
               </Group>
+              <Button onClick={addEvent} disabled={!evTitle}>
+                Simpan
+              </Button>
+              <Text size="xs" c="dimmed">
+                Rentang tanggal akan menghasilkan event berulang harian di
+                kalender (setiap hari dalam rentang). Klik badge untuk detail,
+                dan hapus dari modal detail.
+              </Text>
+            </Stack>
+          </Modal>
+
+          <Modal
+            opened={!!selectedEvent}
+            onClose={() => setSelectedEvent(null)}
+            title={selectedEvent ? `Detail Jadwal: ${selectedEvent.title}` : ""}
+            centered
+          >
+            {selectedEvent && (
+              <Stack gap="sm">
+                <Badge color={categoryColor[selectedEvent.category]}>
+                  {selectedEvent.category}
+                </Badge>
+                <Text fw={600}>{selectedEvent.title}</Text>
+                <Text size="sm" c="dimmed">
+                  {selectedEvent.description || "-"}
+                </Text>
+                <Text size="sm">
+                  Mulai:{" "}
+                  {dayjs(selectedEvent.start)
+                    .locale("id")
+                    .format("DD MMMM YYYY")}
+                </Text>
+                {selectedEvent.end && (
+                  <Text size="sm">
+                    Selesai:{" "}
+                    {dayjs(selectedEvent.end)
+                      .locale("id")
+                      .format("DD MMMM YYYY")}
+                  </Text>
+                )}
+                <Group justify="flex-end" gap={8}>
+                  <Button size="xs" variant="default" onClick={openEditModal}>
+                    Edit
+                  </Button>
+                  <Button
+                    color="red"
+                    size="xs"
+                    onClick={() => confirmDelete(selectedEvent.id)}
+                  >
+                    Hapus
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+          </Modal>
+
+          {/* Modal Daftar Jadwal per Tanggal */}
+          <Modal
+            opened={!!selectedDate}
+            onClose={() => {
+              setSelectedDate(null);
+              setSelectedDateEvents([]);
+            }}
+            title={
+              selectedDate
+                ? `Jadwal: ${dayjs(selectedDate)
+                    .locale("id")
+                    .format("DD MMMM YYYY")}`
+                : ""
+            }
+            centered
+            size="sm"
+          >
+            <Stack gap="md">
+              {selectedDateEvents.length > 0 ? (
+                selectedDateEvents.map((ev) => (
+                  <Paper key={ev.id} p="sm" withBorder>
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Badge
+                          color={categoryColor[ev.category]}
+                          variant="light"
+                          size="sm"
+                        >
+                          {ev.category}
+                        </Badge>
+                        <ActionIcon
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => {
+                            setSelectedEvent(ev);
+                            setSelectedDate(null);
+                            setSelectedDateEvents([]);
+                          }}
+                        >
+                          <IconListDetails size={16} />
+                        </ActionIcon>
+                      </Group>
+                      <Text size="sm" fw={500}>
+                        {ev.title}
+                      </Text>
+                      {ev.description && (
+                        <Text size="xs" c="dimmed" lineClamp={2}>
+                          {ev.description}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Paper>
+                ))
+              ) : (
+                <Text c="dimmed" size="sm" ta="center">
+                  Tidak ada jadwal pada tanggal ini
+                </Text>
+              )}
+            </Stack>
+          </Modal>
+
+          {/* Modal Edit Jadwal */}
+          <Modal
+            opened={!!editOpen}
+            onClose={closeEditModal}
+            title={
+              selectedEvent
+                ? `Edit Jadwal: ${selectedEvent.title}`
+                : "Edit Jadwal"
+            }
+            centered
+          >
+            {selectedEvent && (
+              <Stack gap="sm">
+                <TextInput
+                  label="Judul"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.currentTarget.value)}
+                  required
+                />
+                <Select
+                  label="Kategori"
+                  data={[
+                    { value: "belajar", label: "Belajar" },
+                    { value: "tugas", label: "Tugas" },
+                    { value: "live", label: "Live Calls" },
+                  ]}
+                  value={editCategory}
+                  onChange={(v) =>
+                    setEditCategory(v as ScheduleEvent["category"])
+                  }
+                />
+                <Textarea
+                  label="Deskripsi"
+                  minRows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.currentTarget.value)}
+                  placeholder="Catatan tambahan"
+                />
+                <Group grow>
+                  <DateInput
+                    label="Mulai"
+                    value={editStart ? new Date(editStart) : null}
+                    onChange={(date) =>
+                      setEditStart(date ? dayjs(date).format("YYYY-MM-DD") : "")
+                    }
+                    placeholder="Pilih tanggal mulai"
+                    clearable
+                    weekdayFormat="ddd"
+                    firstDayOfWeek={1}
+                    locale="id"
+                    valueFormat="DD MMMM, YYYY"
+                    styles={(theme) => ({
+                      weekday: {
+                        fontSize: "0.875rem",
+                      },
+                    })}
+                  />
+                  <DateInput
+                    label="Selesai (opsional)"
+                    value={editEnd ? new Date(editEnd) : null}
+                    onChange={(date) =>
+                      setEditEnd(date ? dayjs(date).format("YYYY-MM-DD") : "")
+                    }
+                    placeholder="Pilih tanggal selesai"
+                    clearable
+                    minDate={editStart ? new Date(editStart) : undefined}
+                    weekdayFormat="ddd"
+                    firstDayOfWeek={1}
+                    locale="id"
+                    valueFormat="DD MMMM, YYYY"
+                    styles={(theme) => ({
+                      weekday: {
+                        fontSize: "0.875rem",
+                      },
+                    })}
+                  />
+                </Group>
+                <Group justify="flex-end">
+                  <Button onClick={handleEditSubmit} disabled={!editTitle}>
+                    Simpan
+                  </Button>
+                  <Button variant="default" onClick={closeEditModal}>
+                    Batal
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+          </Modal>
+          <Modal
+            opened={!!deleteId}
+            onClose={() => setDeleteId(null)}
+            title="Hapus Jadwal"
+            centered
+          >
+            <Stack>
+              <Text size="sm">
+                Yakin ingin menghapus jadwal ini? Tindakan ini tidak bisa
+                dibatalkan.
+              </Text>
               <Group justify="flex-end">
-                <Button onClick={handleEditSubmit} disabled={!editTitle}>
-                  Simpan
-                </Button>
-                <Button variant="default" onClick={closeEditModal}>
+                <Button
+                  variant="default"
+                  onClick={() => setDeleteId(null)}
+                  size="xs"
+                >
                   Batal
+                </Button>
+                <Button color="red" onClick={doDelete} size="xs">
+                  Hapus
                 </Button>
               </Group>
             </Stack>
+          </Modal>
+          {eventsError && (
+            <Alert color="red" mt="md" icon={<IconAlertCircle size={16} />}>
+              {eventsError}
+            </Alert>
           )}
-        </Modal>
-        <Modal
-          opened={!!deleteId}
-          onClose={() => setDeleteId(null)}
-          title="Hapus Jadwal"
-          centered
-        >
-          <Stack>
-            <Text size="sm">
-              Yakin ingin menghapus jadwal ini? Tindakan ini tidak bisa
-              dibatalkan.
-            </Text>
-            <Group justify="flex-end">
-              <Button
-                variant="default"
-                onClick={() => setDeleteId(null)}
-                size="xs"
-              >
-                Batal
-              </Button>
-              <Button color="red" onClick={doDelete} size="xs">
-                Hapus
-              </Button>
-            </Group>
-          </Stack>
-        </Modal>
-        {eventsError && (
-          <Alert color="red" mt="md" icon={<IconAlertCircle size={16} />}>
-            {eventsError}
-          </Alert>
-        )}
-      </Container>
+        </Container>
+      )}
     </DatesProvider>
   );
 }

@@ -16,10 +16,10 @@ import {
   Image,
   SimpleGrid,
   Divider,
-  Skeleton,
   Textarea,
   FileInput,
   Modal,
+  Skeleton,
 } from "@mantine/core";
 import {
   IconHeart,
@@ -116,6 +116,7 @@ export default function UserPostDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [myOtherPosts, setMyOtherPosts] = useState<ApiPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [switcherLoading, setSwitcherLoading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingComment, setEditingComment] = useState<ApiComment | null>(null);
   const [editText, setEditText] = useState("");
@@ -507,13 +508,58 @@ export default function UserPostDetailPage() {
 
   if (loading) {
     return (
-      <Container size="xl">
-        <Stack gap="lg">
-          <Skeleton height={36} width={200} />
-          <Skeleton height={200} radius="md" />
-          <Skeleton height={120} radius="md" />
-        </Stack>
-      </Container>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
     );
   }
 
@@ -1074,6 +1120,65 @@ export default function UserPostDetailPage() {
             ))}
           </Stack>
         </Stack>
+
+        {/* Postingan Saya yang Lain dengan skeleton loading saat switch */}
+        {myOtherPosts.length > 0 && (
+          <Stack gap="lg" mt="xl">
+            <Title order={4}>Postingan Saya yang Lain</Title>
+            {switcherLoading ? (
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                {[1, 2].map((i) => (
+                  <Card key={i} radius="md" withBorder p="md">
+                    <Stack gap="sm">
+                      <Skeleton height={20} width="80%" />
+                      <Skeleton height={60} />
+                      <Group>
+                        <Skeleton height={24} width={60} />
+                        <Skeleton height={24} width={80} />
+                      </Group>
+                    </Stack>
+                  </Card>
+                ))}
+              </SimpleGrid>
+            ) : (
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                {myOtherPosts.map((p) => (
+                  <Card
+                    key={p.id}
+                    radius="md"
+                    withBorder
+                    p="md"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => {
+                      setSwitcherLoading(true);
+                      window.location.href = `/user/discussions/${p.id}`;
+                    }}
+                    className="card-hover"
+                  >
+                    <Stack gap="xs">
+                      <Text fw={600} lineClamp={1}>
+                        {p.title}
+                      </Text>
+                      <Text size="sm" c="dimmed" lineClamp={2}>
+                        {p.content
+                          .replaceAll("\\r\\n", " ")
+                          .replaceAll("\\n", " ")}
+                      </Text>
+                      <Group gap="sm">
+                        <Badge size="sm" variant="light">
+                          {p.likes} suka
+                        </Badge>
+                        <Badge size="sm" variant="light" color="blue">
+                          {p.comments.length} komentar
+                        </Badge>
+                      </Group>
+                    </Stack>
+                  </Card>
+                ))}
+              </SimpleGrid>
+            )}
+          </Stack>
+        )}
 
         {/* Modal Konfirmasi Edit Komentar */}
         <Modal

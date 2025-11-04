@@ -7,7 +7,6 @@ import {
   Paper,
   Grid,
   Text,
-  Loader,
   Card,
   Button,
   Divider,
@@ -90,14 +89,19 @@ export default function SchoolDashboard() {
     totalEnrollments: number;
     completionRate: number;
   } | null>(null);
-  const [transactions, setTransactions] = useState<
-    | Array<{ id: string; date: string; course_title: string; amount: number; status: string }>
-    | null
-  >(null);
-  const [students, setStudents] = useState<
-    | Array<{ id: string; name: string; email: string; status?: string }>
-    | null
-  >(null);
+  const [transactions, setTransactions] = useState<Array<{
+    id: string;
+    date: string;
+    course_title: string;
+    amount: number;
+    status: string;
+  }> | null>(null);
+  const [students, setStudents] = useState<Array<{
+    id: string;
+    name: string;
+    email: string;
+    status?: string;
+  }> | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -111,7 +115,8 @@ export default function SchoolDashboard() {
         if (res.ok && json.success) {
           setStats(json.stats);
           // set transactions if provided by the API
-          if (Array.isArray(json.transactions)) setTransactions(json.transactions);
+          if (Array.isArray(json.transactions))
+            setTransactions(json.transactions);
         } else {
           setError(json.error || "Gagal memuat data");
         }
@@ -127,7 +132,9 @@ export default function SchoolDashboard() {
     const fetchStudents = async () => {
       if (!user?.id) return;
       try {
-        const res = await fetch(`/api/school/students?schoolUserId=${user.id}&limit=10`);
+        const res = await fetch(
+          `/api/school/students?schoolUserId=${user.id}&limit=10`
+        );
         const json = await res.json();
         if (res.ok && json.success) {
           setStudents(json.students || []);
@@ -144,17 +151,58 @@ export default function SchoolDashboard() {
 
   if (loading) {
     return (
-      <Box
-        p="lg"
+      <div
         style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
           display: "flex",
-          justifyContent: "center",
           alignItems: "center",
-          minHeight: "60vh",
+          justifyContent: "center",
+          zIndex: 9999,
         }}
       >
-        <Loader size="lg" />
-      </Box>
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
     );
   }
 
@@ -214,7 +262,13 @@ export default function SchoolDashboard() {
       <Grid gutter="lg" mt="xl">
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Card padding="lg" radius="md" withBorder>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+              }}
+            >
               <div>
                 <Title order={3}>Transaksi Terbaru</Title>
                 <Text size="sm" c="dimmed">
@@ -230,27 +284,52 @@ export default function SchoolDashboard() {
               {transactions && transactions.length === 0 && (
                 <Text c="dimmed">Belum ada transaksi.</Text>
               )}
-              {transactions && transactions.map((t) => (
-                <Group key={t.id} style={{ justifyContent: "space-between" }}>
-                  <Group>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      <Text size="sm" fw={700}>{t.course_title}</Text>
-                      <Text size="xs" c="dimmed">{new Date(t.date).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</Text>
-                    </div>
+              {transactions &&
+                transactions.map((t) => (
+                  <Group key={t.id} style={{ justifyContent: "space-between" }}>
+                    <Group>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <Text size="sm" fw={700}>
+                          {t.course_title}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {new Date(t.date).toLocaleString("id-ID", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </Text>
+                      </div>
+                    </Group>
+                    <Text
+                      size="sm"
+                      fw={700}
+                      c={
+                        t.status === "completed" || t.status === "paid"
+                          ? "green"
+                          : undefined
+                      }
+                    >
+                      {rupiah(t.amount)}
+                    </Text>
                   </Group>
-                  <Text size="sm" fw={700} c={t.status === "completed" || t.status === "paid" ? "green" : undefined}>
-                    {rupiah(t.amount)}
-                  </Text>
-                </Group>
-              ))}
+                ))}
             </Stack>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: 12,
+              }}
+            >
               <Button
                 size="xs"
                 variant="light"
                 component="a"
                 href="/school/profile?tab=purchases"
-                style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}
+                style={{
+                  color: "var(--primary-color)",
+                  borderColor: "var(--primary-color)",
+                }}
               >
                 Lihat Selengkapnya
               </Button>
@@ -260,27 +339,57 @@ export default function SchoolDashboard() {
 
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Card padding="lg" radius="md" withBorder>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+              }}
+            >
               <div>
                 <Title order={3}>Daftar Siswa</Title>
-                <Text size="sm" c="dimmed">Beberapa siswa teratas yang terdaftar di sekolah ini</Text>
+                <Text size="sm" c="dimmed">
+                  Beberapa siswa teratas yang terdaftar di sekolah ini
+                </Text>
               </div>
             </div>
             <Divider my="sm" />
             <Stack gap="sm">
               {students === null && <Text c="dimmed">Memuat siswa...</Text>}
-              {students && students.length === 0 && <Text c="dimmed">Belum ada siswa terdaftar.</Text>}
-              {students && students.map((s) => (
-                <Group key={s.id} style={{ justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <Text size="sm" fw={700}>{s.name}</Text>
-                    <Text size="xs" c="dimmed">{s.email}</Text>
-                  </div>
-                </Group>
-              ))}
+              {students && students.length === 0 && (
+                <Text c="dimmed">Belum ada siswa terdaftar.</Text>
+              )}
+              {students &&
+                students.map((s) => (
+                  <Group key={s.id} style={{ justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <Text size="sm" fw={700}>
+                        {s.name}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {s.email}
+                      </Text>
+                    </div>
+                  </Group>
+                ))}
             </Stack>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <Button size="xs" variant="light" component="a" href="/school/students" style={{ color: "var(--primary-color)", borderColor: "var(--primary-color)" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: 12,
+              }}
+            >
+              <Button
+                size="xs"
+                variant="light"
+                component="a"
+                href="/school/students"
+                style={{
+                  color: "var(--primary-color)",
+                  borderColor: "var(--primary-color)",
+                }}
+              >
                 Kelola Siswa
               </Button>
             </div>

@@ -27,7 +27,6 @@ import {
   IconShoppingCart,
 } from "@tabler/icons-react";
 import { useAuth } from "../../../hooks/useAuth";
-import PrimeLoader from "../../../components/PrimeLoader";
 import {
   getCategoryLabel,
   getCategoryColor,
@@ -64,6 +63,7 @@ export default function UserExplorePage() {
   };
   const [items, setItems] = useState<ExploreCourse[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const formatDurationHours = (durationMin: number | null | undefined) => {
     if (typeof durationMin !== "number" || Number.isNaN(durationMin)) {
@@ -149,6 +149,7 @@ export default function UserExplorePage() {
       }
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [searchQuery, categoryFilter, levelFilter, sort, page, limit, user?.id]);
 
@@ -162,8 +163,61 @@ export default function UserExplorePage() {
 
   // enroll handled via checkout flow now
 
-  if (loading && items.length === 0) {
-    return <PrimeLoader />;
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
   }
 
   return (
@@ -220,12 +274,49 @@ export default function UserExplorePage() {
         </Card>
 
         {/* Course Grid */}
-        {loading && items.length === 0 ? (
-          <Stack gap="md">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} height={260} radius="md" />
+        {loading && !initialLoad ? (
+          // Skeleton loading untuk search/filter
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Card key={i} radius="lg">
+                <Card.Section>
+                  <Skeleton height={200} />
+                </Card.Section>
+                <Stack p="md" gap="sm">
+                  <Group justify="space-between">
+                    <Skeleton height={24} width={80} />
+                    <Skeleton height={24} width={60} />
+                  </Group>
+                  <Skeleton height={24} width="80%" />
+                  <Skeleton height={60} />
+                  <Group gap="xs">
+                    <Skeleton height={16} width={60} />
+                    <Skeleton height={16} width={40} />
+                    <Skeleton height={16} width={50} />
+                  </Group>
+                  <Group justify="space-between">
+                    <Skeleton height={28} width={100} />
+                    <Group gap="xs">
+                      <Skeleton height={32} width={60} />
+                      <Skeleton height={32} width={60} />
+                    </Group>
+                  </Group>
+                </Stack>
+              </Card>
             ))}
-          </Stack>
+          </SimpleGrid>
+        ) : items.length === 0 && !loading ? (
+          <Card padding="xl" radius="md">
+            <Stack align="center" gap="md">
+              <IconBook size="3rem" color="gray" />
+              <Text size="lg" c="dimmed">
+                Tidak ada kursus ditemukan
+              </Text>
+              <Text size="sm" c="dimmed" ta="center">
+                Coba ubah filter atau kata kunci pencarian Anda
+              </Text>
+            </Stack>
+          </Card>
         ) : (
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
             {items.map((course) => (
@@ -349,20 +440,6 @@ export default function UserExplorePage() {
               </Card>
             ))}
           </SimpleGrid>
-        )}
-
-        {items.length === 0 && !loading && (
-          <Card padding="xl" radius="md">
-            <Stack align="center" gap="md">
-              <IconBook size="3rem" color="gray" />
-              <Text size="lg" c="dimmed">
-                Tidak ada kursus ditemukan
-              </Text>
-              <Text size="sm" c="dimmed" ta="center">
-                Coba ubah filter atau kata kunci pencarian Anda
-              </Text>
-            </Stack>
-          </Card>
         )}
 
         {total > limit && (

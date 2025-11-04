@@ -16,14 +16,13 @@ import {
   SimpleGrid,
   Select,
   Pagination,
-  Skeleton,
   Modal,
+  Skeleton,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
-import PrimeLoader from "../../../components/PrimeLoader";
 import { useCallback, useEffect, useState } from "react";
 
 type ApiPost = {
@@ -59,6 +58,7 @@ export default function UserDiscussionsPage() {
   const [items, setItems] = useState<ApiPost[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
 
   // Modal zoom image
@@ -86,6 +86,7 @@ export default function UserDiscussionsPage() {
       }
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [user, sort, page, limit, q, filter]);
 
@@ -161,8 +162,61 @@ export default function UserDiscussionsPage() {
     });
   }
 
-  if (loading && items.length === 0) {
-    return <PrimeLoader />;
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
   }
 
   return (
@@ -215,15 +269,37 @@ export default function UserDiscussionsPage() {
           onKeyDown={(e) => e.key === "Enter" && setPage(1)}
         />
 
-        {loading ? (
-          <Stack gap="md">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} height={120} radius="md" />
-            ))}
-          </Stack>
-        ) : (
-          <Stack gap="md">
-            {items.map((post) => {
+        <Stack gap="md">
+          {loading && !initialLoad ? (
+            // Skeleton loading untuk search/filter
+            <>
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: "20px",
+                    background: "#ffffff",
+                    borderRadius: "12px",
+                    border: "1px solid #e9ecef",
+                  }}
+                >
+                  <Group align="flex-start" gap="md" wrap="nowrap">
+                    <Skeleton height={40} circle />
+                    <div style={{ flex: 1 }}>
+                      <Skeleton height={8} width="40%" mb={8} />
+                      <Skeleton height={20} width="70%" mb={8} />
+                      <Skeleton height={60} mb={12} />
+                      <Group gap={8}>
+                        <Skeleton height={24} width={60} />
+                        <Skeleton height={24} width={60} />
+                      </Group>
+                    </div>
+                  </Group>
+                </div>
+              ))}
+            </>
+          ) : (
+            items.map((post) => {
               const cover =
                 post.media && post.media.length > 0 ? post.media[0] : null;
               const isVideo = cover?.m_type === "video";
@@ -471,9 +547,9 @@ export default function UserDiscussionsPage() {
                   </Group>
                 </div>
               );
-            })}
-          </Stack>
-        )}
+            })
+          )}
+        </Stack>
 
         <Group justify="space-between" align="center" mt="md">
           <Text size="xs" c="dimmed">

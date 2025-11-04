@@ -12,10 +12,10 @@ import {
   Badge,
   Modal,
   Select,
-  Loader,
   Pagination,
   Group,
   Text,
+  Skeleton,
 } from "@mantine/core";
 import { IconPlus, IconSearch, IconTrash, IconUser } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
@@ -43,6 +43,7 @@ export default function SchoolStudentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [emailOrUsername, setEmailOrUsername] = useState("");
@@ -76,13 +77,13 @@ export default function SchoolStudentsPage() {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   };
 
   useEffect(() => {
     fetchStudents();
   }, [user?.id, page, search, statusFilter]);
-
 
   useEffect(() => {
     setPage(1);
@@ -249,10 +250,59 @@ export default function SchoolStudentsPage() {
         </Group>
       </Paper>
 
-      {loading && (
-        <Box style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-          <Loader size="lg" />
-        </Box>
+      {loading && initialLoad && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(255,255,255,0.98)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div style={{ display: "flex", gap: 24 }}>
+            {[0, 1, 2].map((i) => (
+              <svg
+                key={i}
+                width="64"
+                height="64"
+                viewBox="0 0 64 64"
+                style={{
+                  animation: "spinDiamond 1.2s linear infinite",
+                  animationDelay: `${i * 0.2}s`,
+                }}
+              >
+                <rect
+                  x="12"
+                  y="12"
+                  width="40"
+                  height="40"
+                  fill="none"
+                  stroke="url(#grad)"
+                  strokeWidth="8"
+                  rx="4"
+                  ry="4"
+                  transform="rotate(45 32 32)"
+                />
+                <defs>
+                  <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#f6d457" />
+                    <stop offset="100%" stopColor="#1e3769" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            ))}
+          </div>
+          <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+        </div>
       )}
 
       {error && (
@@ -281,7 +331,30 @@ export default function SchoolStudentsPage() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {students.length === 0 && (
+                  {loading && !initialLoad ? (
+                    // Skeleton loading untuk search/filter
+                    <>
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <Table.Tr key={i}>
+                          <Table.Td>
+                            <Group gap="xs" align="center">
+                              <Skeleton height={28} circle />
+                              <Skeleton height={16} width={120} />
+                            </Group>
+                          </Table.Td>
+                          <Table.Td>
+                            <Skeleton height={16} width={180} />
+                          </Table.Td>
+                          <Table.Td>
+                            <Skeleton height={16} width={100} />
+                          </Table.Td>
+                          <Table.Td>
+                            <Skeleton height={28} width={80} />
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </>
+                  ) : students.length === 0 ? (
                     <Table.Tr>
                       <Table.Td
                         colSpan={5}
@@ -290,43 +363,47 @@ export default function SchoolStudentsPage() {
                         <Text c="dimmed">Belum ada siswa</Text>
                       </Table.Td>
                     </Table.Tr>
+                  ) : (
+                    students.map((s) => (
+                      <Table.Tr key={s.id}>
+                        <Table.Td>
+                          <Group gap="xs" align="center">
+                            {/* show avatar when available, otherwise use IconUser initials */}
+                            {s.avatar ? (
+                              <Image
+                                src={s.avatar}
+                                alt={s.name}
+                                width={28}
+                                height={28}
+                                style={{
+                                  borderRadius: 999,
+                                  objectFit: "cover",
+                                }}
+                              />
+                            ) : (
+                              <IconUser size={18} />
+                            )}
+                            <Text>{s.name}</Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td>{s.email}</Table.Td>
+                        <Table.Td>
+                          {new Date(s.invited_at).toLocaleDateString("id-ID")}
+                        </Table.Td>
+                        <Table.Td>
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            leftSection={<IconTrash size={14} />}
+                            onClick={() => setDeleteId(s.id)}
+                          >
+                            Hapus
+                          </Button>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
                   )}
-                  {students.map((s) => (
-                    <Table.Tr key={s.id}>
-                      <Table.Td>
-                        <Group gap="xs" align="center">
-                          {/* show avatar when available, otherwise use IconUser initials */}
-                          {s.avatar ? (
-                            <Image
-                              src={s.avatar}
-                              alt={s.name}
-                              width={28}
-                              height={28}
-                              style={{ borderRadius: 999, objectFit: "cover" }}
-                            />
-                          ) : (
-                            <IconUser size={18} />
-                          )}
-                          <Text>{s.name}</Text>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td>{s.email}</Table.Td>
-                      <Table.Td>
-                        {new Date(s.invited_at).toLocaleDateString("id-ID")}
-                      </Table.Td>
-                      <Table.Td>
-                        <Button
-                          size="xs"
-                          color="red"
-                          variant="light"
-                          leftSection={<IconTrash size={14} />}
-                          onClick={() => setDeleteId(s.id)}
-                        >
-                          Hapus
-                        </Button>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
                 </Table.Tbody>
               </Table>
             </div>

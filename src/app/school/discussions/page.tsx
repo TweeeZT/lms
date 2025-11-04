@@ -16,14 +16,12 @@ import {
   SimpleGrid,
   Select,
   Pagination,
-  Skeleton,
   Modal,
+  Skeleton,
 } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
-import PrimeLoader from "../../../components/PrimeLoader";
 import { useCallback, useEffect, useState } from "react";
 
 type ApiPost = {
@@ -59,6 +57,7 @@ export default function UserDiscussionsPage() {
   const [items, setItems] = useState<ApiPost[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
 
   // Modal zoom image
@@ -86,6 +85,7 @@ export default function UserDiscussionsPage() {
       }
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [user, sort, page, limit, q, filter]);
 
@@ -161,8 +161,61 @@ export default function UserDiscussionsPage() {
     });
   }
 
-  if (loading && items.length === 0) {
-    return <PrimeLoader />;
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
   }
 
   return (
@@ -215,15 +268,37 @@ export default function UserDiscussionsPage() {
           onKeyDown={(e) => e.key === "Enter" && setPage(1)}
         />
 
-        {loading && items.length === 0 ? (
-          <Stack gap="md">
-            {Array.from({ length: 10 }).map((_, i) => (
-              <Skeleton key={i} height={120} radius="md" />
-            ))}
-          </Stack>
-        ) : (
-          <Stack gap="md">
-            {items.map((post) => {
+        <Stack gap="md">
+          {loading && !initialLoad ? (
+            // Skeleton loading untuk search/filter
+            <>
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: "20px",
+                    background: "#ffffff",
+                    borderRadius: "12px",
+                    border: "1px solid #e9ecef",
+                  }}
+                >
+                  <Group align="flex-start" gap="md" wrap="nowrap">
+                    <Skeleton height={40} circle />
+                    <div style={{ flex: 1 }}>
+                      <Skeleton height={8} width="40%" mb={8} />
+                      <Skeleton height={20} width="70%" mb={8} />
+                      <Skeleton height={60} mb={12} />
+                      <Group gap={8}>
+                        <Skeleton height={24} width={60} />
+                        <Skeleton height={24} width={60} />
+                      </Group>
+                    </div>
+                  </Group>
+                </div>
+              ))}
+            </>
+          ) : (
+            items.map((post) => {
               const cover =
                 post.media && post.media.length > 0 ? post.media[0] : null;
               const isVideo = cover?.m_type === "video";
@@ -259,7 +334,11 @@ export default function UserDiscussionsPage() {
                         radius="xl"
                         size="md"
                         src={post.user?.avatar || undefined}
-                        style={{ flexShrink: 0, marginTop: 2, cursor: "pointer" }}
+                        style={{
+                          flexShrink: 0,
+                          marginTop: 2,
+                          cursor: "pointer",
+                        }}
                         title={post.user?.full_name || "Profil"}
                       >
                         {(post.user?.full_name || "U")
@@ -274,7 +353,11 @@ export default function UserDiscussionsPage() {
                           {post.user?.full_name || "Pengguna"}
                         </Text>
                         {post.user?.role && (
-                          <Badge size="xs" variant="light" color={getRoleColor(post.user.role)}>
+                          <Badge
+                            size="xs"
+                            variant="light"
+                            color={getRoleColor(post.user.role)}
+                          >
                             {getRoleLabel(post.user.role)}
                           </Badge>
                         )}
@@ -291,7 +374,12 @@ export default function UserDiscussionsPage() {
                             {post.title}
                           </Text>
                           {post.tags?.[0] && (
-                            <Badge size="xs" variant="light" color="blue" style={{ textTransform: "uppercase" }}>
+                            <Badge
+                              size="xs"
+                              variant="light"
+                              color="blue"
+                              style={{ textTransform: "uppercase" }}
+                            >
                               {post.tags[0]}
                             </Badge>
                           )}
@@ -307,88 +395,104 @@ export default function UserDiscussionsPage() {
                       {/* Tampilkan 1 media pertama + 1 tile overlay "+N" */}
                       {post.media && post.media.length > 0 && (
                         <div style={{ marginBottom: 12 }}>
-                          <SimpleGrid cols={post.media.length > 1 ? 2 : 1} spacing={6}>
-                            {post.media.slice(0, Math.min(2, post.media.length)).map((m, idx) => {
-                              const isVid = m.m_type === "video";
-                              const src = isVid
-                                ? m.thumbnail ||
-                                  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%231e3769' width='200' height='200'/%3E%3C/svg%3E"
-                                : m.url;
-                              const remaining = Math.max(0, post.media.length - 1);
-                              const isOverlayTile = idx === 1 && post.media.length > 2; // overlay only if total > 2
-                              return (
-                                <div
-                                  key={m.id}
-                                  style={{
-                                    position: "relative",
-                                    width: "100%",
-                                    aspectRatio: "1 / 1",
-                                    borderRadius: 8,
-                                    overflow: "hidden",
-                                    border: "1px solid #e9ecef",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (isOverlayTile) {
-                                      window.location.href = `/school/discussions/${post.id}`;
-                                      return;
-                                    }
-                                    if (isVid) setPlayVideo(m.url);
-                                    else setZoomImage(m.url);
-                                  }}
-                                >
-                                  <Image
-                                    src={src}
-                                    alt={`Media ${idx + 1}`}
-                                    fit="cover"
-                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                  />
-                                  {isVid && !isOverlayTile && (
-                                    <div
+                          <SimpleGrid
+                            cols={post.media.length > 1 ? 2 : 1}
+                            spacing={6}
+                          >
+                            {post.media
+                              .slice(0, Math.min(2, post.media.length))
+                              .map((m, idx) => {
+                                const isVid = m.m_type === "video";
+                                const src = isVid
+                                  ? m.thumbnail ||
+                                    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%231e3769' width='200' height='200'/%3E%3C/svg%3E"
+                                  : m.url;
+                                const remaining = Math.max(
+                                  0,
+                                  post.media.length - 1
+                                );
+                                const isOverlayTile =
+                                  idx === 1 && post.media.length > 2; // overlay only if total > 2
+                                return (
+                                  <div
+                                    key={m.id}
+                                    style={{
+                                      position: "relative",
+                                      width: "100%",
+                                      aspectRatio: "1 / 1",
+                                      borderRadius: 8,
+                                      overflow: "hidden",
+                                      border: "1px solid #e9ecef",
+                                      cursor: "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isOverlayTile) {
+                                        window.location.href = `/school/discussions/${post.id}`;
+                                        return;
+                                      }
+                                      if (isVid) setPlayVideo(m.url);
+                                      else setZoomImage(m.url);
+                                    }}
+                                  >
+                                    <Image
+                                      src={src}
+                                      alt={`Media ${idx + 1}`}
+                                      fit="cover"
                                       style={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        background: "rgba(0,0,0,0.3)",
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
                                       }}
-                                    >
+                                    />
+                                    {isVid && !isOverlayTile && (
                                       <div
                                         style={{
-                                          background: "rgba(255,255,255,0.9)",
-                                          borderRadius: "50%",
-                                          width: 32,
-                                          height: 32,
+                                          position: "absolute",
+                                          inset: 0,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          background: "rgba(0,0,0,0.3)",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            background: "rgba(255,255,255,0.9)",
+                                            borderRadius: "50%",
+                                            width: 32,
+                                            height: 32,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <IconVideo
+                                            size={16}
+                                            color="#1e3769"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                    {isOverlayTile && (
+                                      <div
+                                        style={{
+                                          position: "absolute",
+                                          inset: 0,
+                                          background: "rgba(0,0,0,0.6)",
                                           display: "flex",
                                           alignItems: "center",
                                           justifyContent: "center",
                                         }}
                                       >
-                                        <IconVideo size={16} color="#1e3769" />
+                                        <Text c="white" fw={700} size="xl">
+                                          +{remaining}
+                                        </Text>
                                       </div>
-                                    </div>
-                                  )}
-                                  {isOverlayTile && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        background: "rgba(0,0,0,0.6)",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <Text c="white" fw={700} size="xl">
-                                        +{remaining}
-                                      </Text>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                    )}
+                                  </div>
+                                );
+                              })}
                           </SimpleGrid>
                         </div>
                       )}
@@ -421,9 +525,9 @@ export default function UserDiscussionsPage() {
                   </Group>
                 </div>
               );
-            })}
-          </Stack>
-        )}
+            })
+          )}
+        </Stack>
 
         <Group justify="space-between" align="center" mt="md">
           <Text size="xs" c="dimmed">

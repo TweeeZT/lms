@@ -170,7 +170,7 @@ export default function CheckoutCoursePage() {
         mb="md"
         style={{ color: "var(--primary-color)" }}
       >
-        Kembali ke Explore
+        Kembali ke Jelajahi Kursus
       </Button>
       {loading && (
         <Stack>

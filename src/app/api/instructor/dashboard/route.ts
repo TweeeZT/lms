@@ -172,19 +172,14 @@ export async function GET(req: Request) {
       }
     }
 
-    // Derive stats
-    const totalStudents = courses.reduce(
-      (s, c) => s + (c.enrolled_count || 0),
-      0
-    );
-
-    // Calculate totalEarnings from transactions table
-    let totalEarnings = 0;
+  // Calculate totalEarnings and uniqueStudents (unique buyers) from transactions table
+  let totalEarnings = 0;
+  let uniqueStudents = 0;
     {
       // Primary: by instructors_id
       const { data: trxByInstructor } = await supabase
         .from("transactions")
-        .select("amount, status")
+        .select("amount, status, user_id")
         .eq("instructors_id", instructorId);
 
       let rows = trxByInstructor || [];
@@ -194,7 +189,7 @@ export async function GET(req: Request) {
         const courseIds = courses.map((c) => c.id);
         const { data: trxByCourses } = await supabase
           .from("transactions")
-          .select("amount, status, course_id")
+          .select("amount, status, course_id, user_id")
           .in("course_id", courseIds);
         rows = trxByCourses || [];
       }
@@ -207,13 +202,28 @@ export async function GET(req: Request) {
         "settled",
         "succeeded",
       ]);
+      const uniqueUsers = new Set<string>();
       totalEarnings = (rows || []).reduce((sum, t) => {
         const s = String((t as any).status || "").toLowerCase();
         if (successStatuses.has(s)) {
-          return sum + (Number((t as any).amount) || 0);
+          const amt = Number((t as any).amount) || 0;
+          const uid = String((t as any).user_id || "");
+          if (uid) uniqueUsers.add(uid);
+          return sum + amt;
         }
         return sum;
       }, 0);
+      uniqueStudents = uniqueUsers.size;
+    }
+
+    // To match the "Kursus Saya" page, use the same total students metric: total rows in students table
+    // This keeps both pages consistent as requested
+    let totalStudents = 0;
+    {
+      const { count, error } = await supabase
+        .from("students")
+        .select("*", { count: "exact", head: true });
+      if (!error) totalStudents = count || 0;
     }
 
     const avgRating = courses.length

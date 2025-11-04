@@ -55,7 +55,7 @@ export async function GET(req: Request) {
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
-    const { data, error, count } = await query.range(from, to);
+  const { data, error, count } = await query.range(from, to);
     if (error) throw error;
 
     // Align total_modules with actual published modules count
@@ -84,10 +84,38 @@ export async function GET(req: Request) {
       total_modules: modulesCountByCourse[c.id] ?? 0,
     }));
 
+    // Compute total unique students across ALL courses by this instructor
+    // Note: uses user_progress as proxy for enrollment/engagement
+    let totalUniqueStudents = 0;
+    try {
+      const { data: allCoursesRows, error: allCoursesErr } = await supabase
+        .from("courses")
+        .select("id")
+        .eq("instructor_id", instructorId);
+      if (allCoursesErr) throw allCoursesErr;
+      const allCourseIds = (allCoursesRows || []).map((r: any) => r.id).filter(Boolean);
+      if (allCourseIds.length > 0) {
+        const { data: upRows, error: upErr } = await supabase
+          .from("user_progress")
+          .select("user_id, course_id")
+          .in("course_id", allCourseIds);
+        if (upErr) throw upErr;
+        const uniq = new Set<string>();
+        for (const r of upRows || []) {
+          if (r && r.user_id) uniq.add(String(r.user_id));
+        }
+        totalUniqueStudents = uniq.size;
+      }
+    } catch (aggErr) {
+      // Log but don't fail the listing endpoint
+      console.error("[instructor/courses] unique students compute failed:", aggErr);
+    }
+
     return NextResponse.json({
       success: true,
       items,
       total: count || 0,
+      totalUniqueStudents,
       page,
       limit,
     });

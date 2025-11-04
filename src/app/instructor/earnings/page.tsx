@@ -1,22 +1,6 @@
 "use client";
 
-import {
-  Container,
-  Title,
-  Text,
-  Grid,
-  Card,
-  Stack,
-  Group,
-  Badge,
-  Table,
-  Button,
-  Skeleton,
-  TextInput,
-  Modal,
-  ActionIcon,
-  Divider,
-} from "@mantine/core";
+import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Table, Button, TextInput, Modal, ActionIcon, Divider } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import "dayjs/locale/id";
 import {
@@ -33,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
 import { notifications } from "@mantine/notifications";
 import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
+// Use page-level spinner for loading instead of global overlay
 
 type TxRow = {
   id: string;
@@ -238,7 +223,6 @@ export default function InstructorEarningsPage() {
   const fetchData = async (page = 1, limit = tx.limit || 10) => {
     if (!user) return;
     setLoading(true);
-    showGlobalLoader();
     setError(null);
     try {
       const params = new URLSearchParams({
@@ -267,7 +251,6 @@ export default function InstructorEarningsPage() {
       setError(e instanceof Error ? e.message : "Terjadi kesalahan");
     } finally {
       setLoading(false);
-      hideGlobalLoader();
     }
   };
 
@@ -277,6 +260,13 @@ export default function InstructorEarningsPage() {
 
     fetchData(1, tx.limit || 10);
   }, [user, startDate, endDate, search, sortBy, sortDir]);
+
+  // Toggle global loader while loading
+  useEffect(() => {
+    if (loading) showGlobalLoader();
+    else hideGlobalLoader();
+    return () => hideGlobalLoader();
+  }, [loading]);
 
   // sorting toggle
   const toggleSort = (key: typeof sortBy) => {
@@ -718,8 +708,10 @@ export default function InstructorEarningsPage() {
     w.document.close();
   };
 
-  // Saat loading awal, tampilkan global loader (via layout) dengan tidak merender konten halaman
-  if (loading && tx.items.length === 0 && !error) return null;
+  // Saat loading awal, biarkan loader global tampil dan jangan render konten
+  if (loading && tx.items.length === 0 && !error) {
+    return null;
+  }
 
   return (
     <Container size="lg" py="xl">

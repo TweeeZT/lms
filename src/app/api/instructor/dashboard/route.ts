@@ -216,14 +216,26 @@ export async function GET(req: Request) {
       uniqueStudents = uniqueUsers.size;
     }
 
-    // To match the "Kursus Saya" page, use the same total students metric: total rows in students table
-    // This keeps both pages consistent as requested
+    // Total siswa dalam kursus: jumlahkan enrolled_count dari SEMUA kursus milik instruktur ini
+    // Gunakan query terpisah tanpa limit agar tidak terpotong oleh limit preview list
     let totalStudents = 0;
     {
-      const { count, error } = await supabase
-        .from("students")
-        .select("*", { count: "exact", head: true });
-      if (!error) totalStudents = count || 0;
+      const { data: enrollRows } = await supabase
+        .from("courses")
+        .select("enrolled_count")
+        .eq("instructor_id", instructorId);
+      if (Array.isArray(enrollRows)) {
+        totalStudents = enrollRows.reduce(
+          (sum, r: any) => sum + (Number(r?.enrolled_count) || 0),
+          0
+        );
+      } else {
+        // Fallback to preview list sum if for some reason data is null
+        totalStudents = courses.reduce(
+          (sum, c) => sum + (Number(c.enrolled_count) || 0),
+          0
+        );
+      }
     }
 
     const avgRating = courses.length

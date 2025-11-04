@@ -1,24 +1,6 @@
 "use client";
 
-import {
-  Container,
-  Title,
-  Text,
-  Stack,
-  Group,
-  Avatar,
-  ActionIcon,
-  Button,
-  Badge,
-  SegmentedControl,
-  TextInput,
-  Image,
-  SimpleGrid,
-  Select,
-  Pagination,
-  Skeleton,
-  Modal,
-} from "@mantine/core";
+import { Container, Title, Text, Stack, Group, Avatar, ActionIcon, Button, Badge, SegmentedControl, TextInput, Image, SimpleGrid, Select, Pagination, Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
@@ -70,7 +52,6 @@ export default function InstructorDiscussionsFeed() {
   const fetchItems = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    showGlobalLoader();
     try {
       const params = new URLSearchParams({
         instructorId: user.id,
@@ -88,13 +69,19 @@ export default function InstructorDiscussionsFeed() {
       }
     } finally {
       setLoading(false);
-      hideGlobalLoader();
     }
   }, [user, sort, page, limit, q, filter]);
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  // Toggle global loader while page is loading, match admin behavior
+  useEffect(() => {
+    if (loading) showGlobalLoader();
+    else hideGlobalLoader();
+    return () => hideGlobalLoader();
+  }, [loading]);
 
   // Map backend role to human label and color
   const getRoleLabel = (r?: string | null) => {
@@ -168,8 +155,10 @@ export default function InstructorDiscussionsFeed() {
     });
   }
 
-  // Saat loading awal, biarkan layout global menampilkan loader dengan tidak merender konten
-  if (loading && items.length === 0) return null;
+  // Saat loading awal, biarkan loader global tampil dan jangan render konten halaman
+  if (loading && items.length === 0) {
+    return null;
+  }
 
   return (
     <Container size="lg">

@@ -1,17 +1,6 @@
 "use client";
 
-import {
-  Container,
-  Title,
-  Text,
-  Grid,
-  Card,
-  Stack,
-  Group,
-  Badge,
-  Button,
-  Avatar,
-} from "@mantine/core";
+import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Button, Avatar } from "@mantine/core";
 import {
   IconBook,
   IconUsers,
@@ -163,7 +152,6 @@ export default function InstructorDashboard() {
     const load = async () => {
       if (!user) return;
       setLoading(true);
-      showGlobalLoader();
       setError(null);
       try {
         const params = new URLSearchParams({
@@ -203,7 +191,6 @@ export default function InstructorDashboard() {
         if (!ignore) setError(e instanceof Error ? e.message : "Gagal memuat");
       } finally {
         if (!ignore) setLoading(false);
-        hideGlobalLoader();
       }
     };
     if (!authLoading && user) load();
@@ -211,6 +198,13 @@ export default function InstructorDashboard() {
       ignore = true;
     };
   }, [authLoading, user, offsetMonths]);
+
+  // Toggle global loader like admin while auth/data loading
+  useEffect(() => {
+    if (authLoading || loading) showGlobalLoader();
+    else hideGlobalLoader();
+    return () => hideGlobalLoader();
+  }, [authLoading, loading]);
 
   // Make numbers compact and prevent wrapping
   const formatCurrency = (n: number) => {
@@ -350,8 +344,7 @@ export default function InstructorDashboard() {
   const totalEarnings = data?.stats.totalEarnings || 0;
   const avgRating = data?.stats.avgRating || 0;
 
-  // Selaraskan dengan halaman admin: saat loading, biarkan Admin/Instructor layout
-  // menampilkan global loader (PrimeLoader) dengan tidak merender konten halaman.
+  // Selaraskan dengan halaman admin: saat loading, biarkan layout global loader yang tampil
   if (authLoading || loading) return null;
 
   if (!user || !data) {
@@ -422,7 +415,7 @@ export default function InstructorDashboard() {
           </Grid.Col>
           <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
             <StatCard
-              label="Total Siswa"
+              label="Total Siswa Dalam Kursus"
               value={totalStudents}
               Icon={IconUsers}
               color="grape"

@@ -1,25 +1,6 @@
 "use client";
 
-import {
-  Container,
-  Title,
-  Text,
-  Grid,
-  Card,
-  Stack,
-  Group,
-  Badge,
-  Button,
-  ActionIcon,
-  Modal,
-  TextInput,
-  NumberInput,
-  Select,
-  FileInput,
-  Switch,
-  Pagination,
-  Textarea,
-} from "@mantine/core";
+import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Button, ActionIcon, Modal, TextInput, NumberInput, Select, FileInput, Switch, Pagination, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
   IconBook,
@@ -33,9 +14,10 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useAuth } from "../../../hooks/useAuth";
+import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 import Link from "next/link";
 import RichTextEditor from "../../../components/RichTextEditor";
-import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
+// Page-level spinner will be used for loading instead of global loader
 
 export default function InstructorCoursesPage() {
   const { user } = useAuth();
@@ -211,7 +193,6 @@ export default function InstructorCoursesPage() {
   const fetchCourses = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    showGlobalLoader();
     try {
       const params = new URLSearchParams({
         instructorId: user.id,
@@ -226,31 +207,19 @@ export default function InstructorCoursesPage() {
         throw new Error(json.error || "Gagal memuat kursus");
       setCourses(json.items || []);
       setTotal(json.total || 0);
+      // read unique-per-instructor students from API
+      setTotalStudents(Number(json.totalUniqueStudents || 0));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gagal memuat kursus";
       notifications.show({ color: "red", title: "Gagal", message: msg });
     } finally {
       setLoading(false);
-      hideGlobalLoader();
     }
   }, [user?.id, search, statusFilter, page, limit]);
 
-  const fetchTotalStudents = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user/stats/count");
-      const json = await res.json();
-      if (json.success) {
-        setTotalStudents(json.total || 0);
-      }
-    } catch (e) {
-      console.error("Failed to fetch total students:", e);
-    }
-  }, []);
-
   useEffect(() => {
     fetchCourses();
-    fetchTotalStudents();
-  }, [fetchCourses, fetchTotalStudents]);
+  }, [fetchCourses]);
 
   useEffect(() => {
     // re-filter/refetch on search/status changes (server filters for accuracy)
@@ -262,6 +231,14 @@ export default function InstructorCoursesPage() {
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter]);
+
+  // Toggle global loader like admin while page data is loading
+  useEffect(() => {
+    if (loading) showGlobalLoader();
+    else hideGlobalLoader();
+    // hide on unmount
+    return () => hideGlobalLoader();
+  }, [loading]);
 
   const saveCourse = async () => {
     if (saving) return; // prevent spam
@@ -475,8 +452,10 @@ export default function InstructorCoursesPage() {
       ).toFixed(1)
     : "0";
 
-  // Saat loading awal, gunakan global loader dari layout dengan tidak merender konten halaman
-  if (loading && courses.length === 0) return null;
+  // Saat loading awal, biarkan layout menampilkan loader global dan jangan render konten halaman
+  if (loading && courses.length === 0) {
+    return null;
+  }
 
   return (
     <Container size="xl">

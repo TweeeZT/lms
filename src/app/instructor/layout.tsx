@@ -20,14 +20,12 @@ export default function InstructorLayout({
     }
   }, [user, loading, router]);
 
-  // Keep the global loader visible while auth is resolving or user is not yet available
+  // Only show global loader while auth is resolving; avoid showing when user is null on logout
   useEffect(() => {
-    if (loading || !user) {
-      showGlobalLoader();
-    } else {
-      hideGlobalLoader();
-    }
-  }, [loading, user]);
+    if (loading) showGlobalLoader();
+    else hideGlobalLoader();
+    return () => hideGlobalLoader();
+  }, [loading]);
 
   if (loading || !user) return null;
 

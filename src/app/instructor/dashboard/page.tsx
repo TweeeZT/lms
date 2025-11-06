@@ -1,6 +1,6 @@
 "use client";
 
-import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Button, Avatar } from "@mantine/core";
+import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Button, Avatar, Skeleton } from "@mantine/core";
 import {
   IconBook,
   IconUsers,
@@ -10,7 +10,7 @@ import {
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
-import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
+// Note: We handle our own initial overlay loader on this page to match user discussions.
 
 type ApiProfile = {
   id: string;
@@ -142,6 +142,7 @@ function StatCard({
 export default function InstructorDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardResponse | null>(null);
   // Month navigation: 0 means current month window; 1 means window ending previous month, etc.
@@ -190,7 +191,10 @@ export default function InstructorDashboard() {
       } catch (e) {
         if (!ignore) setError(e instanceof Error ? e.message : "Gagal memuat");
       } finally {
-        if (!ignore) setLoading(false);
+        if (!ignore) {
+          setLoading(false);
+          setInitialLoad(false);
+        }
       }
     };
     if (!authLoading && user) load();
@@ -198,13 +202,6 @@ export default function InstructorDashboard() {
       ignore = true;
     };
   }, [authLoading, user, offsetMonths]);
-
-  // Toggle global loader like admin while auth/data loading
-  useEffect(() => {
-    if (authLoading || loading) showGlobalLoader();
-    else hideGlobalLoader();
-    return () => hideGlobalLoader();
-  }, [authLoading, loading]);
 
   // Make numbers compact and prevent wrapping
   const formatCurrency = (n: number) => {
@@ -344,8 +341,63 @@ export default function InstructorDashboard() {
   const totalEarnings = data?.stats.totalEarnings || 0;
   const avgRating = data?.stats.avgRating || 0;
 
-  // Selaraskan dengan halaman admin: saat loading, biarkan layout global loader yang tampil
-  if (authLoading || loading) return null;
+  // Initial, one-time full-screen overlay loader (same style as user discussions)
+  if ((authLoading || loading) && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   if (!user || !data) {
     return (
@@ -453,134 +505,145 @@ export default function InstructorDashboard() {
                 <Group justify="space-between" mb="md">
                   <Title order={3}>Performa Bulanan</Title>
                 </Group>
-                <div style={{ width: "100%", overflowX: "auto" }}>
-                  <svg
-                    viewBox={`0 0 ${chartW} ${chartH}`}
-                    width="100%"
-                    style={{ minWidth: 560, display: "block" }}
-                  >
-                    {/* Grid lines */}
-                    {Array.from({ length: 4 }, (_, i) => {
-                      const y = padding + (i * (chartH - padding * 2)) / 3;
-                      const val = Math.round((1 - i / 3) * maxVal);
-                      return (
-                        <g key={i} opacity={0.4}>
-                          <line
-                            x1={padding - 10}
-                            x2={chartW - padding + 10}
-                            y1={y}
-                            y2={y}
-                            stroke="var(--mantine-color-gray-4)"
-                            strokeDasharray="4 6"
-                          />
+                {loading && !initialLoad ? (
+                  <Stack gap={8}>
+                    <Skeleton height={18} width={140} />
+                    <Skeleton height={chartH} radius="md" />
+                    <Group gap={8} mt="xs">
+                      <Skeleton height={24} width={110} />
+                      <Skeleton height={24} width={90} />
+                    </Group>
+                  </Stack>
+                ) : (
+                  <div style={{ width: "100%", overflowX: "auto" }}>
+                    <svg
+                      viewBox={`0 0 ${chartW} ${chartH}`}
+                      width="100%"
+                      style={{ minWidth: 560, display: "block" }}
+                    >
+                      {/* Grid lines */}
+                      {Array.from({ length: 4 }, (_, i) => {
+                        const y = padding + (i * (chartH - padding * 2)) / 3;
+                        const val = Math.round((1 - i / 3) * maxVal);
+                        return (
+                          <g key={i} opacity={0.4}>
+                            <line
+                              x1={padding - 10}
+                              x2={chartW - padding + 10}
+                              y1={y}
+                              y2={y}
+                              stroke="var(--mantine-color-gray-4)"
+                              strokeDasharray="4 6"
+                            />
+                            <text
+                              x={8}
+                              y={y - 4}
+                              fontSize={10}
+                              fill="var(--mantine-color-dimmed)"
+                            >
+                              {new Intl.NumberFormat("id-ID").format(val)}
+                            </text>
+                          </g>
+                        );
+                      })}
+                      {/* Revenue line */}
+                      {showRevenue && (
+                        <path
+                          d={revenuePath}
+                          fill="none"
+                          stroke="var(--mantine-color-green-6)"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                        />
+                      )}
+                      {/* Orders line */}
+                      {showOrders && (
+                        <path
+                          d={ordersPath}
+                          fill="none"
+                          stroke="var(--mantine-color-blue-6)"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeDasharray="5 6"
+                        />
+                      )}
+                      {/* Points + tooltip */}
+                      {earningsTrend.map((d, i) => {
+                        const x =
+                          padding +
+                          (i * (chartW - padding * 2)) /
+                            Math.max(earningsTrend.length - 1, 1);
+                        const yRev =
+                          padding +
+                          (1 - d.revenue / maxVal) * (chartH - padding * 2);
+                        const yOrd =
+                          padding +
+                          (1 - d.orders / maxVal) * (chartH - padding * 2);
+
+                        return (
+                          <g key={d.idx}>
+                            {showRevenue && (
+                              <circle
+                                cx={x}
+                                cy={yRev}
+                                r={5}
+                                fill="var(--mantine-color-green-6)"
+                                stroke="#fff"
+                                strokeWidth={2}
+                              >
+                                <title>
+                                  {formatMonth(d.month)}
+                                  {"\n"}Pendapatan:{" "}
+                                  {new Intl.NumberFormat("id-ID").format(
+                                    d.revenue
+                                  )}
+                                </title>
+                              </circle>
+                            )}
+                            {showOrders && (
+                              <circle
+                                cx={x}
+                                cy={yOrd}
+                                r={5}
+                                fill="var(--mantine-color-blue-6)"
+                                stroke="#fff"
+                                strokeWidth={2}
+                              >
+                                <title>
+                                  {formatMonth(d.month)}
+                                  {"\n"}Orders:{" "}
+                                  {new Intl.NumberFormat("id-ID").format(
+                                    d.orders
+                                  )}
+                                </title>
+                              </circle>
+                            )}
+                          </g>
+                        );
+                      })}
+
+                      {/* Month labels */}
+                      {earningsTrend.map((d, i) => {
+                        const x =
+                          padding +
+                          (i * (chartW - padding * 2)) /
+                            Math.max(earningsTrend.length - 1, 1);
+                        return (
                           <text
-                            x={8}
-                            y={y - 4}
-                            fontSize={10}
+                            key={d.idx}
+                            x={x}
+                            y={chartH - 12}
+                            fontSize={11}
+                            textAnchor="middle"
                             fill="var(--mantine-color-dimmed)"
                           >
-                            {new Intl.NumberFormat("id-ID").format(val)}
+                            {formatMonth(d.month).split(" ")[0]}
                           </text>
-                        </g>
-                      );
-                    })}
-                    {/* Revenue line */}
-                    {showRevenue && (
-                      <path
-                        d={revenuePath}
-                        fill="none"
-                        stroke="var(--mantine-color-green-6)"
-                        strokeWidth={3}
-                        strokeLinecap="round"
-                      />
-                    )}
-                    {/* Orders line */}
-                    {showOrders && (
-                      <path
-                        d={ordersPath}
-                        fill="none"
-                        stroke="var(--mantine-color-blue-6)"
-                        strokeWidth={3}
-                        strokeLinecap="round"
-                        strokeDasharray="5 6"
-                      />
-                    )}
-                    {/* Points + tooltip */}
-                    {earningsTrend.map((d, i) => {
-                      const x =
-                        padding +
-                        (i * (chartW - padding * 2)) /
-                          Math.max(earningsTrend.length - 1, 1);
-                      const yRev =
-                        padding +
-                        (1 - d.revenue / maxVal) * (chartH - padding * 2);
-                      const yOrd =
-                        padding +
-                        (1 - d.orders / maxVal) * (chartH - padding * 2);
-
-                      return (
-                        <g key={d.idx}>
-                          {showRevenue && (
-                            <circle
-                              cx={x}
-                              cy={yRev}
-                              r={5}
-                              fill="var(--mantine-color-green-6)"
-                              stroke="#fff"
-                              strokeWidth={2}
-                            >
-                              <title>
-                                {formatMonth(d.month)}
-                                {"\n"}Pendapatan:{" "}
-                                {new Intl.NumberFormat("id-ID").format(
-                                  d.revenue
-                                )}
-                              </title>
-                            </circle>
-                          )}
-                          {showOrders && (
-                            <circle
-                              cx={x}
-                              cy={yOrd}
-                              r={5}
-                              fill="var(--mantine-color-blue-6)"
-                              stroke="#fff"
-                              strokeWidth={2}
-                            >
-                              <title>
-                                {formatMonth(d.month)}
-                                {"\n"}Orders:{" "}
-                                {new Intl.NumberFormat("id-ID").format(
-                                  d.orders
-                                )}
-                              </title>
-                            </circle>
-                          )}
-                        </g>
-                      );
-                    })}
-
-                    {/* Month labels */}
-                    {earningsTrend.map((d, i) => {
-                      const x =
-                        padding +
-                        (i * (chartW - padding * 2)) /
-                          Math.max(earningsTrend.length - 1, 1);
-                      return (
-                        <text
-                          key={d.idx}
-                          x={x}
-                          y={chartH - 12}
-                          fontSize={11}
-                          textAnchor="middle"
-                          fill="var(--mantine-color-dimmed)"
-                        >
-                          {formatMonth(d.month).split(" ")[0]}
-                        </text>
-                      );
-                    })}
-                  </svg>
-                </div>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                )}
                 <Group gap={8} mt="xs">
                   <Badge
                     onClick={() => setShowRevenue((s) => !s)}
@@ -616,28 +679,40 @@ export default function InstructorDashboard() {
                   Kursus Saya
                 </Title>
                 <Stack gap={12} style={{ fontSize: 13 }}>
-                  {myCourses.slice(0, 3).map((c) => (
-                    <Group
-                      key={c.id}
-                      justify="space-between"
-                      align="flex-start"
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <Text size="sm" fw={600} lineClamp={1}>
-                          {c.title}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {c.enrolledCount} siswa • {c.totalModules} modul
-                        </Text>
-                      </div>
-                      <Badge
-                        variant="light"
-                        color={c.isPublished ? "teal" : "gray"}
+                  {loading && !initialLoad ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <Group key={i} justify="space-between" align="center">
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Skeleton height={12} width="70%" mb={6} />
+                          <Skeleton height={10} width="40%" />
+                        </div>
+                        <Skeleton height={22} width={64} radius="xl" />
+                      </Group>
+                    ))
+                  ) : (
+                    myCourses.slice(0, 3).map((c) => (
+                      <Group
+                        key={c.id}
+                        justify="space-between"
+                        align="flex-start"
                       >
-                        {c.isPublished ? "Tayang" : "Draf"}
-                      </Badge>
-                    </Group>
-                  ))}
+                        <div style={{ minWidth: 0 }}>
+                          <Text size="sm" fw={600} lineClamp={1}>
+                            {c.title}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {c.enrolledCount} siswa • {c.totalModules} modul
+                          </Text>
+                        </div>
+                        <Badge
+                          variant="light"
+                          color={c.isPublished ? "teal" : "gray"}
+                        >
+                          {c.isPublished ? "Tayang" : "Draf"}
+                        </Badge>
+                      </Group>
+                    ))
+                  )}
                 </Stack>
                 <Button
                   component={Link}
@@ -702,7 +777,18 @@ export default function InstructorDashboard() {
                   Pembelian Terbaru
                 </Title>
                 <Stack gap={12} style={{ fontSize: 13 }}>
-                  {recentPurchases.length === 0 ? (
+                  {loading && !initialLoad ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <Group key={i} justify="space-between" wrap="nowrap">
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Skeleton height={12} width="60%" mb={6} />
+                          <Skeleton height={10} width="50%" mb={6} />
+                          <Skeleton height={10} width="40%" />
+                        </div>
+                        <Skeleton height={14} width={90} />
+                      </Group>
+                    ))
+                  ) : recentPurchases.length === 0 ? (
                     <Text size="sm" c="dimmed" ta="center" py="md">
                       Belum ada transaksi
                     </Text>

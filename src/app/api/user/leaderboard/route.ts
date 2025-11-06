@@ -19,15 +19,35 @@ export async function GET(req: Request) {
   const to = from + limit - 1;
 
   try {
-    // Fetch base student rows
+    // First, get all user IDs with role 'user' only
+    const { data: userRoleData, error: roleErr } = await supabase
+      .from("users")
+      .select("id")
+      .eq("role", "user");
+    if (roleErr) throw roleErr;
+
+    const userRoleIds = (userRoleData || []).map((u) => u.id);
+
+    // If no users with role 'user', return empty
+    if (!userRoleIds.length) {
+      return NextResponse.json({
+        success: true,
+        items: [],
+        total: 0,
+        page,
+        limit,
+      });
+    }
+
+    // Fetch base student rows, but only for users with role 'user'
     const {
       data: rowsRaw,
       error,
       count,
     } = await supabase
       .from("students")
-      // Select all columns to be resilient to schema differences (e.g., xp may not exist)
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" })
+      .in("user_id", userRoleIds);
     if (error) throw error;
     const rows = rowsRaw || [];
 
@@ -43,6 +63,7 @@ export async function GET(req: Request) {
       const { data: users, error: uErr } = await supabase
         .from("users")
         .select("id, username, full_name, avatar")
+        .eq("role", "user")
         .in("id", ids);
       if (uErr) throw uErr;
       usersMap = new Map(((users || []) as UserRow[]).map((u) => [u.id, u]));

@@ -3,9 +3,20 @@ import { useEffect, useState } from "react";
 
 type Props = {
   force?: boolean;
+  /**
+   * Show a dimmed/blurred backdrop behind the loader.
+   * Set to false to remove the background so only the spinner is visible.
+   * Defaults to true.
+   */
+  backdrop?: boolean;
+  /**
+   * Optional solid color for the overlay background when backdrop is enabled.
+   * Defaults to a semi-transparent white. Use '#fff' to fully hide background content.
+   */
+  coverColor?: string;
 };
 
-export default function PrimeLoader({ force = false }: Props) {
+export default function PrimeLoader({ force = false, backdrop = true, coverColor }: Props) {
   const [visible, setVisible] = useState(false);
   // Manual override counter for app-driven loading phases
   const [manualCount, setManualCount] = useState(0);
@@ -73,6 +84,7 @@ export default function PrimeLoader({ force = false }: Props) {
   }, []);
 
   const forced = force || manualCount > 0;
+  const isManualForced = manualCount > 0 && !force;
   if (!visible && !forced) return null;
 
   return (
@@ -80,8 +92,10 @@ export default function PrimeLoader({ force = false }: Props) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(255,255,255,0.65)",
-        backdropFilter: "blur(4px)",
+        background: backdrop
+          ? coverColor ?? (isManualForced ? "#ffffff" : "rgba(255,255,255,0.65)")
+          : "transparent",
+        backdropFilter: backdrop ? (isManualForced ? "none" : "blur(4px)") : "none",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

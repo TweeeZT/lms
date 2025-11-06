@@ -21,6 +21,7 @@ import {
   IconChartBar,
 } from "@tabler/icons-react";
 import Link from "next/link";
+import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 // Dummy finance/user/course imports removed; data now fetched from API
 
 function rupiah(n: number) {
@@ -478,6 +479,8 @@ export default function AdminDashboard() {
     let active = true;
     (async () => {
       try {
+        // Show global loader immediately to avoid any blank period before fetch starts
+        showGlobalLoader();
         setLoading(true);
         setError(null);
         // Discover admin id from localStorage or cookie
@@ -579,10 +582,14 @@ export default function AdminDashboard() {
         setError(e instanceof Error ? e.message : "Gagal memuat data");
       } finally {
         if (active) setLoading(false);
+        // Always hide the global loader at the end
+        hideGlobalLoader();
       }
     })();
     return () => {
       active = false;
+      // Ensure loader is hidden if component unmounts mid-load
+      hideGlobalLoader();
     };
   }, []);
 
@@ -607,7 +614,7 @@ export default function AdminDashboard() {
   }));
 
   if (loading) {
-    // Let AdminLayout show the global PrimeLoader overlay; avoid rendering partial content
+    // While loading, render nothing; the global loader is shown via showGlobalLoader()
     return null;
   }
 

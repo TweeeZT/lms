@@ -402,61 +402,6 @@ export default function AdminUsersPage() {
 
   return (
     <Container size="xl" style={{ position: "relative" }}>
-      {loading && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(255,255,255,0.65)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 2000,
-          }}
-        >
-          <div style={{ display: "flex", gap: 32 }}>
-            {[0, 1, 2].map((i) => (
-              <svg
-                key={i}
-                width="70"
-                height="70"
-                viewBox="0 0 64 64"
-                style={{
-                  animation: "spinDiamond 1.2s linear infinite",
-                  animationDelay: `${i * 0.2}s`,
-                }}
-              >
-                <rect
-                  x="12"
-                  y="12"
-                  width="40"
-                  height="40"
-                  fill="none"
-                  stroke="url(#gradAdminUsersFull)"
-                  strokeWidth="8"
-                  rx="4"
-                  ry="4"
-                  transform="rotate(45 32 32)"
-                />
-                <defs>
-                  <linearGradient
-                    id="gradAdminUsersFull"
-                    x1="0%"
-                    y1="0%"
-                    x2="100%"
-                    y2="100%"
-                  >
-                    <stop offset="0%" stopColor="#f6d457" />
-                    <stop offset="100%" stopColor="#1e3769" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            ))}
-          </div>
-          <style>{`@keyframes spinDiamond { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
-        </div>
-      )}
       <Stack gap="lg">
         <Title order={2}>Manajemen Pengguna</Title>
         <Paper p="sm" radius="md" withBorder>

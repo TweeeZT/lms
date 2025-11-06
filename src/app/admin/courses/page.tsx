@@ -600,15 +600,7 @@ export default function AdminCoursesPage() {
               {total} hasil
             </Text>
           </Group>
-          {loading ? (
-            <Grid gutter="xl">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Grid.Col key={i} span={{ base: 12, sm: 6, md: 4 }}>
-                  <Skeleton height={160} radius="md" />
-                </Grid.Col>
-              ))}
-            </Grid>
-          ) : (
+          {!loading && (
             <Grid gutter="xl">
               {filteredCourses.map((course) => (
                 <Grid.Col

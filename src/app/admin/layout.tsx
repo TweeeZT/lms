@@ -14,6 +14,8 @@ export default function AdminLayout({
   const { user, logout, loading } = useAuth();
   const router = useRouter();
   const [apiPending, setApiPending] = useState(0);
+  // Track app-wide manual loader events to avoid double loaders
+  const [manualCount, setManualCount] = useState(0);
   const patchedRef = useRef(false);
   const origFetchRef = useRef<typeof window.fetch | null>(null);
 
@@ -62,6 +64,18 @@ export default function AdminLayout({
     };
   }, []);
 
+  // Observe global manual loader events to prevent duplicate overlays
+  useEffect(() => {
+    const onShow = () => setManualCount((c) => c + 1);
+    const onHide = () => setManualCount((c) => (c > 0 ? c - 1 : 0));
+    window.addEventListener("prime-loader:show", onShow as any);
+    window.addEventListener("prime-loader:hide", onHide as any);
+    return () => {
+      window.removeEventListener("prime-loader:show", onShow as any);
+      window.removeEventListener("prime-loader:hide", onHide as any);
+    };
+  }, []);
+
   // if there's no user (redirect will happen), don't render the layout to avoid passing null
   if (!user) {
     return null;
@@ -69,7 +83,9 @@ export default function AdminLayout({
 
   return (
     <DashboardLayout user={user} onLogout={logout} globalLoading={loading}>
-      {apiPending > 0 && <PrimeLoader force />}
+      {apiPending > 0 && manualCount === 0 && (
+        <PrimeLoader force coverColor="#ffffff" />
+      )}
       {children}
     </DashboardLayout>
   );

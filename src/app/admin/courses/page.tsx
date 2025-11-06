@@ -42,6 +42,7 @@ export default function AdminCoursesPage() {
   const { user } = useAuth();
   const isMobile = useMediaQuery("(max-width: 48em)");
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   type CourseRow = {
     id: string;
     instructor_id: string;
@@ -269,6 +270,7 @@ export default function AdminCoursesPage() {
       notifications.show({ color: "red", title: "Gagal", message: msg });
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [user?.id, search, statusFilter, page, limit, instructorFilter]);
 
@@ -512,6 +514,64 @@ export default function AdminCoursesPage() {
       ).toFixed(1)
     : "0";
 
+  // Initial full-page overlay loader (only on first navigation)
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <Container size="xl">
       <Stack gap="xl">
@@ -596,13 +656,49 @@ export default function AdminCoursesPage() {
               clearable
               style={{ width: 220 }}
             />
-            <Text size="xs" c="dimmed" style={{ marginLeft: "auto" }}>
-              {total} hasil
-            </Text>
+            <div style={{ marginLeft: "auto" }}>
+              {loading && !initialLoad ? (
+                <Skeleton height={12} width={70} />
+              ) : (
+                <Text size="xs" c="dimmed">
+                  {total} hasil
+                </Text>
+              )}
+            </div>
           </Group>
-          {!loading && (
-            <Grid gutter="xl">
-              {filteredCourses.map((course) => (
+          <Grid gutter="xl">
+            {loading && !initialLoad
+              ? Array.from({ length: limit }).map((_, idx) => (
+                  <Grid.Col key={`skeleton-${idx}`} span={{ base: 12, sm: 6, md: 6, lg: 4 }}>
+                    <Card withBorder padding="lg" radius="lg">
+                      <Stack gap={12}>
+                        <Skeleton height={0} style={{ paddingTop: "56.25%", borderRadius: 8 }} />
+                        <Group justify="space-between" align="flex-start">
+                          <Skeleton height={18} width="70%" />
+                          <Skeleton height={20} width={64} />
+                        </Group>
+                        <Skeleton height={12} width={160} />
+                        <Group gap={8}>
+                          <Skeleton height={20} width={80} />
+                          <Skeleton height={20} width={80} />
+                        </Group>
+                        <Group justify="space-between" align="center">
+                          <Skeleton height={18} width={120} />
+                          <Skeleton height={14} width={80} />
+                        </Group>
+                        <Group justify="space-between">
+                          <Skeleton height={28} width={90} />
+                          <Group gap="xs">
+                            <Skeleton height={28} width={32} />
+                            <Skeleton height={28} width={32} />
+                          </Group>
+                        </Group>
+                        <Skeleton height={12} width={120} />
+                      </Stack>
+                    </Card>
+                  </Grid.Col>
+                ))
+              : filteredCourses.map((course) => (
                 <Grid.Col
                   key={course.id}
                   span={{ base: 12, sm: 6, md: 6, lg: 4 }}
@@ -729,8 +825,7 @@ export default function AdminCoursesPage() {
                   </Card>
                 </Grid.Col>
               ))}
-            </Grid>
-          )}
+          </Grid>
           {filteredCourses.length === 0 && !loading && (
             <Stack align="center" py="xl" gap={6}>
               <IconBook size="3rem" color="gray" />

@@ -20,6 +20,7 @@ import {
   Card,
   Divider,
   Image,
+  Skeleton,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -96,6 +97,7 @@ export default function AdminUsersPage() {
   const [sortBy, setSortBy] = useState<Sortable>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [viewUser, setViewUser] = useState<UserRow | null>(null);
@@ -235,6 +237,7 @@ export default function AdminUsersPage() {
       setTotal(0);
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }
 
@@ -400,6 +403,64 @@ export default function AdminUsersPage() {
     );
   };
 
+  // Initial full-page overlay loader (only on first navigation)
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <Container size="xl" style={{ position: "relative" }}>
       <Stack gap="lg">
@@ -492,7 +553,31 @@ export default function AdminUsersPage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {items.map((u) => (
+                {loading && !initialLoad
+                  ? Array.from({ length: limit }).map((_, idx) => (
+                      <Table.Tr key={`skeleton-${idx}`}>
+                        <Table.Td>
+                          <Skeleton height={12} width={90} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={12} width={140} />
+                          <Skeleton height={10} width={80} mt={6} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={12} width={160} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={22} width={70} radius="xl" />
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap={4} wrap="nowrap">
+                            <Skeleton height={28} width={28} circle />
+                            <Skeleton height={28} width={28} circle />
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
+                  : items.map((u) => (
                   <Table.Tr key={u.id}>
                     <Table.Td>
                       {u.created_at
@@ -574,7 +659,7 @@ export default function AdminUsersPage() {
                     </Table.Td>
                   </Table.Tr>
                 ))}
-                {!items.length && (
+                {!items.length && !loading && (
                   <Table.Tr>
                     <Table.Td colSpan={6}>
                       <Text ta="center" c="dimmed" size="sm">

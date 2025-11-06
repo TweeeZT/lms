@@ -19,6 +19,7 @@ import {
   Card,
   Loader,
   Alert,
+  Skeleton,
 } from "@mantine/core";
 import {
   IconReportMoney,
@@ -165,6 +166,7 @@ export default function AdminEarningsPage() {
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Stats
@@ -295,6 +297,7 @@ export default function AdminEarningsPage() {
         });
       } finally {
         setLoading(false);
+        setInitialLoad(false);
       }
     },
     [
@@ -312,6 +315,63 @@ export default function AdminEarningsPage() {
   useEffect(() => {
     fetchData(1);
   }, [user?.id, search, startDate, endDate, sortBy, sortDir]);
+  // Initial full-page overlay loader (only on first navigation)
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   const toggleSort = (key: typeof sortBy) => {
     if (sortBy === key) {
@@ -954,11 +1014,7 @@ export default function AdminEarningsPage() {
           </Alert>
         )}
 
-        {loading ? (
-          <Group justify="center" py="xl">
-            <Loader />
-          </Group>
-        ) : tx.items.length === 0 ? (
+        {!loading && tx.items.length === 0 ? (
           <Alert color="blue" title="Tidak ada data">
             Belum ada transaksi yang sesuai dengan filter
           </Alert>
@@ -966,162 +1022,95 @@ export default function AdminEarningsPage() {
           <Paper withBorder style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 800 }}>
               <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>
-                    <Group
-                      gap={4}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => toggleSort("date")}
-                    >
-                      <Text size="sm" fw={600}>
-                        Tanggal
-                      </Text>
-                      {sortBy === "date" &&
-                        (sortDir === "asc" ? (
-                          <IconArrowUp size={14} />
-                        ) : (
-                          <IconArrowDown size={14} />
-                        ))}
-                    </Group>
-                  </Table.Th>
-                  <Table.Th>
-                    <Group
-                      gap={4}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => toggleSort("user_name")}
-                    >
-                      <Text size="sm" fw={600}>
-                        Siswa
-                      </Text>
-                      {sortBy === "user_name" &&
-                        (sortDir === "asc" ? (
-                          <IconArrowUp size={14} />
-                        ) : (
-                          <IconArrowDown size={14} />
-                        ))}
-                    </Group>
-                  </Table.Th>
-                  <Table.Th>
-                    <Group
-                      gap={4}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => toggleSort("course_title")}
-                    >
-                      <Text size="sm" fw={600}>
-                        Kursus
-                      </Text>
-                      {sortBy === "course_title" &&
-                        (sortDir === "asc" ? (
-                          <IconArrowUp size={14} />
-                        ) : (
-                          <IconArrowDown size={14} />
-                        ))}
-                    </Group>
-                  </Table.Th>
-                  <Table.Th>Metode</Table.Th>
-                  <Table.Th>
-                    <Group
-                      gap={4}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => toggleSort("status")}
-                    >
-                      <Text size="sm" fw={600}>
-                        Status
-                      </Text>
-                      {sortBy === "status" &&
-                        (sortDir === "asc" ? (
-                          <IconArrowUp size={14} />
-                        ) : (
-                          <IconArrowDown size={14} />
-                        ))}
-                    </Group>
-                  </Table.Th>
-                  <Table.Th>
-                    <Group
-                      gap={4}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => toggleSort("amount")}
-                    >
-                      <Text size="sm" fw={600}>
-                        Jumlah
-                      </Text>
-                      {sortBy === "amount" &&
-                        (sortDir === "asc" ? (
-                          <IconArrowUp size={14} />
-                        ) : (
-                          <IconArrowDown size={14} />
-                        ))}
-                    </Group>
-                  </Table.Th>
-                  <Table.Th>Aksi</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {tx.items.map((t) => (
-                  <Table.Tr key={t.id}>
-                    <Table.Td>
-                      <Text size="sm">{formatDate(t.date)}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm" fw={500}>
-                        {t.user_name}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm" lineClamp={1}>
-                        {t.course_title}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">{displayMethod(t.method)}</Text>
-                    </Table.Td>
-                    <Table.Td>{statusLabelUI(t.status)}</Table.Td>
-                    <Table.Td>
-                      <Text size="sm" fw={600}>
-                        {formatCurrency(t.amount)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <Tooltip label="Lihat Detail">
-                          <ActionIcon
-                            variant="light"
-                            color="blue"
-                            onClick={() => {
-                              setActiveTx(t);
-                              setOpened(true);
-                            }}
-                          >
-                            <IconEye size={16} />
-                          </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Print Struk">
-                          <ActionIcon
-                            variant="light"
-                            color="green"
-                            onClick={() => printThermalReceipt(t)}
-                          >
-                            <IconReceipt2 size={16} />
-                          </ActionIcon>
-                        </Tooltip>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>
+                      <Group gap={4} style={{ cursor: 'pointer' }} onClick={() => toggleSort('date')}>
+                        <Text size="sm" fw={600}>Tanggal</Text>
+                        {sortBy === 'date' && (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />)}
                       </Group>
-                    </Table.Td>
+                    </Table.Th>
+                    <Table.Th>
+                      <Group gap={4} style={{ cursor: 'pointer' }} onClick={() => toggleSort('user_name')}>
+                        <Text size="sm" fw={600}>Siswa</Text>
+                        {sortBy === 'user_name' && (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />)}
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>
+                      <Group gap={4} style={{ cursor: 'pointer' }} onClick={() => toggleSort('course_title')}>
+                        <Text size="sm" fw={600}>Kursus</Text>
+                        {sortBy === 'course_title' && (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />)}
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>Metode</Table.Th>
+                    <Table.Th>
+                      <Group gap={4} style={{ cursor: 'pointer' }} onClick={() => toggleSort('status')}>
+                        <Text size="sm" fw={600}>Status</Text>
+                        {sortBy === 'status' && (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />)}
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>
+                      <Group gap={4} style={{ cursor: 'pointer' }} onClick={() => toggleSort('amount')}>
+                        <Text size="sm" fw={600}>Jumlah</Text>
+                        {sortBy === 'amount' && (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />)}
+                      </Group>
+                    </Table.Th>
+                    <Table.Th>Aksi</Table.Th>
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
+                </Table.Thead>
+                <Table.Tbody>
+                  {loading && !initialLoad
+                    ? Array.from({ length: tx.limit || 10 }).map((_, idx) => (
+                        <Table.Tr key={`skeleton-${idx}`}>
+                          <Table.Td><Skeleton height={12} width={140} /></Table.Td>
+                          <Table.Td><Skeleton height={12} width={160} /></Table.Td>
+                          <Table.Td><Skeleton height={12} width={200} /></Table.Td>
+                          <Table.Td><Skeleton height={12} width={90} /></Table.Td>
+                          <Table.Td><Skeleton height={22} width={70} radius="xl" /></Table.Td>
+                          <Table.Td><Skeleton height={12} width={110} /></Table.Td>
+                          <Table.Td>
+                            <Group gap="xs">
+                              <Skeleton height={28} width={28} circle />
+                              <Skeleton height={28} width={28} circle />
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))
+                    : tx.items.map((t) => (
+                        <Table.Tr key={t.id}>
+                          <Table.Td><Text size="sm">{formatDate(t.date)}</Text></Table.Td>
+                          <Table.Td><Text size="sm" fw={500}>{t.user_name}</Text></Table.Td>
+                          <Table.Td><Text size="sm" lineClamp={1}>{t.course_title}</Text></Table.Td>
+                          <Table.Td><Text size="sm">{displayMethod(t.method)}</Text></Table.Td>
+                          <Table.Td>{statusLabelUI(t.status)}</Table.Td>
+                          <Table.Td><Text size="sm" fw={600}>{formatCurrency(t.amount)}</Text></Table.Td>
+                          <Table.Td>
+                            <Group gap="xs">
+                              <Tooltip label="Lihat Detail">
+                                <ActionIcon variant="light" color="blue" onClick={() => { setActiveTx(t); setOpened(true); }}>
+                                  <IconEye size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                              <Tooltip label="Print Struk">
+                                <ActionIcon variant="light" color="green" onClick={() => printThermalReceipt(t)}>
+                                  <IconReceipt2 size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                </Table.Tbody>
               </Table>
             </div>
             <Group justify="space-between" p="md" wrap="wrap">
               <Text size="sm" c="dimmed">
-                Menampilkan {tx.items.length} dari {tx.total} transaksi
+                {loading ? 'Memuat…' : `Menampilkan ${tx.items.length} dari ${tx.total} transaksi`}
               </Text>
               <Pagination
                 value={tx.page}
-                onChange={(p) => fetchData(p, tx.limit)}
+                onChange={(p) => fetchData(p)}
                 total={totalPages}
-                size="sm"
-                styles={{ root: { flexWrap: 'wrap' } }}
               />
             </Group>
           </Paper>

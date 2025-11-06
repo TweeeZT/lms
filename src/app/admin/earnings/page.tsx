@@ -963,8 +963,9 @@ export default function AdminEarningsPage() {
             Belum ada transaksi yang sesuai dengan filter
           </Alert>
         ) : (
-          <Paper withBorder>
-            <Table striped highlightOnHover>
+          <Paper withBorder style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: 800 }}>
+              <Table striped highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>
@@ -1109,9 +1110,9 @@ export default function AdminEarningsPage() {
                   </Table.Tr>
                 ))}
               </Table.Tbody>
-            </Table>
-
-            <Group justify="space-between" p="md">
+              </Table>
+            </div>
+            <Group justify="space-between" p="md" wrap="wrap">
               <Text size="sm" c="dimmed">
                 Menampilkan {tx.items.length} dari {tx.total} transaksi
               </Text>
@@ -1119,6 +1120,8 @@ export default function AdminEarningsPage() {
                 value={tx.page}
                 onChange={(p) => fetchData(p, tx.limit)}
                 total={totalPages}
+                size="sm"
+                styles={{ root: { flexWrap: 'wrap' } }}
               />
             </Group>
           </Paper>

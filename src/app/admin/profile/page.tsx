@@ -17,6 +17,7 @@ import {
   Badge,
   Modal,
   LoadingOverlay,
+  Textarea,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useAuth } from "../../../hooks/useAuth";
@@ -50,6 +51,7 @@ export default function ProfilePage() {
   const [phoneError, setPhoneError] = useState("");
   const [fullNameError, setFullNameError] = useState("");
   const [bioError, setBioError] = useState("");
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [opened, setOpened] = useState(false);
   // image cropping states
   const [rawImage, setRawImage] = useState<string | null>(null);
@@ -151,15 +153,28 @@ export default function ProfilePage() {
     setCropOpen(false);
   };
 
-  const validateAll = () => {
+  const validateAll = async () => {
     setFullNameError(fullName.trim() ? "" : "Nama lengkap wajib diisi");
-    setUsernameError(
-      username.trim()
-        ? /\s/.test(username)
-          ? "Tidak boleh ada spasi"
-          : ""
-        : "Username wajib diisi"
-    );
+    // Username: wajib, tanpa spasi, minimal 4 karakter, unik
+    if (!username.trim()) {
+      setUsernameError("Username wajib diisi");
+    } else if (/\s/.test(username)) {
+      setUsernameError("Tidak boleh ada spasi");
+    } else if (username.length < 4) {
+      setUsernameError("Minimal 4 karakter");
+    } else {
+      setUsernameError("");
+      setCheckingUsername(true);
+      // Cek unik username ke server (kecuali username sendiri)
+      try {
+        const res = await fetch(`/api/users/check?username=${encodeURIComponent(username.trim())}`);
+        const json = await res.json();
+        if (res.ok && json.success && json.found && json.user?.id !== user?.id) {
+          setUsernameError("Username sudah digunakan");
+        }
+      } catch {}
+      setCheckingUsername(false);
+    }
     setEmailError(
       email.trim()
         ? email.includes("@")
@@ -167,14 +182,22 @@ export default function ProfilePage() {
           : "Format email tidak valid"
         : "Email wajib diisi"
     );
-    setPhoneError(
-      phone.trim()
-        ? /^\d+$/.test(phone)
-          ? ""
-          : "Hanya angka"
-        : "Nomor telepon wajib diisi"
-    );
-    setBioError(bio.trim() ? "" : "Bio wajib diisi");
+    // Telepon: wajib, boleh diawali +, hanya angka setelah +, minimal 10 digit (tanpa +)
+    if (!phone.trim()) {
+      setPhoneError("Nomor telepon wajib diisi");
+    } else if (!/^\+?\d+$/.test(phone)) {
+      setPhoneError("Hanya angka, boleh diawali +");
+    } else if (phone.replace(/^\+/, "").length < 10) {
+      setPhoneError("Minimal 10 digit");
+    } else {
+      setPhoneError("");
+    }
+    // Bio: boleh kosong, jika diisi minimal 10 karakter
+    if (bio.trim() && bio.trim().length < 10) {
+      setBioError("Minimal 10 karakter jika diisi");
+    } else {
+      setBioError("");
+    }
   };
 
   const hasErrors = [
@@ -183,16 +206,18 @@ export default function ProfilePage() {
     emailError,
     phoneError,
     bioError,
+    checkingUsername,
   ].some(Boolean);
 
   const handleSave = async () => {
-    validateAll();
+    await validateAll();
     const afterValidateErrors = [
       fullNameError,
       usernameError,
       emailError,
       phoneError,
       bioError,
+      checkingUsername,
     ].some(Boolean);
     if (afterValidateErrors) return;
     if (!user) return;
@@ -391,8 +416,10 @@ export default function ProfilePage() {
 
                   {/* Bio */}
                   <Grid.Col span={12}>
-                    <TextInput
+                    <Textarea
                       label="Bio"
+                      minRows={4}
+                      autosize
                       value={bio}
                       error={bioError}
                       onBlur={validateAll}

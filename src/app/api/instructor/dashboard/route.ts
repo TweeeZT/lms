@@ -238,10 +238,22 @@ export async function GET(req: Request) {
       }
     }
 
-    const avgRating = courses.length
-      ? courses.reduce((s: number, c) => s + (c.rating || 0), 0) /
-        courses.length
-      : instQ.data?.rating || 0;
+      // Rata-rata rating semua course milik instruktur (tanpa limit),
+      // dihitung dari kolom rating yang bernilai angka (abaikan null/undefined/NaN).
+      let avgRating = 0;
+      {
+        const { data: ratingRows } = await supabase
+          .from("courses")
+          .select("rating")
+          .eq("instructor_id", instructorId);
+        const ratingValues = (ratingRows || [])
+          .map((r: any) => Number(r?.rating))
+          .filter((v) => v !== null && v !== undefined && !Number.isNaN(v));
+        if (ratingValues.length) {
+          const total = ratingValues.reduce((s, v) => s + v, 0);
+          avgRating = total / ratingValues.length;
+        }
+      }
 
     // Helper: month arithmetic and formatting
     const startOfMonth = (dt: Date) =>

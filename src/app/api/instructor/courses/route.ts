@@ -87,13 +87,22 @@ export async function GET(req: Request) {
     // Compute total unique students across ALL courses by this instructor
     // Note: uses user_progress as proxy for enrollment/engagement
     let totalUniqueStudents = 0;
+    let avgRating = 0;
     try {
       const { data: allCoursesRows, error: allCoursesErr } = await supabase
         .from("courses")
-        .select("id")
+        .select("id, rating")
         .eq("instructor_id", instructorId);
       if (allCoursesErr) throw allCoursesErr;
       const allCourseIds = (allCoursesRows || []).map((r: any) => r.id).filter(Boolean);
+      // Compute average rating across all courses (match dashboard logic: include 0, exclude only null/NaN)
+      const ratings: number[] = (allCoursesRows || [])
+        .map((r: any) => Number((r as any).rating))
+        .filter((v) => v !== null && v !== undefined && !Number.isNaN(v)) as number[];
+      if (ratings.length > 0) {
+        const totalRating = ratings.reduce((a, b) => a + b, 0);
+        avgRating = Number((totalRating / ratings.length).toFixed(1));
+      }
       if (allCourseIds.length > 0) {
         const { data: upRows, error: upErr } = await supabase
           .from("user_progress")
@@ -116,6 +125,7 @@ export async function GET(req: Request) {
       items,
       total: count || 0,
       totalUniqueStudents,
+      avgRating,
       page,
       limit,
     });

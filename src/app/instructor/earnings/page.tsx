@@ -1,6 +1,6 @@
 "use client";
 
-import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Table, Button, TextInput, Modal, ActionIcon, Divider } from "@mantine/core";
+import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Table, Button, TextInput, Modal, ActionIcon, Divider, Skeleton, Loader } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import "dayjs/locale/id";
 import {
@@ -16,7 +16,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
 import { notifications } from "@mantine/notifications";
-import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
+// Removed global loader overlay; we'll use in-page skeletons instead
 // Use page-level spinner for loading instead of global overlay
 
 type TxRow = {
@@ -128,6 +128,11 @@ export default function InstructorEarningsPage() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [tableLoadReason, setTableLoadReason] = useState<
+    "idle" | "searchFilter" | "other"
+  >("idle");
+  const [showAll, setShowAll] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // no trend UI currently
   const [totals, setTotals] = useState<{
@@ -220,21 +225,49 @@ export default function InstructorEarningsPage() {
     }
   };
 
-  const fetchData = async (page = 1, limit = tx.limit || 10) => {
+  const fetchData = async (
+    page = 1,
+    limit = tx.limit || 10,
+    reason: "initial" | "searchFilter" | "sort" | "paginate" | "other" = "other",
+    overrides?: {
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+      showAll?: boolean;
+      sortBy?: typeof sortBy;
+      sortDir?: typeof sortDir;
+    }
+  ) => {
     if (!user) return;
     setLoading(true);
+    if (reason === "initial") {
+      setInitialLoading(true);
+      setTableLoadReason("idle");
+    } else if (reason === "searchFilter") {
+      setTableLoadReason("searchFilter");
+    } else {
+      setTableLoadReason("other");
+    }
     setError(null);
     try {
+      const effSearch = overrides?.search ?? search;
+      const effStart = overrides?.startDate ?? startDate;
+      const effEnd = overrides?.endDate ?? endDate;
+      const effShowAll = overrides?.showAll ?? showAll;
+      const effSortBy = overrides?.sortBy ?? sortBy;
+      const effSortDir = overrides?.sortDir ?? sortDir;
+
       const params = new URLSearchParams({
         instructorId: user.id,
         page: String(page),
         limit: String(limit),
-        search,
-        sortBy,
-        sortDir,
+        search: effSearch,
+        sortBy: effSortBy,
+        sortDir: effSortDir,
       });
-      if (startDate) params.set("startDate", startDate);
-      if (endDate) params.set("endDate", endDate);
+      if (effStart) params.set("startDate", effStart);
+      if (effEnd) params.set("endDate", effEnd);
+      if (effShowAll) params.set("all", "true");
 
       const res = await fetch(`/api/instructor/earnings?${params}`);
       const json = await res.json();
@@ -242,31 +275,42 @@ export default function InstructorEarningsPage() {
         throw new Error(json.error || "Gagal memuat data");
 
       setTotals(json.totals);
-      setTotalTransactions(
-        json.totalTransactions || json.transactions?.total || 0
-      );
+      setTotalTransactions(json.totalTransactions || 0);
       setCommissionPercent(Number(json.commissionPercent || 10));
       setTx(json.transactions);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Terjadi kesalahan");
     } finally {
       setLoading(false);
+      setInitialLoading(false);
+      setTableLoadReason("idle");
     }
   };
 
-  // trigger fetch when filters change
+  // Initial load on mount/user change
   useEffect(() => {
     if (!user) return;
+    fetchData(1, tx.limit || 10, "initial", { showAll: true });
+  }, [user]);
 
-    fetchData(1, tx.limit || 10);
-  }, [user, startDate, endDate, search, sortBy, sortDir]);
-
-  // Toggle global loader while loading
+  // Debounced search fetch
   useEffect(() => {
-    if (loading) showGlobalLoader();
-    else hideGlobalLoader();
-    return () => hideGlobalLoader();
-  }, [loading]);
+    if (!user) return;
+    const t = setTimeout(() => {
+      fetchData(1, tx.limit || 10, "searchFilter");
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  // Sort change fetch (no skeleton)
+  useEffect(() => {
+    if (!user) return;
+    fetchData(1, tx.limit || 10, "sort");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, sortDir]);
+
+  // Use in-page skeletons, no global loader overlay
 
   // sorting toggle
   const toggleSort = (key: typeof sortBy) => {
@@ -283,15 +327,16 @@ export default function InstructorEarningsPage() {
     if (!user) return [];
 
     try {
-      const params = new URLSearchParams();
+  const params = new URLSearchParams();
       params.set("instructorId", user.id);
       params.set("page", "1");
       params.set("limit", "10000"); // Fetch all
       params.set("sortBy", sortBy);
       params.set("sortDir", sortDir);
-      if (search) params.set("q", search);
+  if (search) params.set("search", search);
       if (startDate) params.set("startDate", startDate);
       if (endDate) params.set("endDate", endDate);
+  if (showAll) params.set("all", "true");
 
       const res = await fetch(`/api/instructor/earnings?${params}`);
       const json = await res.json();
@@ -708,10 +753,65 @@ export default function InstructorEarningsPage() {
     w.document.close();
   };
 
-  // Saat loading awal, biarkan loader global tampil dan jangan render konten
-  if (loading && tx.items.length === 0 && !error) {
-    return null;
-  }
+    // Initial full-page overlay loader (match user discussions): only on first navigation
+    if (loading && initialLoading) {
+      return (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(255,255,255,0.98)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div style={{ display: "flex", gap: 24 }}>
+            {[0, 1, 2].map((i) => (
+              <svg
+                key={i}
+                width="64"
+                height="64"
+                viewBox="0 0 64 64"
+                style={{
+                  animation: "spinDiamond 1.2s linear infinite",
+                  animationDelay: `${i * 0.2}s`,
+                }}
+              >
+                <rect
+                  x="12"
+                  y="12"
+                  width="40"
+                  height="40"
+                  fill="none"
+                  stroke="url(#grad)"
+                  strokeWidth="8"
+                  rx="4"
+                  ry="4"
+                  transform="rotate(45 32 32)"
+                />
+                <defs>
+                  <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#f6d457" />
+                    <stop offset="100%" stopColor="#1e3769" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            ))}
+          </div>
+          <style>{`
+            @keyframes spinDiamond {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      );
+    }
+
+  // Selalu render halaman; gunakan Skeleton pada tabel saat loading
 
   return (
     <Container size="lg" py="xl">
@@ -752,9 +852,10 @@ export default function InstructorEarningsPage() {
                   placeholder="Pilih tanggal mulai"
                   value={startDate ? new Date(startDate) : null}
                   onChange={(d) =>
-                    setStartDate(
-                      d ? new Date(d).toISOString().slice(0, 10) : ""
-                    )
+                    {
+                      setShowAll(false);
+                      setStartDate(d ? new Date(d).toISOString().slice(0, 10) : "");
+                    }
                   }
                   clearable
                   locale="id"
@@ -765,7 +866,10 @@ export default function InstructorEarningsPage() {
                   placeholder="Pilih tanggal akhir"
                   value={endDate ? new Date(endDate) : null}
                   onChange={(d) =>
-                    setEndDate(d ? new Date(d).toISOString().slice(0, 10) : "")
+                    {
+                      setShowAll(false);
+                      setEndDate(d ? new Date(d).toISOString().slice(0, 10) : "");
+                    }
                   }
                   clearable
                   locale="id"
@@ -778,16 +882,25 @@ export default function InstructorEarningsPage() {
                   onClick={() => {
                     setStartDate("");
                     setEndDate("");
-                    setTotals({ gross: 0, commission: 0, net: 0 });
-                    setTx({ items: [], total: 0, page: 1, limit: tx.limit });
+                    setSearch("");
+                    setShowAll(true);
+                    fetchData(1, tx.limit, "searchFilter", {
+                      search: "",
+                      startDate: "",
+                      endDate: "",
+                      showAll: true,
+                    });
                   }}
-                  disabled={loading || (!startDate && !endDate)}
+                  disabled={loading || (!startDate && !endDate && !search)}
                 >
                   Reset
                 </Button>
                 <Button
                   className="btn-primary"
-                  onClick={() => fetchData(1, tx.limit)}
+                  onClick={() => {
+                    setShowAll(false);
+                    fetchData(1, tx.limit, "searchFilter", { showAll: false });
+                  }}
                   disabled={loading || !startDate || !endDate}
                 >
                   Terapkan
@@ -815,7 +928,6 @@ export default function InstructorEarningsPage() {
                 </>
               }
               Icon={IconWallet}
-              isLoading={loading}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 6 }}>
@@ -823,7 +935,6 @@ export default function InstructorEarningsPage() {
               label="Jumlah Transaksi"
               value={<AnimatedCounter value={totalTransactions} />}
               Icon={IconReceipt}
-              isLoading={loading}
             />
           </Grid.Col>
         </Grid>
@@ -906,96 +1017,131 @@ export default function InstructorEarningsPage() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {tx.items.map((t) => (
-                    <Table.Tr key={t.id}>
-                      <Table.Td>{formatDate(t.date)}</Table.Td>
-                      <Table.Td>
-                        <Text size="sm" fw={600}>
-                          {t.course_title}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">{t.user_name}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge
-                          color={
-                            t.status === "completed"
-                              ? "green"
-                              : t.status === "pending"
-                              ? "orange"
-                              : "red"
-                          }
-                          variant="light"
-                        >
-                          {statusLabelUI(t.status)}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td ta="right">
-                        <Text fw={700}>{formatCurrency(t.amount)}</Text>
-                      </Table.Td>
-                      <Table.Td ta="right">
-                        <Group gap={6} justify="right">
-                          <ActionIcon
-                            size="sm"
-                            variant="light"
-                            color="blue"
-                            onClick={() => printThermalReceipt(t)}
-                            title="Print Thermal"
-                          >
-                            <IconPrinter size={14} />
-                          </ActionIcon>
-                          <ActionIcon
-                            size="sm"
-                            variant="light"
-                            onClick={() => {
-                              setActiveTx(t);
-                              setOpened(true);
-                            }}
-                            title="Lihat Detail"
-                          >
-                            <IconEye size={14} />
-                          </ActionIcon>
-                          <ActionIcon
-                            size="sm"
-                            variant="subtle"
-                            onClick={() => downloadSingleCSV(t)}
-                            title="Download CSV"
-                          >
-                            <IconDownload size={14} />
-                          </ActionIcon>
-                        </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                  {tx.items.length === 0 && !loading && (
-                    <Table.Tr>
-                      <Table.Td colSpan={6}>
-                        <Text size="sm" c="dimmed">
-                          Belum ada transaksi.
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  )}
+                  {(loading && !initialLoading)
+                    ? Array.from({ length: Math.min(8, tx.limit || 10) }).map((_, idx) => (
+                        <Table.Tr key={`sk-${idx}`}>
+                          <Table.Td>
+                            <Skeleton height={12} width={120} />
+                          </Table.Td>
+                          <Table.Td>
+                            <Skeleton height={12} width={220} />
+                          </Table.Td>
+                          <Table.Td>
+                            <Skeleton height={12} width={160} />
+                          </Table.Td>
+                          <Table.Td>
+                            <Skeleton height={24} width={90} radius="xl" />
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Skeleton height={12} width={110} />
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <Group justify="right" gap={8}>
+                              <Skeleton height={28} width={28} circle />
+                              <Skeleton height={28} width={28} circle />
+                              <Skeleton height={28} width={28} circle />
+                            </Group>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))
+                    : (
+                        <>
+                          {tx.items.map((t) => (
+                            <Table.Tr key={t.id}>
+                              <Table.Td>{formatDate(t.date)}</Table.Td>
+                              <Table.Td>
+                                <Text size="sm" fw={600}>
+                                  {t.course_title}
+                                </Text>
+                              </Table.Td>
+                              <Table.Td>
+                                <Text size="sm">{t.user_name}</Text>
+                              </Table.Td>
+                              <Table.Td>
+                                <Badge
+                                  color={
+                                    t.status === "completed"
+                                      ? "green"
+                                      : t.status === "pending"
+                                      ? "orange"
+                                      : "red"
+                                  }
+                                  variant="light"
+                                >
+                                  {statusLabelUI(t.status)}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td ta="right">
+                                <Text fw={700}>{formatCurrency(t.amount)}</Text>
+                              </Table.Td>
+                              <Table.Td ta="right">
+                                <Group gap={6} justify="right">
+                                  <ActionIcon
+                                    size="sm"
+                                    variant="light"
+                                    color="blue"
+                                    onClick={() => printThermalReceipt(t)}
+                                    title="Print Thermal"
+                                  >
+                                    <IconPrinter size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    size="sm"
+                                    variant="light"
+                                    onClick={() => {
+                                      setActiveTx(t);
+                                      setOpened(true);
+                                    }}
+                                    title="Lihat Detail"
+                                  >
+                                    <IconEye size={14} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    size="sm"
+                                    variant="subtle"
+                                    onClick={() => downloadSingleCSV(t)}
+                                    title="Download CSV"
+                                  >
+                                    <IconDownload size={14} />
+                                  </ActionIcon>
+                                </Group>
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                          {tx.items.length === 0 && (
+                            <Table.Tr>
+                              <Table.Td colSpan={6}>
+                                <Text size="sm" c="dimmed">
+                                  Belum ada transaksi.
+                                </Text>
+                              </Table.Td>
+                            </Table.Tr>
+                          )}
+                        </>
+                      )}
                 </Table.Tbody>
               </Table>
             </div>
           <Group justify="space-between" mt="md">
-            <Text size="xs" c="dimmed">
-              Hal {tx.page} dari {totalPages}
-            </Text>
+            {loading && !initialLoading ? (
+              <Skeleton height={12} width={140} />
+            ) : (
+              <Text size="xs" c="dimmed">
+                Hal {tx.page} dari {totalPages}
+              </Text>
+            )}
             <Group gap={4}>
               <ActionIcon
                 variant="light"
                 disabled={tx.page <= 1 || loading}
-                onClick={() => fetchData(tx.page - 1, tx.limit)}
+                onClick={() => fetchData(tx.page - 1, tx.limit, "paginate")}
               >
                 <IconArrowLeft size={16} />
               </ActionIcon>
               <ActionIcon
                 variant="light"
                 disabled={tx.page >= totalPages || loading}
-                onClick={() => fetchData(tx.page + 1, tx.limit)}
+                onClick={() => fetchData(tx.page + 1, tx.limit, "paginate")}
               >
                 <IconArrowRight size={16} />
               </ActionIcon>

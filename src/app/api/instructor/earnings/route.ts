@@ -20,6 +20,7 @@ const supabase = createClient(url, serviceRole);
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const instructorId = searchParams.get("instructorId");
+  const showAll = (searchParams.get("all") || "false").toLowerCase() === "true";
   const range = (searchParams.get("range") || "month") as
     | "week"
     | "month"
@@ -34,12 +35,14 @@ export async function GET(req: Request) {
   const endDateParam = searchParams.get("endDate");
 
   let dateFilter: { gte?: string; lte?: string } = {};
-  if (startDateParam && endDateParam) {
-    dateFilter = { gte: startDateParam, lte: endDateParam };
-  } else if (startDateParam) {
-    dateFilter = { gte: startDateParam };
-  } else if (endDateParam) {
-    dateFilter = { lte: endDateParam };
+  if (!showAll) {
+    if (startDateParam && endDateParam) {
+      dateFilter = { gte: startDateParam, lte: endDateParam };
+    } else if (startDateParam) {
+      dateFilter = { gte: startDateParam };
+    } else if (endDateParam) {
+      dateFilter = { lte: endDateParam };
+    }
   }
   // kalau kosong, biarin tanpa filter → tampil semua
 
@@ -101,13 +104,15 @@ export async function GET(req: Request) {
     })();
 
     // Revenues table per day for instructor
-    const { data: revs } = await supabase
+    let revQuery = supabase
       .from("revenues")
       .select("date, gross_revenue, net_revenue, commission_percent")
       .eq("instructor_id", instructorId)
-      .gte("date", startDate)
-      .lte("date", endDate)
       .order("date", { ascending: true });
+    if (!showAll) {
+      revQuery = revQuery.gte("date", startDate).lte("date", endDate);
+    }
+    const { data: revs } = await revQuery;
     const trend = (revs || []).map((r) => ({
       date: r.date as unknown as string,
       gross: Number(r.gross_revenue || 0),
@@ -120,13 +125,15 @@ export async function GET(req: Request) {
     }));
 
     // Calculate totals from transactions with date filter (completed only)
-    const { data: rangedTrx } = await supabase
+    let totalsQuery = supabase
       .from("transactions")
       .select("amount, status, date")
       .eq("instructors_id", instructorId)
-      .eq("status", "completed")
-      .gte("date", startDate)
-      .lt("date", endExclusive);
+      .eq("status", "completed");
+    if (!showAll) {
+      totalsQuery = totalsQuery.gte("date", startDate).lt("date", endExclusive);
+    }
+    const { data: rangedTrx } = await totalsQuery;
 
     const totals = (rangedTrx || []).reduce(
       (a, x) => {
@@ -162,7 +169,20 @@ export async function GET(req: Request) {
     };
     let trxItems: TransactionRow[] = [];
     let trxCount = 0;
+    // Count completed transactions independent of search term
+    let totalCompletedCount = 0;
     if (courseIds.length) {
+      let countQuery = supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .in("course_id", courseIds)
+        .eq("status", "completed");
+      if (!showAll) {
+        countQuery = countQuery.gte("date", startDate).lt("date", endExclusive);
+      }
+      const { count: completedCount } = await countQuery;
+      totalCompletedCount = completedCount || 0;
+
       // Supabase range pagination for filtered list
       const from = (page - 1) * limit;
       const to = from + limit - 1;
@@ -172,12 +192,15 @@ export async function GET(req: Request) {
           "id, date, user_id, user_name, course_id, course_title, amount, method, status",
           { count: "exact" }
         )
-        .in("course_id", courseIds)
-        .gte("date", startDate) // inclusive start
-        .lt("date", endExclusive); // end-exclusive to include full end day
+        .in("course_id", courseIds);
+      if (!showAll) {
+        q = q.gte("date", startDate).lt("date", endExclusive);
+      }
 
-      if (dateFilter.gte) q = q.gte("date", dateFilter.gte + "T00:00:00");
-      if (dateFilter.lte) q = q.lte("date", dateFilter.lte + "T23:59:59");
+      if (!showAll) {
+        if (dateFilter.gte) q = q.gte("date", dateFilter.gte + "T00:00:00");
+        if (dateFilter.lte) q = q.lte("date", dateFilter.lte + "T23:59:59");
+      }
 
       if (search) {
         const term = search.replace(/%/g, "");
@@ -205,6 +228,7 @@ export async function GET(req: Request) {
       commissionPercent,
       totals,
       trend,
+      totalTransactions: totalCompletedCount,
       transactions: { items: trxItems, total: trxCount, page, limit },
     });
   } catch (err: unknown) {

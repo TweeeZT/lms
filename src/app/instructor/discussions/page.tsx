@@ -1,12 +1,11 @@
 "use client";
 
-import { Container, Title, Text, Stack, Group, Avatar, ActionIcon, Button, Badge, SegmentedControl, TextInput, Image, SimpleGrid, Select, Pagination, Modal } from "@mantine/core";
+import { Container, Title, Text, Stack, Group, Avatar, ActionIcon, Button, Badge, SegmentedControl, TextInput, Image, SimpleGrid, Select, Pagination, Modal, Skeleton, Card } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconHeart, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import Link from "next/link";
 import { useAuth } from "../../../hooks/useAuth";
 import { useCallback, useEffect, useState } from "react";
-import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 
 type ApiPost = {
   id: string;
@@ -41,6 +40,7 @@ export default function InstructorDiscussionsFeed() {
   const [items, setItems] = useState<ApiPost[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   // composer moved to separate page (/instructor/discussions/new)
   const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
 
@@ -69,19 +69,13 @@ export default function InstructorDiscussionsFeed() {
       }
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [user, sort, page, limit, q, filter]);
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
-
-  // Toggle global loader while page is loading, match admin behavior
-  useEffect(() => {
-    if (loading) showGlobalLoader();
-    else hideGlobalLoader();
-    return () => hideGlobalLoader();
-  }, [loading]);
 
   // Map backend role to human label and color
   const getRoleLabel = (r?: string | null) => {
@@ -155,9 +149,62 @@ export default function InstructorDiscussionsFeed() {
     });
   }
 
-  // Saat loading awal, biarkan loader global tampil dan jangan render konten halaman
-  if (loading && items.length === 0) {
-    return null;
+  // Initial full-page overlay loader: only on first navigation
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
   }
 
   return (
@@ -212,7 +259,53 @@ export default function InstructorDiscussionsFeed() {
 
         {/* Twitter-like feed */}
         <Stack gap="md">
-            {items.map((post) => {
+            {loading && !initialLoad
+              ? Array.from({ length: Math.min(5, limit || 10) }).map((_, idx) => (
+                  <div
+                    key={`skeleton-${idx}`}
+                    style={{
+                      padding: "20px",
+                      background: "#ffffff",
+                      borderRadius: "12px",
+                      border: "1px solid #e9ecef",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    }}
+                  >
+                    <Group align="flex-start" gap="md" wrap="nowrap">
+                      {/* Avatar */}
+                      <Skeleton height={40} width={40} circle />
+                      {/* Content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* Header */}
+                        <Group gap="xs" mb={8} align="center">
+                          <Skeleton height={12} width={120} />
+                          <Skeleton height={16} width={64} radius="sm" />
+                          <Skeleton height={10} width={10} circle />
+                          <Skeleton height={12} width={80} />
+                        </Group>
+                        {/* Title */}
+                        <Skeleton height={14} width="60%" mb={8} />
+                        {/* Content lines */}
+                        <Skeleton height={12} width="100%" mb={6} />
+                        <Skeleton height={12} width="90%" mb={12} />
+                        {/* Media grid placeholder */}
+                        <SimpleGrid cols={2} spacing={6} style={{ marginBottom: 12 }}>
+                          <Skeleton height={0} style={{ paddingTop: "100%", borderRadius: 8 }} />
+                          <Skeleton height={0} style={{ paddingTop: "100%", borderRadius: 8 }} />
+                        </SimpleGrid>
+                        {/* Engagement */}
+                        <Group gap="lg">
+                          <Group gap="xs" align="center">
+                            <Skeleton height={28} width={28} radius="xl" />
+                            <Skeleton height={12} width={32} />
+                          </Group>
+                          <Skeleton height={12} width={80} />
+                        </Group>
+                      </div>
+                    </Group>
+                  </div>
+                ))
+              : items.map((post) => {
               const cover =
                 post.media && post.media.length > 0 ? post.media[0] : null;
               const isVideo = cover?.m_type === "video";
@@ -423,9 +516,13 @@ export default function InstructorDiscussionsFeed() {
         </Stack>
 
         <Group justify="space-between" align="center" mt="md">
-          <Text size="xs" c="dimmed">
-            Total {total} post
-          </Text>
+          {loading && !initialLoad ? (
+            <Skeleton height={12} width={120} />
+          ) : (
+            <Text size="xs" c="dimmed">
+              Total {total} post
+            </Text>
+          )}
           <Pagination
             total={totalPages}
             value={page}

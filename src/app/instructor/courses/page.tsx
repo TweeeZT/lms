@@ -1,6 +1,6 @@
 "use client";
 
-import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Button, ActionIcon, Modal, TextInput, NumberInput, Select, FileInput, Switch, Pagination, Textarea } from "@mantine/core";
+import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Button, ActionIcon, Modal, TextInput, NumberInput, Select, FileInput, Switch, Pagination, Textarea, Skeleton } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
   IconBook,
@@ -14,7 +14,6 @@ import {
 import { useState, useEffect, useCallback } from "react";
 import { useMediaQuery } from "@mantine/hooks";
 import { useAuth } from "../../../hooks/useAuth";
-import { showGlobalLoader, hideGlobalLoader } from "../../../hooks/useGlobalLoader";
 import Link from "next/link";
 import RichTextEditor from "../../../components/RichTextEditor";
 // Page-level spinner will be used for loading instead of global loader
@@ -23,6 +22,7 @@ export default function InstructorCoursesPage() {
   const { user } = useAuth();
   const isMobile = useMediaQuery("(max-width: 48em)");
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   // error state handled via dialog + notifications
   type CourseRow = {
     id: string;
@@ -81,7 +81,13 @@ export default function InstructorCoursesPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(6);
   const [total, setTotal] = useState(0);
-  const [totalStudents, setTotalStudents] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0); // kept for backward-compat (list fetch)
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    totalStudents: 0,
+    avgRating: "0",
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
 
   // errors reported via notifications only
 
@@ -207,13 +213,14 @@ export default function InstructorCoursesPage() {
         throw new Error(json.error || "Gagal memuat kursus");
       setCourses(json.items || []);
       setTotal(json.total || 0);
-      // read unique-per-instructor students from API
+      // read unique-per-instructor students from API (filtered result — kept for compatibility)
       setTotalStudents(Number(json.totalUniqueStudents || 0));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Gagal memuat kursus";
       notifications.show({ color: "red", title: "Gagal", message: msg });
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [user?.id, search, statusFilter, page, limit]);
 
@@ -232,13 +239,53 @@ export default function InstructorCoursesPage() {
     setPage(1);
   }, [search, statusFilter]);
 
-  // Toggle global loader like admin while page data is loading
+  // Skeleton loading is used on this page; avoid global loader overlay
+
+  // Fetch unfiltered stats once (or when user changes) and keep them stable across filtering/search
+  const fetchStats = useCallback(async () => {
+    if (!user?.id) return;
+    setStatsLoading(true);
+    try {
+      // Prefer dedicated stats endpoint if available
+      const url = `/api/instructor/courses/stats?instructorId=${encodeURIComponent(
+        user.id
+      )}`;
+      const res = await fetch(url);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setStats({
+          totalCourses: Number(json.totalCourses ?? 0),
+          totalStudents: Number(json.totalUniqueStudents ?? 0),
+          avgRating: String(json.avgRating ?? "0"),
+        });
+        return;
+      }
+      // Fallback: try generic list with no filters to at least get total and students
+      const params = new URLSearchParams({
+        instructorId: user.id,
+        status: "all",
+        page: "1",
+        limit: "1",
+      });
+      const res2 = await fetch(`/api/instructor/courses?${params.toString()}`);
+      const json2 = await res2.json();
+      if (res2.ok && json2.success) {
+        setStats({
+          totalCourses: Number(json2.total ?? 0),
+          totalStudents: Number(json2.totalUniqueStudents ?? 0),
+          avgRating: String(json2.avgRating ?? "0"),
+        });
+      }
+    } catch (err) {
+      console.error("[fetchStats]", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
-    if (loading) showGlobalLoader();
-    else hideGlobalLoader();
-    // hide on unmount
-    return () => hideGlobalLoader();
-  }, [loading]);
+    fetchStats();
+  }, [fetchStats]);
 
   const saveCourse = async () => {
     if (saving) return; // prevent spam
@@ -421,7 +468,7 @@ export default function InstructorCoursesPage() {
               width: 56,
               height: 56,
               borderRadius: 16,
-              background: iconBadgeBg, // frosted look
+              background: iconBadgeBg,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -433,11 +480,7 @@ export default function InstructorCoursesPage() {
           <Text size="xs" tt="uppercase" fw={700} c={textColor}>
             {label}
           </Text>
-          <Text
-            size="xl"
-            fw={800}
-            style={{ lineHeight: 1.1, color: textColor }}
-          >
+          <Text size="xl" fw={800} style={{ lineHeight: 1.1, color: textColor }}>
             {value}
           </Text>
         </Stack>
@@ -445,17 +488,67 @@ export default function InstructorCoursesPage() {
     );
   };
 
-  const avgRating = myCourses.length
-    ? (
-        myCourses.reduce((s: number, c: CourseRow) => s + (c.rating ?? 0), 0) /
-        myCourses.length
-      ).toFixed(1)
-    : "0";
+  // Keep stats independent from filters; avgRating comes from stats
 
-  // Saat loading awal, biarkan layout menampilkan loader global dan jangan render konten halaman
-  if (loading && courses.length === 0) {
-    return null;
+  // Initial full-page overlay loader (only on first navigation)
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
   }
+
+  // Selalu render halaman; gunakan Skeleton saat loading (post-initial only)
 
   return (
     <Container size="xl">
@@ -481,25 +574,13 @@ export default function InstructorCoursesPage() {
         {/* Stats */}
         <Grid gutter="xl">
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <StatCard
-              label="Total Kursus"
-              value={String(myCourses.length)}
-              icon={IconBook}
-            />
+            <StatCard label="Total Kursus" value={String(stats.totalCourses)} icon={IconBook} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <StatCard
-              label="Total Siswa"
-              value={String(totalStudents)}
-              icon={IconUsers}
-            />
+            <StatCard label="Total Siswa" value={String(stats.totalStudents)} icon={IconUsers} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <StatCard
-              label="Rata-rata Rating"
-              value={avgRating}
-              icon={IconStar}
-            />
+            <StatCard label="Rata-rata Rating" value={stats.avgRating} icon={IconStar} />
           </Grid.Col>
         </Grid>
 
@@ -526,13 +607,49 @@ export default function InstructorCoursesPage() {
               ]}
               style={{ width: 180 }}
             />
-            <Text size="xs" c="dimmed" style={{ marginLeft: "auto" }}>
-              {total} hasil
-            </Text>
+            <div style={{ marginLeft: "auto" }}>
+              {loading && !initialLoad ? (
+                <Skeleton height={12} width={70} />
+              ) : (
+                <Text size="xs" c="dimmed">
+                  {total} hasil
+                </Text>
+              )}
+            </div>
           </Group>
           {/* Grid cards */}
           <Grid gutter="xl">
-            {filteredCourses.map((course) => (
+            {loading && !initialLoad
+              ? Array.from({ length: limit }).map((_, idx) => (
+                  <Grid.Col key={`skeleton-${idx}`} span={{ base: 12, sm: 6, md: 6, lg: 4 }}>
+                    <Card withBorder padding="lg" radius="lg">
+                      <Stack gap={12}>
+                        <Skeleton height={0} style={{ paddingTop: "56.25%", borderRadius: 8 }} />
+                        <Group justify="space-between" align="flex-start">
+                          <Skeleton height={18} width="70%" />
+                          <Skeleton height={20} width={64} />
+                        </Group>
+                        <Group gap={8}>
+                          <Skeleton height={20} width={80} />
+                          <Skeleton height={20} width={80} />
+                        </Group>
+                        <Group justify="space-between" align="center">
+                          <Skeleton height={18} width={120} />
+                          <Skeleton height={14} width={80} />
+                        </Group>
+                        <Group justify="space-between">
+                          <Skeleton height={28} width={90} />
+                          <Group gap="xs">
+                            <Skeleton height={28} width={32} />
+                            <Skeleton height={28} width={32} />
+                          </Group>
+                        </Group>
+                        <Skeleton height={12} width={120} />
+                      </Stack>
+                    </Card>
+                  </Grid.Col>
+                ))
+              : filteredCourses.map((course) => (
               <Grid.Col
                 key={course.id}
                 span={{ base: 12, sm: 6, md: 6, lg: 4 }}
@@ -656,13 +773,13 @@ export default function InstructorCoursesPage() {
               </Grid.Col>
             ))}
           </Grid>
-          {filteredCourses.length === 0 && (
+          {!loading && filteredCourses.length === 0 && (
             <Stack align="center" py="xl" gap={6}>
               <IconBook size="3rem" color="gray" />
               <Text c="dimmed">Tidak ada kursus memenuhi filter</Text>
             </Stack>
           )}
-          {total > limit && (
+          {!loading && total > limit && (
             <Group justify="center" mt="lg">
               <Pagination
                 value={page}

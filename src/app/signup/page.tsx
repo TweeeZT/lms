@@ -48,7 +48,7 @@ const schema = z
       .regex(/^[a-zA-Z\s]+$/, {
         message: "Nama lengkap hanya boleh huruf dan spasi",
       }),
-    role: z.enum(["instructor", "user"]),
+    role: z.enum(["user", "school"]),
     phone: z
       .string()
       .min(10, { message: "Nomor telepon minimal 10 digit" })
@@ -59,6 +59,7 @@ const schema = z
       .string()
       .max(200, { message: "Bio maksimal 200 karakter" })
       .optional(),
+    affiliateCode: z.string().optional(),
     password: z
       .string()
       .min(6, { message: "Password minimal 6 karakter" })
@@ -84,21 +85,24 @@ export function SignupForm() {
     reset,
     control,
     formState: { errors },
-  } = useForm<SignupData & { confirmPassword: string }>({
-    defaultValues: {
-      email: "",
-      username: "",
-      fullName: "",
-      role: "user",
-      phone: "",
-      bio: "",
-      password: "",
-      confirmPassword: "",
-    },
-    mode: "onSubmit", // ✅ validasi hanya saat submit
-    reValidateMode: "onSubmit", // ✅ kalau sudah bener, error hilang
-    shouldUnregister: true,
-  });
+  } = useForm<SignupData & { confirmPassword: string; affiliateCode?: string }>(
+    {
+      defaultValues: {
+        email: "",
+        username: "",
+        fullName: "",
+        role: "user",
+        phone: "",
+        bio: "",
+        affiliateCode: "",
+        password: "",
+        confirmPassword: "",
+      },
+      mode: "onSubmit", // ✅ validasi hanya saat submit
+      reValidateMode: "onSubmit", // ✅ kalau sudah bener, error hilang
+      shouldUnregister: true,
+    }
+  );
 
   useEffect(() => {
     reset({
@@ -108,12 +112,15 @@ export function SignupForm() {
       role: "user",
       phone: "",
       bio: "",
+      affiliateCode: "",
       password: "",
       confirmPassword: "",
     });
   }, []);
 
-  const onSubmit = async (data: SignupData & { confirmPassword: string }) => {
+  const onSubmit = async (
+    data: SignupData & { confirmPassword: string; affiliateCode?: string }
+  ) => {
     try {
       setSignupError(null);
       const result = await signup(data as SignupData);
@@ -212,7 +219,7 @@ export function SignupForm() {
                       placeholder="Pilih peran"
                       data={[
                         { value: "user", label: "Siswa" },
-                        { value: "instructor", label: "Instruktur" },
+                        { value: "school", label: "Sekolah" },
                       ]}
                       value={field.value}
                       onChange={field.onChange}
@@ -241,6 +248,16 @@ export function SignupForm() {
                   maxRows={4}
                   {...register("bio")}
                   error={errors.bio?.message}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={12}>
+                <TextInput
+                  label="Kode Referral (opsional)"
+                  placeholder="Masukkan kode referral jika ada"
+                  {...register("affiliateCode")}
+                  error={errors.affiliateCode?.message}
+                  description="Dapatkan 1000 poin bonus untuk referrer jika menggunakan kode referral"
                 />
               </Grid.Col>
 

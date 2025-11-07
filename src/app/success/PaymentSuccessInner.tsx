@@ -150,7 +150,7 @@ export default function PaymentSuccessInner() {
       ? "/user/courses"
       : "/";
 
-  const buttonLabel = role ? "Kembali ke Dashboard" : "Kembali ke Beranda";
+  const buttonLabel = role ? "Kembali ke Kursus Saya" : "Kembali ke Beranda";
 
   const finished = status === "completed";
   const cancelled = status === "cancelled";

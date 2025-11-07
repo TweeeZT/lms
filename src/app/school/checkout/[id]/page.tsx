@@ -16,9 +16,11 @@ import {
   Badge,
   Modal,
   Checkbox,
+  TextInput,
+  Radio,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconTicket, IconDiscount } from "@tabler/icons-react";
 
 export default function CheckoutCoursePage() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +44,18 @@ export default function CheckoutCoursePage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [totalStudents, setTotalStudents] = useState(0);
   const [includeSchool, setIncludeSchool] = useState(false);
+
+  // Discount codes
+  const [discountType, setDiscountType] = useState<
+    "none" | "affiliate" | "voucher"
+  >("none");
+  const [affiliateCode, setAffiliateCode] = useState("");
+  const [voucherCode, setVoucherCode] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [validatingCode, setValidatingCode] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"direct" | "xendit">(
+    "xendit"
+  ); // Default to Xendit untuk mendukung payment gateway
 
   useEffect(() => {
     let active = true;
@@ -86,21 +100,23 @@ export default function CheckoutCoursePage() {
     // Check if free course
     const price = course?.price || 0;
     const finalCount = includeSchool ? totalStudents + 1 : totalStudents;
-    const totalAmount = price * finalCount;
+    const baseAmount = price * finalCount;
+    const finalAmount = baseAmount - discountAmount;
 
-    if (totalAmount === 0) {
+    if (finalAmount === 0 && baseAmount === 0) {
       // Handle free course - enroll school and students
       setCreatingInvoice(true);
       setInvoiceError(null);
       try {
-        const res = await fetch("/api/school/checkout/confirm", {
+        const res = await fetch("/api/school/purchase-course", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             schoolUserId: user.id,
             courseId: id,
-            isFree: true,
-            includeSchool,
+            affiliateCode:
+              discountType === "affiliate" ? affiliateCode : undefined,
+            voucherCode: discountType === "voucher" ? voucherCode : undefined,
           }),
         });
         const json = await res.json();
@@ -111,9 +127,7 @@ export default function CheckoutCoursePage() {
         notifications.show({
           color: "green",
           title: "Berhasil!",
-          message: `${includeSchool ? "Sekolah dan " : ""}${
-            json.studentsEnrolled
-          } siswa berhasil terdaftar di kursus ini`,
+          message: `${json.enrolled} siswa berhasil terdaftar di kursus ini`,
         });
 
         // Untuk kursus gratis, langsung arahkan ke kursus sekolah
@@ -129,43 +143,76 @@ export default function CheckoutCoursePage() {
       return;
     }
 
-    // Handle paid course with Xendit
-    setCreatingInvoice(true);
-    setInvoiceError(null);
-    try {
-      const res = await fetch("/api/school/checkout/invoice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          schoolUserId: user.id,
-          courseId: id,
-          includeSchool,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success)
-        throw new Error(json.error || "Gagal membuat invoice");
-      if (json.invoiceUrl) {
-        try {
-          localStorage.setItem("pending_invoiceId", json.invoiceId || "");
-          localStorage.setItem("pending_courseId", id);
-          localStorage.setItem("pending_schoolUserId", user.id);
-          localStorage.setItem(
-            "pending_includeSchool",
-            includeSchool ? "1" : "0"
-          );
-        } catch {}
-        window.location.href = json.invoiceUrl;
-      } else {
-        throw new Error("Invoice URL tidak tersedia");
+    // Handle paid course - use selected payment method
+    if (paymentMethod === "xendit") {
+      // Create Xendit invoice
+      setCreatingInvoice(true);
+      setInvoiceError(null);
+      try {
+        const res = await fetch("/api/school/checkout/invoice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolUserId: user.id,
+            courseId: id,
+            includeSchool,
+            affiliateCode:
+              discountType === "affiliate" ? affiliateCode : undefined,
+            voucherCode: discountType === "voucher" ? voucherCode : undefined,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success)
+          throw new Error(json.error || "Gagal membuat invoice");
+
+        // Redirect to Xendit payment page
+        if (json.invoiceUrl) {
+          window.location.href = json.invoiceUrl;
+        } else {
+          throw new Error("Invoice URL tidak ditemukan");
+        }
+      } catch (e) {
+        setInvoiceError(
+          e instanceof Error ? e.message : "Gagal membuat invoice"
+        );
+        setCreatingInvoice(false);
+        setConfirmOpen(false);
       }
-    } catch (e) {
-      setInvoiceError(
-        e instanceof Error ? e.message : "Gagal memulai pembayaran"
-      );
-    } finally {
-      setCreatingInvoice(false);
-      setConfirmOpen(false);
+    } else {
+      // Direct purchase (no payment gateway)
+      setCreatingInvoice(true);
+      setInvoiceError(null);
+      try {
+        const res = await fetch("/api/school/purchase-course", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            schoolUserId: user.id,
+            courseId: id,
+            affiliateCode:
+              discountType === "affiliate" ? affiliateCode : undefined,
+            voucherCode: discountType === "voucher" ? voucherCode : undefined,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success)
+          throw new Error(json.error || "Gagal membeli kursus");
+
+        notifications.show({
+          color: "green",
+          title: "Berhasil!",
+          message: json.message || "Pembelian berhasil",
+        });
+
+        router.push(`/school/courses`);
+      } catch (e) {
+        setInvoiceError(
+          e instanceof Error ? e.message : "Gagal memulai pembayaran"
+        );
+      } finally {
+        setCreatingInvoice(false);
+        setConfirmOpen(false);
+      }
     }
   };
 
@@ -192,6 +239,8 @@ export default function CheckoutCoursePage() {
   };
 
   const finalParticipantCount = totalStudents + (includeSchool ? 1 : 0);
+  const baseAmount = (course?.price || 0) * finalParticipantCount;
+  const finalAmount = Math.max(0, baseAmount - discountAmount);
 
   return (
     <Container size="md" py="lg" style={{ position: "relative" }}>
@@ -376,6 +425,209 @@ export default function CheckoutCoursePage() {
                         setIncludeSchool(e.currentTarget.checked)
                       }
                     />
+
+                    {/* Discount Code Section */}
+                    <div
+                      style={{
+                        marginTop: 16,
+                        paddingTop: 16,
+                        borderTop: "1px solid #dee2e6",
+                      }}
+                    >
+                      <Text size="sm" fw={600} mb="xs">
+                        Kode Diskon (Opsional)
+                      </Text>
+                      <Radio.Group
+                        value={discountType}
+                        onChange={(val) => {
+                          setDiscountType(
+                            val as "none" | "affiliate" | "voucher"
+                          );
+                          setDiscountAmount(0);
+                          setAffiliateCode("");
+                          setVoucherCode("");
+                        }}
+                      >
+                        <Stack gap="xs">
+                          <Radio value="none" label="Tidak menggunakan kode" />
+                          <Radio
+                            value="affiliate"
+                            label={
+                              <Group gap={4}>
+                                <IconDiscount size={16} />
+                                <span>Kode Afiliasi (Diskon 10%)</span>
+                              </Group>
+                            }
+                          />
+                          <Radio
+                            value="voucher"
+                            label={
+                              <Group gap={4}>
+                                <IconTicket size={16} />
+                                <span>Kode Voucher</span>
+                              </Group>
+                            }
+                          />
+                        </Stack>
+                      </Radio.Group>
+
+                      {discountType === "affiliate" && (
+                        <Group mt="sm" align="flex-end">
+                          <TextInput
+                            style={{ flex: 1 }}
+                            placeholder="Masukkan kode afiliasi"
+                            value={affiliateCode}
+                            onChange={(e) => {
+                              setAffiliateCode(
+                                e.currentTarget.value.toUpperCase()
+                              );
+                              setDiscountAmount(0); // Reset discount saat input berubah
+                            }}
+                            description="Dapatkan diskon 10% dan bantu referrer mendapat reward!"
+                          />
+                          <Button
+                            onClick={async () => {
+                              if (!affiliateCode.trim()) {
+                                notifications.show({
+                                  color: "red",
+                                  message:
+                                    "Masukkan kode afiliasi terlebih dahulu",
+                                });
+                                return;
+                              }
+                              setValidatingCode(true);
+                              try {
+                                // Validasi dengan memanggil endpoint yang sama
+                                const price = course?.price || 0;
+                                const count = includeSchool
+                                  ? totalStudents + 1
+                                  : totalStudents;
+                                const baseAmt = price * count;
+                                const discount = baseAmt * 0.1; // 10% discount
+
+                                // Cek kode valid (cukup cek apakah ada di DB)
+                                const res = await fetch(
+                                  `/api/school/validate-code?code=${affiliateCode}&type=affiliate`
+                                );
+                                const json = await res.json();
+
+                                if (json.success && json.valid) {
+                                  setDiscountAmount(discount);
+                                  notifications.show({
+                                    color: "green",
+                                    title: "Kode Valid!",
+                                    message: `Diskon 10% (Rp ${discount.toLocaleString()}) akan diterapkan`,
+                                  });
+                                } else {
+                                  setDiscountAmount(0);
+                                  notifications.show({
+                                    color: "red",
+                                    message:
+                                      json.error || "Kode afiliasi tidak valid",
+                                  });
+                                }
+                              } catch (e) {
+                                notifications.show({
+                                  color: "red",
+                                  message: "Gagal memvalidasi kode",
+                                });
+                              } finally {
+                                setValidatingCode(false);
+                              }
+                            }}
+                            loading={validatingCode}
+                            style={{ backgroundColor: "rgb(30, 55, 105)" }}
+                          >
+                            Terapkan
+                          </Button>
+                        </Group>
+                      )}
+
+                      {discountType === "voucher" && (
+                        <Group mt="sm" align="flex-end">
+                          <TextInput
+                            style={{ flex: 1 }}
+                            placeholder="Masukkan kode voucher"
+                            value={voucherCode}
+                            onChange={(e) => {
+                              setVoucherCode(
+                                e.currentTarget.value.toUpperCase()
+                              );
+                              setDiscountAmount(0); // Reset discount saat input berubah
+                            }}
+                            description="Masukkan kode voucher untuk mendapat diskon"
+                          />
+                          <Button
+                            onClick={async () => {
+                              if (!voucherCode.trim()) {
+                                notifications.show({
+                                  color: "red",
+                                  message:
+                                    "Masukkan kode voucher terlebih dahulu",
+                                });
+                                return;
+                              }
+                              setValidatingCode(true);
+                              try {
+                                const res = await fetch(
+                                  `/api/school/validate-code?code=${voucherCode}&type=voucher`
+                                );
+                                const json = await res.json();
+
+                                if (json.success && json.valid) {
+                                  const price = course?.price || 0;
+                                  const count = includeSchool
+                                    ? totalStudents + 1
+                                    : totalStudents;
+                                  const baseAmt = price * count;
+
+                                  let discount = 0;
+                                  if (json.discountType === "percentage") {
+                                    discount =
+                                      baseAmt * (json.discountValue / 100);
+                                  } else if (json.discountType === "fixed") {
+                                    discount = json.discountValue * count;
+                                  }
+
+                                  setDiscountAmount(discount);
+                                  notifications.show({
+                                    color: "green",
+                                    title: "Kode Valid!",
+                                    message: `Diskon Rp ${discount.toLocaleString()} akan diterapkan`,
+                                  });
+                                } else {
+                                  setDiscountAmount(0);
+                                  notifications.show({
+                                    color: "red",
+                                    message:
+                                      json.error || "Kode voucher tidak valid",
+                                  });
+                                }
+                              } catch (e) {
+                                notifications.show({
+                                  color: "red",
+                                  message: "Gagal memvalidasi kode",
+                                });
+                              } finally {
+                                setValidatingCode(false);
+                              }
+                            }}
+                            loading={validatingCode}
+                            style={{ backgroundColor: "rgb(30, 55, 105)" }}
+                          >
+                            Terapkan
+                          </Button>
+                        </Group>
+                      )}
+
+                      {discountAmount > 0 && (
+                        <Alert mt="sm" color="green" variant="light">
+                          <Text size="sm">
+                            Diskon: <b>Rp {discountAmount.toLocaleString()}</b>
+                          </Text>
+                        </Alert>
+                      )}
+                    </div>
                   </Card>
 
                   <Alert
@@ -423,21 +675,30 @@ export default function CheckoutCoursePage() {
                 <Text size="xs" c="dimmed" mb={4}>
                   Total Pembayaran
                 </Text>
+                {discountAmount > 0 && (
+                  <Text size="sm" c="dimmed" td="line-through">
+                    Rp {baseAmount.toLocaleString()}
+                  </Text>
+                )}
                 <Text
                   fw={800}
                   size="xl"
                   c="green"
                   style={{ letterSpacing: 0.5 }}
                 >
-                  {(course.price || 0) * finalParticipantCount === 0
+                  {finalAmount === 0 && baseAmount === 0
                     ? "GRATIS"
-                    : `Rp ${(
-                        (course.price || 0) * finalParticipantCount
-                      ).toLocaleString()}`}
+                    : `Rp ${finalAmount.toLocaleString()}`}
                 </Text>
                 <Text size="xs" c="dimmed" mt={2}>
                   {finalParticipantCount} peserta × Rp{" "}
                   {(course.price || 0).toLocaleString()}
+                  {discountAmount > 0 && (
+                    <Text component="span" c="green" fw={600}>
+                      {" "}
+                      - Rp {discountAmount.toLocaleString()}
+                    </Text>
+                  )}
                 </Text>
               </div>
               <Button
@@ -448,7 +709,7 @@ export default function CheckoutCoursePage() {
                 radius="md"
                 style={{ minWidth: 180 }}
               >
-                {(course.price || 0) * totalStudents === 0
+                {finalAmount === 0 && baseAmount === 0
                   ? "Daftar Sekarang"
                   : "Bayar Sekarang"}
               </Button>
@@ -464,7 +725,7 @@ export default function CheckoutCoursePage() {
         title={
           <Text fw={700} size="lg">
             Konfirmasi{" "}
-            {(course?.price || 0) * finalParticipantCount === 0
+            {finalAmount === 0 && baseAmount === 0
               ? "Pendaftaran"
               : "Pembayaran"}
           </Text>
@@ -473,17 +734,13 @@ export default function CheckoutCoursePage() {
       >
         <Stack gap="md">
           <Text>
-            {(course?.price || 0) * finalParticipantCount === 0
-              ? `${
-                  includeSchool ? "Sekolah dan " : ""
-                }${totalStudents} siswa akan terdaftar di kursus gratis ini. Lanjutkan?`
-              : `Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi sebesar Rp ${(
-                  (course?.price || 0) * finalParticipantCount
-                ).toLocaleString()} (${finalParticipantCount} peserta × Rp ${(
-                  course?.price || 0
-                ).toLocaleString()}). Setelah pembayaran berhasil, ${
-                  includeSchool ? "sekolah dan semua siswa" : "semua siswa"
-                } akan otomatis terdaftar. Lanjutkan?`}
+            {finalAmount === 0 && baseAmount === 0
+              ? `${totalStudents} siswa akan terdaftar di kursus gratis ini. Lanjutkan?`
+              : `Anda akan menyelesaikan pembelian dengan total Rp ${finalAmount.toLocaleString()} (${finalParticipantCount} peserta)${
+                  discountAmount > 0
+                    ? `. Diskon Rp ${discountAmount.toLocaleString()} telah diterapkan`
+                    : ""
+                }. Setelah pembayaran, semua siswa akan otomatis terdaftar. Lanjutkan?`}
           </Text>
           <Group justify="flex-end" gap="sm">
             <Button
@@ -498,7 +755,7 @@ export default function CheckoutCoursePage() {
               onClick={startPayment}
               loading={creatingInvoice}
             >
-              {(course?.price || 0) * finalParticipantCount === 0
+              {finalAmount === 0 && baseAmount === 0
                 ? "Ya, Daftar"
                 : "Ya, Bayar"}
             </Button>

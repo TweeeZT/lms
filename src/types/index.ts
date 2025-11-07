@@ -223,9 +223,10 @@ export interface SignupData {
   email: string;
   username: string;
   fullName: string;
-  role: "instructor" | "user" | "sekolah"; // 'user' represents siswa/student; 'sekolah' reserved for school accounts
+  role: "user" | "school"; // only 'user' (siswa/student) and 'school'
   phone: string;
   bio?: string;
+  affiliateCode?: string; // optional affiliate code
   password: string;
   confirmPassword: string;
 }

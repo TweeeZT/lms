@@ -44,6 +44,7 @@ import {
 import { useAuth } from "../../../../hooks/useAuth";
 import Image from "next/image";
 import { getCategoryLabel, getLevelLabel } from "../../../../lib/labels";
+import ShareButtons from "../../../../components/ShareButtons";
 
 // Types
 type ModuleListItem = {
@@ -409,6 +410,21 @@ export default function CourseOverviewPage() {
                   </Text>
                 </Group>
               </Group>
+
+              {/* Share Buttons */}
+              <Box>
+                <Group gap="xs" align="center">
+                  <Text c="white" size="sm" fw={500}>
+                    Bagikan:
+                  </Text>
+                  <ShareButtons
+                    title={course?.title || "Kursus"}
+                    description={course?.description || undefined}
+                    courseId={course?.id || ""}
+                    compact={true}
+                  />
+                </Group>
+              </Box>
             </Stack>
           </Group>
 

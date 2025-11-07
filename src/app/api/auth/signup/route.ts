@@ -18,22 +18,52 @@ export async function POST(req: Request) {
       password,
       username,
       fullName,
-      /* role ignored */ phone,
+      role, // now accepts 'user' or 'school'
+      phone,
       bio,
+      affiliateCode, // optional affiliate code
     } = (await req.json()) as {
       email?: string;
       password?: string;
       username?: string;
       fullName?: string;
-      role?: "instructor" | "user"; // will be ignored, always 'user'
+      role?: "user" | "school";
       phone?: string;
       bio?: string;
+      affiliateCode?: string;
     };
     if (!email || !password || !username || !fullName)
       return NextResponse.json(
         { success: false, error: "Data tidak lengkap" },
         { status: 400 }
       );
+
+    // Only allow 'user' (siswa) or 'school'
+    const enforcedRole = role === "school" ? "school" : "user";
+
+    // Validate affiliate code if provided
+    let affiliateCodeId: string | null = null;
+    let referrerId: string | null = null;
+    if (affiliateCode && affiliateCode.trim()) {
+      const { data: codeData, error: codeErr } = await supabaseAdmin
+        .from("affiliate_codes")
+        .select("id, user_id, is_active")
+        .eq("code", affiliateCode.trim())
+        .single();
+
+      if (codeErr || !codeData || !codeData.is_active) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Kode afiliasi tidak valid atau sudah tidak aktif",
+          },
+          { status: 400 }
+        );
+      }
+
+      affiliateCodeId = codeData.id;
+      referrerId = codeData.user_id;
+    }
 
     const { data: auth, error: authError } = await supabaseAuth.auth.signUp({
       email,
@@ -60,7 +90,6 @@ export async function POST(req: Request) {
         { status: 500 }
       );
 
-    const enforcedRole = "user";
     const { error: profileError } = await supabaseAdmin.from("users").insert([
       {
         id: userId,
@@ -78,8 +107,45 @@ export async function POST(req: Request) {
         { status: 400 }
       );
 
-    // Always treat as student
-    await supabaseAdmin.from("students").insert({ user_id: userId });
+    // Create student record (for both user and school)
+    if (enforcedRole === "user") {
+      await supabaseAdmin.from("students").insert({ user_id: userId });
+    } else {
+      // school also gets student record
+      await supabaseAdmin.from("students").insert({ user_id: userId });
+    }
+
+    // Process affiliate referral if code was used
+    if (affiliateCodeId && referrerId) {
+      // Insert referral record
+      await supabaseAdmin.from("affiliate_referrals").insert({
+        affiliate_code_id: affiliateCodeId,
+        referrer_id: referrerId,
+        referred_user_id: userId,
+        reward_coins: 100,
+        bonus_coins: 0,
+        status: "registered",
+      });
+
+      // Award referrer 1000 points and 100 coins
+      const { data: referrerStudent } = await supabaseAdmin
+        .from("students")
+        .select("points, coins, total_referral_points")
+        .eq("user_id", referrerId)
+        .single();
+
+      if (referrerStudent) {
+        await supabaseAdmin
+          .from("students")
+          .update({
+            points: (referrerStudent.points || 0) + 1000,
+            coins: (referrerStudent.coins || 0) + 100,
+            total_referral_points:
+              (referrerStudent.total_referral_points || 0) + 1000,
+          })
+          .eq("user_id", referrerId);
+      }
+    }
 
     // Fire and forget welcome email (do not block response)
     sendWelcomeEmail({ to: email, fullName, role: enforcedRole }).catch((e) => {

@@ -59,6 +59,7 @@ import {
 import NextImage from "next/image";
 import Cropper from "react-easy-crop";
 import CertificateThumbnail from "../../../components/CertificateThumbnail";
+import AffiliateCard from "../../../components/AffiliateCard";
 import { notifications } from "@mantine/notifications";
 
 export default function UserProfilePage() {
@@ -1042,6 +1043,13 @@ export default function UserProfilePage() {
                 Simpan Perubahan
               </Button>
             </Group>
+
+            {/* Affiliate Card */}
+            {user?.id && (
+              <div style={{ marginTop: 24 }}>
+                <AffiliateCard userId={user.id} />
+              </div>
+            )}
           </Stack>
         )}
 

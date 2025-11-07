@@ -269,6 +269,60 @@ export async function POST(req: NextRequest) {
           txUpdateError
         );
       }
+
+      // Best-effort: record voucher usage & increment used_count if webhook hasn't yet
+      try {
+        if (invoiceId) {
+          const { data: tx } = await supabase
+            .from("transactions")
+            .select("voucher_id, amount, final_amount, user_id")
+            .eq("id", invoiceId)
+            .maybeSingle();
+          const voucherId = tx?.voucher_id as string | null;
+          const uid = tx?.user_id as string | null;
+          if (voucherId && uid) {
+            const { data: existingUsage } = await supabase
+              .from("voucher_usages")
+              .select("id")
+              .eq("voucher_id", voucherId)
+              .eq("user_id", uid)
+              .eq("transaction_id", invoiceId)
+              .maybeSingle();
+            if (!existingUsage) {
+              // Parse amounts to numbers for accurate discount calculation
+              const totalAmount = Number(tx?.amount ?? 0);
+              const finalAmt = Number(tx?.final_amount ?? totalAmount);
+              const discountApplied = Math.max(0, totalAmount - finalAmt);
+              await supabase.from("voucher_usages").insert({
+                voucher_id: voucherId,
+                user_id: uid,
+                transaction_id: invoiceId,
+                discount_applied: discountApplied,
+              });
+              // Increment used_count
+              try {
+                const { data: v } = await supabase
+                  .from("vouchers")
+                  .select("used_count")
+                  .eq("id", voucherId)
+                  .maybeSingle();
+                const next = ((v?.used_count as number | null) ?? 0) + 1;
+                await supabase
+                  .from("vouchers")
+                  .update({ used_count: next })
+                  .eq("id", voucherId);
+              } catch (incErr) {
+                console.error(
+                  "[school/confirm] voucher used_count increment failed",
+                  incErr
+                );
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[school/confirm] voucher usage block failed", e);
+      }
     }
 
     return NextResponse.json({

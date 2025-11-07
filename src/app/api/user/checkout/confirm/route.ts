@@ -15,6 +15,15 @@ interface XenditInvoice {
   payment_method?: string;
   payment_channel?: string;
   bank_code?: string;
+  // NOTE: Xendit may return metadata values as strings even if sent as numbers
+  metadata?: {
+    base_amount?: string | number | null;
+    final_amount?: string | number | null;
+    voucher_id?: string | null;
+    affiliate_code_id?: string | null;
+    user_id?: string | null;
+    course_id?: string | null;
+  } | null;
 }
 
 // GET /api/user/checkout/confirm?invoiceId=...&courseId=...
@@ -101,7 +110,13 @@ export async function GET(req: NextRequest) {
                   user_name: data.payer_name || null,
                   course_id: parsedCourse || courseId || null,
                   course_title: cMeta.title || null,
-                  amount: data.amount || 0,
+                  // Parse metadata values to numbers (Xendit returns as strings)
+                  amount: Number(
+                    data.metadata?.base_amount ?? data.amount ?? 0
+                  ),
+                  final_amount: Number(
+                    data.metadata?.final_amount ?? data.amount ?? 0
+                  ),
                   method:
                     data.payment_channel ||
                     data.bank_code ||
@@ -109,6 +124,9 @@ export async function GET(req: NextRequest) {
                     null,
                   status: currentStatus,
                   instructors_id: cMeta.instructor_id || null,
+                  voucher_id: (data as any)?.metadata?.voucher_id ?? null,
+                  affiliate_code_id:
+                    (data as any)?.metadata?.affiliate_code_id ?? null,
                 });
               } catch (e) {
                 console.error("confirm insert transaction failed", e);
@@ -139,7 +157,7 @@ export async function GET(req: NextRequest) {
     if (currentStatus === "completed") {
       const { data: refreshed } = await supabaseAdmin
         .from("transactions")
-        .select("user_id,course_id")
+        .select("user_id,course_id,voucher_id,amount,final_amount")
         .eq("id", invoiceId)
         .maybeSingle();
       const userId = refreshed?.user_id || tx?.user_id;
@@ -160,6 +178,60 @@ export async function GET(req: NextRequest) {
           console.error("confirm students upsert exception", e);
         }
         emailPayload = { userId, courseId: resolvedCourse };
+
+        // Ensure voucher usage is recorded and used_count incremented (idempotent)
+        try {
+          const voucherId = refreshed?.voucher_id as string | null;
+          if (voucherId) {
+            const { data: existingUsage } = await supabaseAdmin
+              .from("voucher_usages")
+              .select("id")
+              .eq("voucher_id", voucherId)
+              .eq("user_id", userId)
+              .eq("transaction_id", invoiceId)
+              .maybeSingle();
+            if (!existingUsage) {
+              // Parse amounts to numbers for accurate discount calculation
+              const totalAmount = Number(refreshed?.amount ?? 0);
+              const finalAmt = Number(refreshed?.final_amount ?? totalAmount);
+              const discountApplied = Math.max(0, totalAmount - finalAmt);
+              await supabaseAdmin.from("voucher_usages").insert({
+                voucher_id: voucherId,
+                user_id: userId,
+                transaction_id: invoiceId,
+                discount_applied: discountApplied,
+              });
+              // Increment used_count safely
+              try {
+                const rpcRes = await (supabaseAdmin as any).rpc(
+                  "increment_voucher_usage",
+                  { voucher_uuid: voucherId }
+                );
+                if (rpcRes?.error) throw rpcRes.error;
+              } catch (_rpcErr) {
+                try {
+                  const { data: v } = await supabaseAdmin
+                    .from("vouchers")
+                    .select("used_count")
+                    .eq("id", voucherId)
+                    .maybeSingle();
+                  const next = ((v?.used_count as number | null) ?? 0) + 1;
+                  await supabaseAdmin
+                    .from("vouchers")
+                    .update({ used_count: next })
+                    .eq("id", voucherId);
+                } catch (fallbackErr) {
+                  console.error(
+                    "voucher used_count increment (confirm) failed",
+                    fallbackErr
+                  );
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("confirm voucher usage block failed", e);
+        }
         const { data: existing } = await supabaseAdmin
           .from("enrollments")
           .select("id")
@@ -174,8 +246,18 @@ export async function GET(req: NextRequest) {
           } catch {}
         }
         try {
+          // Check user role to determine which progress table to use
+          const { data: userInfo } = await supabaseAdmin
+            .from("users")
+            .select("role")
+            .eq("id", userId)
+            .maybeSingle();
+
+          const progressTable =
+            userInfo?.role === "school" ? "school_progress" : "user_progress";
+
           const { data: progress } = await supabaseAdmin
-            .from("user_progress")
+            .from(progressTable)
             .select("id")
             .eq("user_id", userId)
             .eq("course_id", resolvedCourse)
@@ -192,7 +274,7 @@ export async function GET(req: NextRequest) {
                 .limit(1);
               if (first && first.length) firstModule = first[0].id;
             } catch {}
-            await supabaseAdmin.from("user_progress").insert({
+            await supabaseAdmin.from(progressTable).insert({
               id: crypto.randomUUID(),
               user_id: userId,
               course_id: resolvedCourse,

@@ -38,6 +38,7 @@ import {
   getCategoryColor,
   getLevelLabel,
 } from "../../../../lib/labels";
+import ShareButtons from "../../../../components/ShareButtons";
 
 // Small utility helpers
 const formatPrice = (v: number | null) =>
@@ -311,6 +312,19 @@ export default function ExploreCourseDetailPage() {
                   <Text c="dimmed" size="sm" lineClamp={3}>
                     {course.description}
                   </Text>
+
+                  {/* Share Buttons */}
+                  <Group gap="xs" align="center" mt="xs">
+                    <Text size="xs" c="dimmed">
+                      Bagikan:
+                    </Text>
+                    <ShareButtons
+                      title={course.title}
+                      description={course.description || undefined}
+                      courseId={course.id}
+                      compact={true}
+                    />
+                  </Group>
                 </div>
 
                 <Stack gap="xs">

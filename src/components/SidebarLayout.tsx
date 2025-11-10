@@ -83,7 +83,6 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
     case "admin":
       return [
         ...baseItems,
-
         {
           label: "Manajemen User",
           href: "/admin/users",
@@ -98,6 +97,11 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           label: "Manajemen Keuangan",
           href: "/admin/earnings",
           icon: "IconCoin",
+        },
+        {
+          label: "Manajemen Voucher",
+          href: "/admin/vouchers",
+          icon: "IconAward",
         },
       ];
 

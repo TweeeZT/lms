@@ -94,6 +94,11 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           icon: "IconBook",
         },
         {
+          label: "Manajemen Alat",
+          href: "/admin/alat",
+          icon: "IconCode",
+        },
+        {
           label: "Manajemen Keuangan",
           href: "/admin/earnings",
           icon: "IconCoin",
@@ -124,6 +129,12 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
           label: "Penghasilan",
           href: "/instructor/earnings",
           icon: "IconCoin",
+        },
+
+        {
+          label: "Manajemen Alat",
+          href: "/instructor/alat",
+          icon: "IconCode",
         },
       ];
 

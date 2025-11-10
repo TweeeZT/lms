@@ -38,7 +38,7 @@ export default function VoucherAdminPage() {
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
   // Sorting state
-  const [sortCreated, setSortCreated] = useState<'asc' | 'desc'>('asc');
+  const [sortCreated, setSortCreated] = useState<'asc' | 'desc'>('desc');
 
   // Form states
   const [form, setForm] = useState({
@@ -51,6 +51,11 @@ export default function VoucherAdminPage() {
     is_active: true,
     courses_id: "",
   });
+
+  // Helper for today date (yyyy-mm-dd)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  // Helper for min end date
+  const minEndDate = form.start_date ? form.start_date : todayStr;
 
   // Fetch vouchers from Supabase
   useEffect(() => {
@@ -449,13 +454,24 @@ export default function VoucherAdminPage() {
             label="Tanggal Mulai"
             type="date"
             value={form.start_date}
-            onChange={(e) => handleChange("start_date", e.currentTarget.value)}
+            min={todayStr}
+            onChange={(e) => {
+              const val = e.currentTarget.value;
+              handleChange("start_date", val);
+              // Jika end_date < start_date, reset end_date
+              if (form.end_date && val > form.end_date) {
+                handleChange("end_date", val);
+              }
+            }}
+            required
           />
           <TextInput
             label="Tanggal Berakhir"
             type="date"
             value={form.end_date}
+            min={minEndDate}
             onChange={(e) => handleChange("end_date", e.currentTarget.value)}
+            required
           />
           <Checkbox
             label="Aktif"

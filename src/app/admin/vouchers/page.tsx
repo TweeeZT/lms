@@ -461,18 +461,6 @@ export default function VoucherAdminPage() {
           <Table striped highlightOnHover withTableBorder withColumnBorders style={{ minWidth: 800 }}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th style={{ minWidth: 80, textAlign: 'center', paddingRight: 0 }}>
-                  <span style={{ fontWeight: 500, fontSize: 13, marginRight: 2 }}>Tanggal</span>
-                  <ActionIcon
-                    variant="subtle"
-                    size="sm"
-                    onClick={() => { setSortCreated(sortCreated === 'asc' ? 'desc' : 'asc'); setHasInteracted(true); }}
-                    aria-label="sort-created"
-                    style={{ verticalAlign: 'middle', marginLeft: 2 }}
-                  >
-                    {sortCreated === 'asc' ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
-                  </ActionIcon>
-                </Table.Th>
                 <Table.Th style={{ minWidth: 90 }}>Kode</Table.Th>
                 <Table.Th style={{ minWidth: 80 }}>Jenis</Table.Th>
                 <Table.Th style={{ minWidth: 80 }}>Nilai</Table.Th>
@@ -488,9 +476,6 @@ export default function VoucherAdminPage() {
               {isBusy ? (
                 Array.from({ length: Math.min(pageSize, 8) }).map((_, i) => (
                   <Table.Tr key={`sk-${i}`}>
-                    <Table.Td style={{ textAlign: 'center' }}>
-                      <Skeleton height={12} width={70} mx="auto" />
-                    </Table.Td>
                     <Table.Td>
                       <Skeleton height={20} width={90} />
                     </Table.Td>
@@ -525,7 +510,7 @@ export default function VoucherAdminPage() {
                 ))
               ) : filteredVouchers.length === 0 ? (
                 <Table.Tr>
-                  <Table.Td colSpan={10} style={{ textAlign: "center" }}>
+                  <Table.Td colSpan={9} style={{ textAlign: "center" }}>
                     Tidak ada voucher ditemukan.
                   </Table.Td>
                 </Table.Tr>
@@ -534,9 +519,6 @@ export default function VoucherAdminPage() {
                   .slice((page - 1) * pageSize, page * pageSize)
                   .map((v) => (
                     <Table.Tr key={v.id}>
-                      <Table.Td style={{ textAlign: 'center', fontSize: 13 }}>
-                        {v.created_at ? new Date(v.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
-                      </Table.Td>
                       <Table.Td>
                         <Badge color="blue" size="md" radius="sm">
                           {v.code}

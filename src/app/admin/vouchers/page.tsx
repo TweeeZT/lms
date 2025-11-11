@@ -60,6 +60,8 @@ export default function VoucherAdminPage() {
     courses_id: null,
   });
   const [apiError, setApiError] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Courses options
   const [courses, setCourses] = useState<Array<{ value: string; label: string }>>([]);
@@ -191,10 +193,18 @@ export default function VoucherAdminPage() {
     return { nextErrors, hasError };
   };
 
+  const sanitizeCode = (raw: string) => {
+    // Keep letters & numbers only, uppercase them
+    return raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  };
+
   const handleChange = (field: string, value: any) => {
     setApiError(null);
     setForm((prev) => {
       const next = { ...prev, [field]: value } as typeof form;
+      if (field === 'code') {
+        next.code = sanitizeCode(String(value || ''));
+      }
       // Cross-field fixes
       if (field === "start_date" && next.end_date && next.start_date > next.end_date) {
         // Keep end_date at least start_date
@@ -298,7 +308,7 @@ export default function VoucherAdminPage() {
   };
 
   // Delete voucher
-  const deleteVoucher = async (id: string) => {
+  const performDelete = async (id: string) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/voucher`, {
@@ -312,6 +322,8 @@ export default function VoucherAdminPage() {
       const listRes = await fetch('/api/admin/voucher', { cache: 'no-store' });
       const listJson = await listRes.json();
       if (listRes.ok) setVouchers(Array.isArray(listJson.data) ? listJson.data : []);
+      setConfirmOpen(false);
+      setDeleteId(null);
     } catch (e) {
       console.error(e);
     } finally {
@@ -449,7 +461,7 @@ export default function VoucherAdminPage() {
                           </ActionIcon>
                           <ActionIcon
                             color="red"
-                            onClick={() => deleteVoucher(v.id)}
+                            onClick={() => { setDeleteId(v.id); setConfirmOpen(true); }}
                             aria-label="delete"
                             variant="light"
                           >
@@ -612,6 +624,27 @@ export default function VoucherAdminPage() {
           <Group justify="end" mt="md">
             <Button onClick={saveVoucher} loading={loading}>
               {editVoucher ? "Simpan Perubahan" : "Tambah"}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setDeleteId(null); }}
+        title="Hapus Voucher"
+        centered
+        size="sm"
+      >
+        <Stack>
+          <Alert color="red" variant="light">
+            Apakah Anda yakin ingin menghapus voucher ini? Tindakan ini tidak dapat dibatalkan.
+          </Alert>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => { setConfirmOpen(false); setDeleteId(null); }}>
+              Batal
+            </Button>
+            <Button color="red" onClick={() => deleteId && performDelete(deleteId)} loading={loading}>
+              Hapus
             </Button>
           </Group>
         </Stack>

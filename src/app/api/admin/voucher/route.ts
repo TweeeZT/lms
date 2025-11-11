@@ -15,10 +15,14 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// NOTE: Database still uses legacy value 'fixed' in check constraint.
+// Frontend now uses 'nominal'. We translate 'nominal' <-> 'fixed' at the API boundary
+// to avoid violating the existing CHECK constraint without needing an immediate DB migration.
+
 type VoucherPayload = {
 	id?: string;
 	code?: string;
-	discount_type?: "percentage" | "nominal" | string;
+	discount_type?: "percentage" | "nominal" | "fixed" | string;
 	discount_value?: number;
 	max_uses?: number | null;
 	used_count?: number | null;
@@ -49,11 +53,37 @@ function toISOStringOrNull(value?: string | null, endDateMode: boolean = false) 
 	return dateObj.toISOString();
 }
 
+// Sanitize and normalize voucher code: keep alphanumeric, uppercase
+function sanitizeCode(value?: string | null): string {
+	if (!value) return "";
+	return String(value).toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+}
+
+function normalizeIncomingDiscountType(dt?: string | null): "percentage" | "nominal" | "fixed" | undefined {
+  if (!dt) return undefined;
+  if (dt === "fixed") return "fixed"; // legacy value from DB
+  if (dt === "nominal") return "nominal"; // new UI label
+  if (dt === "percentage") return "percentage";
+  return undefined;
+}
+
+function toDbDiscountType(dt: string | undefined): string | undefined {
+  // Map UI 'nominal' to legacy 'fixed' before writing
+  if (dt === "nominal") return "fixed";
+  return dt;
+}
+
+function toUiDiscountType(dt: string | null): string | null {
+  if (dt === "fixed") return "nominal";
+  return dt;
+}
+
 function validatePayload(body: VoucherPayload, isUpdate = false) {
 	const errors: string[] = [];
 	// Required base fields on create
 	if (!isUpdate) {
-		if (!body.code) errors.push("code is required");
+		const norm = sanitizeCode(body.code || "");
+		if (!norm) errors.push("code is required");
 		if (!body.discount_type) errors.push("discount_type is required");
 		if (body.discount_value === undefined || body.discount_value === null) errors.push("discount_value is required");
 		if (!body.courses_id) errors.push("courses_id is required");
@@ -61,19 +91,25 @@ function validatePayload(body: VoucherPayload, isUpdate = false) {
 		if (!body.end_date) errors.push("end_date is required");
 		if (body.max_uses === undefined || body.max_uses === null) errors.push("max_uses is required");
 	}
-	if (body.discount_type && !["percentage", "nominal"].includes(body.discount_type)) {
-		errors.push("discount_type must be either 'percentage' or 'nominal'");
+	const normType = normalizeIncomingDiscountType(body.discount_type);
+	if (body.discount_type && !normType) {
+		errors.push("discount_type must be one of 'percentage','nominal'");
 	}
 	if (body.discount_value !== undefined && body.discount_value !== null) {
 		const dv = Number(body.discount_value);
-		if (body.discount_type === "percentage") {
+		if (normType === "percentage") {
 			if (dv < 1 || dv > 100) errors.push("percentage discount_value must be between 1 and 100");
-		} else {
+		} else if (normType === "nominal" || normType === "fixed") {
 			if (dv < 1) errors.push("nominal discount_value must be >= 1");
 		}
 	}
 	if (body.max_uses !== undefined && body.max_uses !== null && body.max_uses < 1) {
 		errors.push("max_uses must be at least 1");
+	}
+	// On update we still validate code if provided
+	if (isUpdate && body.code !== undefined) {
+		const norm = sanitizeCode(body.code || "");
+		if (!norm) errors.push("code is invalid");
 	}
 	// If both dates provided ensure ordering
 	if (body.start_date && body.end_date) {
@@ -95,6 +131,7 @@ export async function GET(request: Request) {
 			.eq("id", id)
 			.single();
 		if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+		if (data) (data as any).discount_type = toUiDiscountType((data as any).discount_type);
 		return NextResponse.json({ data });
 	}
 
@@ -104,7 +141,8 @@ export async function GET(request: Request) {
 		.order("created_at", { ascending: false });
 
 	if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-	return NextResponse.json({ data });
+	const mapped = (data || []).map((row) => ({ ...row, discount_type: toUiDiscountType((row as any).discount_type) }));
+	return NextResponse.json({ data: mapped });
 }
 
 export async function POST(request: Request) {
@@ -115,12 +153,13 @@ export async function POST(request: Request) {
 		return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 	}
 
+	// Validate with UI terms accepted
 	const errors = validatePayload(body, false);
 	if (errors.length) return NextResponse.json({ errors }, { status: 400 });
 
 	  const payload: VoucherPayload = {
-	    code: body.code?.trim(),
-	    discount_type: body.discount_type as "percentage" | "nominal",
+	    code: sanitizeCode(body.code),
+	    discount_type: toDbDiscountType(body.discount_type) as any,
 	    discount_value: Number(body.discount_value),
 	    max_uses: body.max_uses ?? 1,
 	    used_count: body.used_count ?? 0,
@@ -152,8 +191,8 @@ export async function PUT(request: Request) {
 	if (errors.length) return NextResponse.json({ errors }, { status: 400 });
 
 	const updatePayload: Record<string, any> = {};
-	if (body.code !== undefined) updatePayload.code = body.code?.trim();
-	if (body.discount_type !== undefined) updatePayload.discount_type = body.discount_type;
+	if (body.code !== undefined) updatePayload.code = sanitizeCode(body.code);
+	if (body.discount_type !== undefined) updatePayload.discount_type = toDbDiscountType(body.discount_type);
 	if (body.discount_value !== undefined) updatePayload.discount_value = Number(body.discount_value);
 	if (body.max_uses !== undefined) updatePayload.max_uses = body.max_uses;
 	if (body.used_count !== undefined) updatePayload.used_count = body.used_count;

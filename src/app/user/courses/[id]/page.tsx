@@ -47,6 +47,7 @@ import Image from "next/image";
 import PrimeLoader from "../../../../components/PrimeLoader";
 import { getCategoryLabel, getLevelLabel } from "../../../../lib/labels";
 import ShareButtons from "../../../../components/ShareButtons";
+import CourseToolsSection from "../../../../components/course-detail/CourseToolsSection";
 
 // Types
 type ModuleListItem = {
@@ -107,6 +108,7 @@ export default function CourseOverviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [course, setCourse] = useState<CourseData | null>(null);
   const [modules, setModules] = useState<ModuleListItem[]>([]);
+  const [tools, setTools] = useState<any[]>([]);
   const [certificateUrl, setCertificateUrl] = useState<string | null>(null);
   const [userRating, setUserRating] = useState<number | null>(null);
   const [submittingRating, setSubmittingRating] = useState(false);
@@ -155,6 +157,15 @@ export default function CourseOverviewPage() {
           throw new Error(modulesJson.error || "Gagal memuat modul");
         }
         setModules(modulesJson.items || []);
+
+        // Load tools
+        const toolsRes = await fetch(`/api/user/courses/${courseId}/tools`);
+        if (toolsRes.ok) {
+          const toolsJson = await toolsRes.json();
+          if (toolsJson.success && toolsJson.items) {
+            setTools(toolsJson.items);
+          }
+        }
 
         // Check certificate & rating
         const certRes = await fetch(
@@ -520,6 +531,9 @@ export default function CourseOverviewPage() {
             </Stack>
           </Paper>
         )}
+
+        {/* Course Tools Section */}
+        <CourseToolsSection tools={tools} loading={loading} />
 
         {/* Modules Section */}
         <Stack gap="xl">

@@ -28,6 +28,7 @@ const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
 type Tool = {
   id: string;
   courses_id: string;
+  title: string;
   text_content: string;
   price: number;
   created_at: string;
@@ -40,6 +41,7 @@ type Tool = {
 type FormState = {
   id?: string;
   courses_id: string;
+  title: string;
   text_content: string;
   price: number;
 };
@@ -51,6 +53,7 @@ export default function InstructorToolsPage() {
     []
   );
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState<string | null>(null);
 
@@ -60,6 +63,7 @@ export default function InstructorToolsPage() {
     useDisclosure(false);
   const [form, setForm] = useState<FormState>({
     courses_id: "",
+    title: "",
     text_content: "",
     price: 0,
   });
@@ -146,7 +150,7 @@ export default function InstructorToolsPage() {
   useEffect(() => {
     if (user?.id) {
       fetchCourses();
-      fetchTools();
+      fetchTools().finally(() => setInitialLoading(false));
     }
   }, [user]);
 
@@ -155,7 +159,7 @@ export default function InstructorToolsPage() {
   }, [search, courseFilter]);
 
   const resetForm = () => {
-    setForm({ courses_id: "", text_content: "", price: 0 });
+    setForm({ courses_id: "", title: "", text_content: "", price: 0 });
   };
 
   const onCreate = () => {
@@ -167,6 +171,7 @@ export default function InstructorToolsPage() {
     setForm({
       id: row.id,
       courses_id: row.courses_id,
+      title: row.title || "",
       text_content: row.text_content,
       price: row.price,
     });
@@ -175,10 +180,10 @@ export default function InstructorToolsPage() {
 
   const handleSubmit = async () => {
     if (!user?.id) return;
-    if (!form.courses_id || !form.text_content) {
+    if (!form.courses_id || !form.title || !form.text_content) {
       notifications.show({
         title: "Validation Error",
-        message: "Course and description are required",
+        message: "Course, title, and description are required",
         color: "red",
       });
       return;
@@ -197,6 +202,7 @@ export default function InstructorToolsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courses_id: form.courses_id,
+          title: form.title,
           text_content: form.text_content,
           price: form.price,
           instructorId: user.id,
@@ -207,7 +213,9 @@ export default function InstructorToolsPage() {
       if (json.success) {
         notifications.show({
           title: "Success",
-          message: form.id ? "Tool updated" : "Tool created",
+          message: form.id
+            ? "Alat berhasil diperbarui"
+            : "Alat berhasil dibuat",
           color: "green",
         });
         closeForm();
@@ -249,7 +257,7 @@ export default function InstructorToolsPage() {
       if (json.success) {
         notifications.show({
           title: "Success",
-          message: "Tool deleted",
+          message: "Alat Berhasil dihapus",
           color: "green",
         });
         setDeleteId(null);
@@ -272,6 +280,64 @@ export default function InstructorToolsPage() {
       setLoading(false);
     }
   };
+
+  if (loading && initialLoading) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+            @keyframes spinDiamond {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
+      </div>
+    );
+  }
+
   return (
     <Stack gap="md" p="md">
       <Group justify="space-between">
@@ -293,7 +359,7 @@ export default function InstructorToolsPage() {
           <Group gap="sm">
             <TextInput
               leftSection={<IconSearch size={16} />}
-              placeholder="Cari deskripsi..."
+              placeholder="Cari judul alat..."
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
               w={360}
@@ -315,7 +381,7 @@ export default function InstructorToolsPage() {
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Kursus</Table.Th>
-                  <Table.Th>Deskripsi</Table.Th>
+                  <Table.Th>Judul Alat</Table.Th>
                   <Table.Th>Harga</Table.Th>
                   <Table.Th>Aksi</Table.Th>
                 </Table.Tr>
@@ -329,10 +395,7 @@ export default function InstructorToolsPage() {
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <div
-                        dangerouslySetInnerHTML={{ __html: row.text_content }}
-                        style={{ maxWidth: 400 }}
-                      />
+                      <Text>{row.title || "-"}</Text>
                     </Table.Td>
                     <Table.Td>
                       <Text fw={500}>{formatCurrency(row.price)}</Text>
@@ -379,6 +442,17 @@ export default function InstructorToolsPage() {
             searchable
             required
             nothingFoundMessage="Tidak ada kursus ditemukan"
+          />
+
+          <TextInput
+            label="Judul Alat"
+            placeholder="contoh: Arduino KIT, Sensor Ultrasonik, dll"
+            value={form.title}
+            onChange={(e) => {
+              const value = e?.currentTarget?.value || "";
+              setForm((f) => ({ ...f, title: value }));
+            }}
+            required
           />
 
           <div>

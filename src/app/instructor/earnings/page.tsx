@@ -1,6 +1,23 @@
 "use client";
 
-import { Container, Title, Text, Grid, Card, Stack, Group, Badge, Table, Button, TextInput, Modal, ActionIcon, Divider, Skeleton, Loader } from "@mantine/core";
+import {
+  Container,
+  Title,
+  Text,
+  Grid,
+  Card,
+  Stack,
+  Group,
+  Badge,
+  Table,
+  Button,
+  TextInput,
+  Modal,
+  ActionIcon,
+  Divider,
+  Skeleton,
+  Loader,
+} from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import "dayjs/locale/id";
 import {
@@ -228,7 +245,12 @@ export default function InstructorEarningsPage() {
   const fetchData = async (
     page = 1,
     limit = tx.limit || 10,
-    reason: "initial" | "searchFilter" | "sort" | "paginate" | "other" = "other",
+    reason:
+      | "initial"
+      | "searchFilter"
+      | "sort"
+      | "paginate"
+      | "other" = "other",
     overrides?: {
       search?: string;
       startDate?: string;
@@ -300,14 +322,12 @@ export default function InstructorEarningsPage() {
       fetchData(1, tx.limit || 10, "searchFilter");
     }, 300);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   // Sort change fetch (no skeleton)
   useEffect(() => {
     if (!user) return;
     fetchData(1, tx.limit || 10, "sort");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy, sortDir]);
 
   // Use in-page skeletons, no global loader overlay
@@ -327,16 +347,16 @@ export default function InstructorEarningsPage() {
     if (!user) return [];
 
     try {
-  const params = new URLSearchParams();
+      const params = new URLSearchParams();
       params.set("instructorId", user.id);
       params.set("page", "1");
       params.set("limit", "10000"); // Fetch all
       params.set("sortBy", sortBy);
       params.set("sortDir", sortDir);
-  if (search) params.set("search", search);
+      if (search) params.set("search", search);
       if (startDate) params.set("startDate", startDate);
       if (endDate) params.set("endDate", endDate);
-  if (showAll) params.set("all", "true");
+      if (showAll) params.set("all", "true");
 
       const res = await fetch(`/api/instructor/earnings?${params}`);
       const json = await res.json();
@@ -753,63 +773,63 @@ export default function InstructorEarningsPage() {
     w.document.close();
   };
 
-    // Initial full-page overlay loader (match user discussions): only on first navigation
-    if (loading && initialLoading) {
-      return (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(255,255,255,0.98)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div style={{ display: "flex", gap: 24 }}>
-            {[0, 1, 2].map((i) => (
-              <svg
-                key={i}
-                width="64"
-                height="64"
-                viewBox="0 0 64 64"
-                style={{
-                  animation: "spinDiamond 1.2s linear infinite",
-                  animationDelay: `${i * 0.2}s`,
-                }}
-              >
-                <rect
-                  x="12"
-                  y="12"
-                  width="40"
-                  height="40"
-                  fill="none"
-                  stroke="url(#grad)"
-                  strokeWidth="8"
-                  rx="4"
-                  ry="4"
-                  transform="rotate(45 32 32)"
-                />
-                <defs>
-                  <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#f6d457" />
-                    <stop offset="100%" stopColor="#1e3769" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            ))}
-          </div>
-          <style>{`
+  // Initial full-page overlay loader (match user discussions): only on first navigation
+  if (loading && initialLoading) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
             @keyframes spinDiamond {
               from { transform: rotate(0deg); }
               to { transform: rotate(360deg); }
             }
           `}</style>
-        </div>
-      );
-    }
+      </div>
+    );
+  }
 
   // Selalu render halaman; gunakan Skeleton pada tabel saat loading
 
@@ -851,12 +871,12 @@ export default function InstructorEarningsPage() {
                   label="Tanggal Mulai"
                   placeholder="Pilih tanggal mulai"
                   value={startDate ? new Date(startDate) : null}
-                  onChange={(d) =>
-                    {
-                      setShowAll(false);
-                      setStartDate(d ? new Date(d).toISOString().slice(0, 10) : "");
-                    }
-                  }
+                  onChange={(d) => {
+                    setShowAll(false);
+                    setStartDate(
+                      d ? new Date(d).toISOString().slice(0, 10) : ""
+                    );
+                  }}
                   clearable
                   locale="id"
                   valueFormat="DD MMMM YYYY"
@@ -865,12 +885,10 @@ export default function InstructorEarningsPage() {
                   label="Tanggal Akhir"
                   placeholder="Pilih tanggal akhir"
                   value={endDate ? new Date(endDate) : null}
-                  onChange={(d) =>
-                    {
-                      setShowAll(false);
-                      setEndDate(d ? new Date(d).toISOString().slice(0, 10) : "");
-                    }
-                  }
+                  onChange={(d) => {
+                    setShowAll(false);
+                    setEndDate(d ? new Date(d).toISOString().slice(0, 10) : "");
+                  }}
                   clearable
                   locale="id"
                   valueFormat="DD MMMM YYYY"
@@ -949,179 +967,193 @@ export default function InstructorEarningsPage() {
               miw={260}
             />
           </Group>
-          <div className="responsive-table" style={{ width: "100%", overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
-            <Table highlightOnHover withTableBorder withRowBorders style={{ minWidth: 760 }}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>
-                      <Group gap={6} wrap="nowrap">
-                        <span>Tanggal</span>
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => toggleSort("date")}
-                        >
-                          <IconArrowsSort size={16} />
-                        </ActionIcon>
-                      </Group>
-                    </Table.Th>
-                    <Table.Th>
-                      <Group gap={6} wrap="nowrap">
-                        <span>Kursus</span>
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => toggleSort("course_title")}
-                        >
-                          <IconArrowsSort size={16} />
-                        </ActionIcon>
-                      </Group>
-                    </Table.Th>
-                    <Table.Th>
-                      <Group gap={6} wrap="nowrap">
-                        <span>Nama Siswa</span>
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => toggleSort("user_name")}
-                        >
-                          <IconArrowsSort size={16} />
-                        </ActionIcon>
-                      </Group>
-                    </Table.Th>
-                    <Table.Th>
-                      <Group gap={6} wrap="nowrap">
-                        <span>Status</span>
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => toggleSort("status")}
-                        >
-                          <IconArrowsSort size={16} />
-                        </ActionIcon>
-                      </Group>
-                    </Table.Th>
-                    <Table.Th ta="right">
-                      <Group gap={6} justify="right" wrap="nowrap">
-                        <span>Jumlah</span>
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => toggleSort("amount")}
-                        >
-                          <IconArrowsSort size={16} />
-                        </ActionIcon>
-                      </Group>
-                    </Table.Th>
-                    <Table.Th ta="right">Aksi</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {(loading && !initialLoading)
-                    ? Array.from({ length: Math.min(8, tx.limit || 10) }).map((_, idx) => (
-                        <Table.Tr key={`sk-${idx}`}>
-                          <Table.Td>
-                            <Skeleton height={12} width={120} />
-                          </Table.Td>
-                          <Table.Td>
-                            <Skeleton height={12} width={220} />
-                          </Table.Td>
-                          <Table.Td>
-                            <Skeleton height={12} width={160} />
-                          </Table.Td>
-                          <Table.Td>
-                            <Skeleton height={24} width={90} radius="xl" />
-                          </Table.Td>
-                          <Table.Td ta="right">
-                            <Skeleton height={12} width={110} />
-                          </Table.Td>
-                          <Table.Td ta="right">
-                            <Group justify="right" gap={8}>
-                              <Skeleton height={28} width={28} circle />
-                              <Skeleton height={28} width={28} circle />
-                              <Skeleton height={28} width={28} circle />
-                            </Group>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))
-                    : (
-                        <>
-                          {tx.items.map((t) => (
-                            <Table.Tr key={t.id}>
-                              <Table.Td>{formatDate(t.date)}</Table.Td>
-                              <Table.Td>
-                                <Text size="sm" fw={600}>
-                                  {t.course_title}
-                                </Text>
-                              </Table.Td>
-                              <Table.Td>
-                                <Text size="sm">{t.user_name}</Text>
-                              </Table.Td>
-                              <Table.Td>
-                                <Badge
-                                  color={
-                                    t.status === "completed"
-                                      ? "green"
-                                      : t.status === "pending"
-                                      ? "orange"
-                                      : "red"
-                                  }
-                                  variant="light"
-                                >
-                                  {statusLabelUI(t.status)}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td ta="right">
-                                <Text fw={700}>{formatCurrency(t.amount)}</Text>
-                              </Table.Td>
-                              <Table.Td ta="right">
-                                <Group gap={6} justify="right">
-                                  <ActionIcon
-                                    size="sm"
-                                    variant="light"
-                                    color="blue"
-                                    onClick={() => printThermalReceipt(t)}
-                                    title="Print Thermal"
-                                  >
-                                    <IconPrinter size={14} />
-                                  </ActionIcon>
-                                  <ActionIcon
-                                    size="sm"
-                                    variant="light"
-                                    onClick={() => {
-                                      setActiveTx(t);
-                                      setOpened(true);
-                                    }}
-                                    title="Lihat Detail"
-                                  >
-                                    <IconEye size={14} />
-                                  </ActionIcon>
-                                  <ActionIcon
-                                    size="sm"
-                                    variant="subtle"
-                                    onClick={() => downloadSingleCSV(t)}
-                                    title="Download CSV"
-                                  >
-                                    <IconDownload size={14} />
-                                  </ActionIcon>
-                                </Group>
-                              </Table.Td>
-                            </Table.Tr>
-                          ))}
-                          {tx.items.length === 0 && (
-                            <Table.Tr>
-                              <Table.Td colSpan={6}>
-                                <Text size="sm" c="dimmed">
-                                  Belum ada transaksi.
-                                </Text>
-                              </Table.Td>
-                            </Table.Tr>
-                          )}
-                        </>
-                      )}
-                </Table.Tbody>
-              </Table>
-            </div>
+          <div
+            className="responsive-table"
+            style={{
+              width: "100%",
+              overflowX: "auto",
+              WebkitOverflowScrolling: "touch" as any,
+            }}
+          >
+            <Table
+              highlightOnHover
+              withTableBorder
+              withRowBorders
+              style={{ minWidth: 760 }}
+            >
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>
+                    <Group gap={6} wrap="nowrap">
+                      <span>Tanggal</span>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={() => toggleSort("date")}
+                      >
+                        <IconArrowsSort size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Table.Th>
+                  <Table.Th>
+                    <Group gap={6} wrap="nowrap">
+                      <span>Kursus</span>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={() => toggleSort("course_title")}
+                      >
+                        <IconArrowsSort size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Table.Th>
+                  <Table.Th>
+                    <Group gap={6} wrap="nowrap">
+                      <span>Nama Siswa</span>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={() => toggleSort("user_name")}
+                      >
+                        <IconArrowsSort size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Table.Th>
+                  <Table.Th>
+                    <Group gap={6} wrap="nowrap">
+                      <span>Status</span>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={() => toggleSort("status")}
+                      >
+                        <IconArrowsSort size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Table.Th>
+                  <Table.Th ta="right">
+                    <Group gap={6} justify="right" wrap="nowrap">
+                      <span>Jumlah</span>
+                      <ActionIcon
+                        size="sm"
+                        variant="subtle"
+                        onClick={() => toggleSort("amount")}
+                      >
+                        <IconArrowsSort size={16} />
+                      </ActionIcon>
+                    </Group>
+                  </Table.Th>
+                  <Table.Th ta="right">Aksi</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {loading && !initialLoading ? (
+                  Array.from({ length: Math.min(8, tx.limit || 10) }).map(
+                    (_, idx) => (
+                      <Table.Tr key={`sk-${idx}`}>
+                        <Table.Td>
+                          <Skeleton height={12} width={120} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={12} width={220} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={12} width={160} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Skeleton height={24} width={90} radius="xl" />
+                        </Table.Td>
+                        <Table.Td ta="right">
+                          <Skeleton height={12} width={110} />
+                        </Table.Td>
+                        <Table.Td ta="right">
+                          <Group justify="right" gap={8}>
+                            <Skeleton height={28} width={28} circle />
+                            <Skeleton height={28} width={28} circle />
+                            <Skeleton height={28} width={28} circle />
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    )
+                  )
+                ) : (
+                  <>
+                    {tx.items.map((t) => (
+                      <Table.Tr key={t.id}>
+                        <Table.Td>{formatDate(t.date)}</Table.Td>
+                        <Table.Td>
+                          <Text size="sm" fw={600}>
+                            {t.course_title}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{t.user_name}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            color={
+                              t.status === "completed"
+                                ? "green"
+                                : t.status === "pending"
+                                ? "orange"
+                                : "red"
+                            }
+                            variant="light"
+                          >
+                            {statusLabelUI(t.status)}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td ta="right">
+                          <Text fw={700}>{formatCurrency(t.amount)}</Text>
+                        </Table.Td>
+                        <Table.Td ta="right">
+                          <Group gap={6} justify="right">
+                            <ActionIcon
+                              size="sm"
+                              variant="light"
+                              color="blue"
+                              onClick={() => printThermalReceipt(t)}
+                              title="Print Thermal"
+                            >
+                              <IconPrinter size={14} />
+                            </ActionIcon>
+                            <ActionIcon
+                              size="sm"
+                              variant="light"
+                              onClick={() => {
+                                setActiveTx(t);
+                                setOpened(true);
+                              }}
+                              title="Lihat Detail"
+                            >
+                              <IconEye size={14} />
+                            </ActionIcon>
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              onClick={() => downloadSingleCSV(t)}
+                              title="Download CSV"
+                            >
+                              <IconDownload size={14} />
+                            </ActionIcon>
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                    {tx.items.length === 0 && (
+                      <Table.Tr>
+                        <Table.Td colSpan={6}>
+                          <Text size="sm" c="dimmed">
+                            Belum ada transaksi.
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    )}
+                  </>
+                )}
+              </Table.Tbody>
+            </Table>
+          </div>
           <Group justify="space-between" mt="md">
             {loading && !initialLoading ? (
               <Skeleton height={12} width={140} />

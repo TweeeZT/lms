@@ -25,7 +25,9 @@ export async function GET(req: NextRequest) {
     );
 
     if (search) {
-      query = query.or(`text_content.ilike.%${search}%`);
+      query = query.or(
+        `text_content.ilike.%${search}%,title.ilike.%${search}%`
+      );
     }
 
     if (courseId) {
@@ -67,11 +69,14 @@ export async function POST(req: NextRequest) {
     const supabase = supabaseAdmin;
     const body = await req.json();
 
-    const { courses_id, text_content, price } = body;
+    const { courses_id, title, text_content, price } = body;
 
-    if (!courses_id || !text_content) {
+    if (!courses_id || !title || !text_content) {
       return NextResponse.json(
-        { success: false, error: "courses_id and text_content are required" },
+        {
+          success: false,
+          error: "courses_id, title, and text_content are required",
+        },
         { status: 400 }
       );
     }
@@ -86,6 +91,7 @@ export async function POST(req: NextRequest) {
       .insert({
         id,
         courses_id,
+        title,
         text_content,
         price: price || 0,
       })

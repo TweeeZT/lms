@@ -58,7 +58,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
 
-    const { courses_id, text_content, price, instructorId } = body;
+    const { courses_id, title, text_content, price, instructorId } = body;
 
     // Verify ownership before updating
     if (instructorId) {
@@ -88,6 +88,7 @@ export async function PATCH(
 
     const updates: any = {};
     if (courses_id !== undefined) updates.courses_id = courses_id;
+    if (title !== undefined) updates.title = title;
     if (text_content !== undefined) updates.text_content = text_content;
     if (price !== undefined) updates.price = price;
 

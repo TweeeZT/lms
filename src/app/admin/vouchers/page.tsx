@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Table,
   Button,
@@ -16,6 +16,7 @@ import {
   Badge,
   Card,
   Alert,
+  Skeleton,
 } from "@mantine/core";
 import { DatePickerInput } from "@mantine/dates";
 import { IconPlus, IconEdit, IconTrash, IconChevronLeft, IconChevronRight, IconChevronUp, IconChevronDown } from "@tabler/icons-react";
@@ -25,6 +26,11 @@ export default function VoucherAdminPage() {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [filteredVouchers, setFilteredVouchers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [uiLoading, setUiLoading] = useState(false);
+  // Track whether user has performed an in-page interaction that should show skeletons
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const uiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Pagination states
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -90,6 +96,7 @@ export default function VoucherAdminPage() {
         setVouchers([]);
       } finally {
         setLoading(false);
+        setInitialLoad(false);
       }
     };
     const fetchCourses = async () => {
@@ -137,6 +144,18 @@ export default function VoucherAdminPage() {
     setFilteredVouchers(filtered);
     setPage(1); // Reset ke halaman pertama jika filter berubah
   }, [search, filterStatus, filterType, vouchers, sortCreated]);
+
+  // Trigger brief skeletons for in-page interactions after initial load
+  useEffect(() => {
+    // Skip skeleton trigger until AFTER initial load AND at least one user interaction occurred
+    if (initialLoad || !hasInteracted) return;
+    if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
+    setUiLoading(true);
+    uiTimerRef.current = setTimeout(() => setUiLoading(false), 300);
+    return () => {
+      if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
+    };
+  }, [search, filterStatus, filterType, sortCreated, page, initialLoad, hasInteracted]);
 
   // Handle form change
   const getFieldError = (field: string, next: typeof form): string | null => {
@@ -331,6 +350,66 @@ export default function VoucherAdminPage() {
     }
   };
 
+  // Initial, one-time full-screen overlay loader (same pattern as admin earnings)
+  if (loading && initialLoad) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(255,255,255,0.98)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+        }}
+      >
+        <div style={{ display: "flex", gap: 24 }}>
+          {[0, 1, 2].map((i) => (
+            <svg
+              key={i}
+              width="64"
+              height="64"
+              viewBox="0 0 64 64"
+              style={{
+                animation: "spinDiamond 1.2s linear infinite",
+                animationDelay: `${i * 0.2}s`,
+              }}
+            >
+              <rect
+                x="12"
+                y="12"
+                width="40"
+                height="40"
+                fill="none"
+                stroke="url(#grad)"
+                strokeWidth="8"
+                rx="4"
+                ry="4"
+                transform="rotate(45 32 32)"
+              />
+              <defs>
+                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#f6d457" />
+                  <stop offset="100%" stopColor="#1e3769" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ))}
+        </div>
+        <style>{`
+          @keyframes spinDiamond {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  const isBusy = hasInteracted && (loading || uiLoading) && !initialLoad;
+
   return (
     <Stack p="xl" gap="md">
       <Group justify="space-between" mb="md" align="center">
@@ -349,7 +428,10 @@ export default function VoucherAdminPage() {
           <TextInput
             placeholder="Cari kode voucher..."
             value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
+            onChange={(e) => {
+              setSearch(e.currentTarget.value);
+              setHasInteracted(true);
+            }}
             style={{ minWidth: 180 }}
           />
           <Select
@@ -359,7 +441,7 @@ export default function VoucherAdminPage() {
               { value: "inactive", label: "Nonaktif" },
             ]}
             value={filterStatus}
-            onChange={setFilterStatus}
+            onChange={(v) => { setFilterStatus(v); setHasInteracted(true); }}
             clearable
             style={{ minWidth: 120 }}
           />
@@ -370,7 +452,7 @@ export default function VoucherAdminPage() {
               { value: "nominal", label: "Nominal (Rp)" },
             ]}
             value={filterType}
-            onChange={setFilterType}
+            onChange={(v) => { setFilterType(v); setHasInteracted(true); }}
             clearable
             style={{ minWidth: 140 }}
           />
@@ -384,7 +466,7 @@ export default function VoucherAdminPage() {
                   <ActionIcon
                     variant="subtle"
                     size="sm"
-                    onClick={() => setSortCreated(sortCreated === 'asc' ? 'desc' : 'asc')}
+                    onClick={() => { setSortCreated(sortCreated === 'asc' ? 'desc' : 'asc'); setHasInteracted(true); }}
                     aria-label="sort-created"
                     style={{ verticalAlign: 'middle', marginLeft: 2 }}
                   >
@@ -403,7 +485,45 @@ export default function VoucherAdminPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {filteredVouchers.length === 0 ? (
+              {isBusy ? (
+                Array.from({ length: Math.min(pageSize, 8) }).map((_, i) => (
+                  <Table.Tr key={`sk-${i}`}>
+                    <Table.Td style={{ textAlign: 'center' }}>
+                      <Skeleton height={12} width={70} mx="auto" />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={20} width={90} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={18} width={80} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={12} width={80} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={12} width={40} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={12} width={40} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={18} width={70} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={12} width={120} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Skeleton height={12} width={100} />
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Skeleton height={28} width={28} radius={6} />
+                        <Skeleton height={28} width={28} radius={6} />
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))
+              ) : filteredVouchers.length === 0 ? (
                 <Table.Tr>
                   <Table.Td colSpan={10} style={{ textAlign: "center" }}>
                     Tidak ada voucher ditemukan.
@@ -488,7 +608,7 @@ export default function VoucherAdminPage() {
               variant="subtle"
               size="sm"
               disabled={page === 1 || filteredVouchers.length <= pageSize}
-              onClick={() => setPage(page - 1)}
+              onClick={() => { setPage(page - 1); setHasInteracted(true); }}
               aria-label="prev"
             >
               <IconChevronLeft size={16} />
@@ -500,7 +620,7 @@ export default function VoucherAdminPage() {
                 variant={num === page ? "filled" : "subtle"}
                 color={num === page ? "blue" : undefined}
                 size="sm"
-                onClick={() => setPage(num)}
+                onClick={() => { setPage(num); setHasInteracted(true); }}
                 aria-label={`page-${num}`}
                 disabled={filteredVouchers.length <= pageSize}
                 style={{ fontSize: 13 }}
@@ -512,7 +632,7 @@ export default function VoucherAdminPage() {
               variant="subtle"
               size="sm"
               disabled={page * pageSize >= filteredVouchers.length || filteredVouchers.length <= pageSize}
-              onClick={() => setPage(page + 1)}
+              onClick={() => { setPage(page + 1); setHasInteracted(true); }}
               aria-label="next"
             >
               <IconChevronRight size={16} />

@@ -165,7 +165,9 @@ export default function AdminEarningsPage() {
   // Filter states
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Separate loading: stats (global, once) vs list (filterable)
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -238,11 +240,65 @@ export default function AdminEarningsPage() {
     return `${dayName}, ${day} ${month} ${year}`;
   };
 
-  const fetchData = useCallback(
+  // Normalize dates for API (avoid timezone issues)
+  const toStartOfDayISO = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x.toISOString();
+  };
+  const toEndOfDayISO = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(23, 59, 59, 999);
+    return x.toISOString();
+  };
+
+  // Fetch only stats (no filters effect besides initial user)
+  const fetchStats = useCallback(async () => {
+    if (!user?.id) return;
+    setStatsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        userId: user.id,
+        page: "1",
+        limit: "1", // minimal
+        sortBy: "date",
+        sortDir: "desc",
+      });
+      const res = await fetch(`/api/admin/earnings?${params.toString()}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Gagal memuat data");
+      setTotals({
+        gross: json.summary?.totalRevenue || 0,
+        commission: (json.summary?.totalRevenue || 0) * (commissionPercent / 100),
+        net: json.summary?.totalRevenue || 0,
+      });
+      setTotalTransactions(json.summary?.totalOrders || 0);
+    } catch (err) {
+      console.error("Fetch stats error:", err);
+      notifications.show({
+        title: "Error",
+        message: err instanceof Error ? err.message : "Gagal memuat statistik",
+        color: "red",
+      });
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [user?.id, commissionPercent]);
+
+  // Fetch list with filters & pagination
+  const fetchList = useCallback(
     async (page = 1, limit = tx.limit || 10) => {
       if (!user?.id) return;
-
-      setLoading(true);
+      // Validate date range before calling API
+      if (startDate && endDate && startDate > endDate) {
+        notifications.show({
+          title: "Rentang tanggal tidak valid",
+          message: "Tanggal mulai tidak boleh lebih besar dari tanggal akhir",
+          color: "yellow",
+        });
+        return;
+      }
+      setListLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({
@@ -252,43 +308,15 @@ export default function AdminEarningsPage() {
           sortBy,
           sortDir,
         });
-
         if (search) params.set("q", search);
-        if (startDate) {
-          const dateStr =
-            typeof startDate === "string" ? startDate : startDate.toISOString();
-          params.set("startDate", dateStr);
-        }
-        if (endDate) {
-          const dateStr =
-            typeof endDate === "string" ? endDate : endDate.toISOString();
-          params.set("endDate", dateStr);
-        }
-
+        if (startDate) params.set("startDate", toStartOfDayISO(startDate));
+        if (endDate) params.set("endDate", toEndOfDayISO(endDate));
         const res = await fetch(`/api/admin/earnings?${params.toString()}`);
         const json = await res.json();
-
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || "Gagal memuat data");
-        }
-
-        setTx({
-          items: json.items || [],
-          total: json.total || 0,
-          page,
-          limit,
-        });
-
-        setTotals({
-          gross: json.summary?.totalRevenue || 0,
-          commission:
-            (json.summary?.totalRevenue || 0) * (commissionPercent / 100),
-          net: json.summary?.totalRevenue || 0,
-        });
-
-        setTotalTransactions(json.summary?.totalOrders || 0);
+        if (!res.ok || !json.success) throw new Error(json.error || "Gagal memuat data");
+        setTx({ items: json.items || [], total: json.total || 0, page, limit });
       } catch (err) {
-        console.error("Fetch error:", err);
+        console.error("Fetch list error:", err);
         setError(err instanceof Error ? err.message : "Gagal memuat data");
         notifications.show({
           title: "Error",
@@ -296,27 +324,23 @@ export default function AdminEarningsPage() {
           color: "red",
         });
       } finally {
-        setLoading(false);
-        setInitialLoad(false);
+        setListLoading(false);
       }
     },
-    [
-      user?.id,
-      search,
-      startDate,
-      endDate,
-      sortBy,
-      sortDir,
-      commissionPercent,
-      tx.limit,
-    ]
+    [user?.id, search, startDate, endDate, sortBy, sortDir, tx.limit]
   );
 
-  useEffect(() => {
-    fetchData(1);
-  }, [user?.id, search, startDate, endDate, sortBy, sortDir]);
+  // Initial load: fetch both in parallel
+  useEffect(() => { if (initialLoad && user?.id) { fetchStats(); fetchList(1); } }, [initialLoad, user?.id, fetchStats, fetchList]);
+  // Subsequent filter/sort/search changes only refetch list
+  useEffect(() => { if (!initialLoad) { fetchList(1); } }, [search, startDate, endDate, sortBy, sortDir]);
+  // Pagination handler uses fetchList
+  const handlePageChange = (p: number) => { fetchList(p); };
+  // Mark initial load done when both finished
+  useEffect(() => { if (!statsLoading && !listLoading && initialLoad) setInitialLoad(false); }, [statsLoading, listLoading, initialLoad]);
+
   // Initial full-page overlay loader (only on first navigation)
-  if (loading && initialLoad) {
+  if ((statsLoading || listLoading) && initialLoad) {
     return (
       <div
         style={{
@@ -396,16 +420,8 @@ export default function AdminEarningsPage() {
       });
 
       if (search) params.set("q", search);
-      if (startDate) {
-        const dateStr =
-          typeof startDate === "string" ? startDate : startDate.toISOString();
-        params.set("startDate", dateStr);
-      }
-      if (endDate) {
-        const dateStr =
-          typeof endDate === "string" ? endDate : endDate.toISOString();
-        params.set("endDate", dateStr);
-      }
+      if (startDate) params.set("startDate", toStartOfDayISO(startDate));
+      if (endDate) params.set("endDate", toEndOfDayISO(endDate));
 
       const res = await fetch(`/api/admin/earnings?${params.toString()}`);
       const json = await res.json();
@@ -876,41 +892,21 @@ export default function AdminEarningsPage() {
         <Group grow>
           <StatCard
             label="Total Pendapatan"
-            value={
-              loading ? (
-                <Loader size="sm" color="white" />
-              ) : (
-                formatCurrency(totals.gross)
-              )
-            }
+            value={statsLoading ? (<Loader size="sm" color="white" />) : (formatCurrency(totals.gross))}
             Icon={IconReportMoney}
-            isLoading={loading}
+            isLoading={statsLoading}
           />
           <StatCard
             label="Total Transaksi"
-            value={
-              loading ? (
-                <Loader size="sm" color="white" />
-              ) : (
-                <AnimatedCounter value={totalTransactions} />
-              )
-            }
+            value={statsLoading ? (<Loader size="sm" color="white" />) : (<AnimatedCounter value={totalTransactions} />)}
             Icon={IconCash}
-            isLoading={loading}
+            isLoading={statsLoading}
           />
           <StatCard
             label="Rata-rata per Order"
-            value={
-              loading ? (
-                <Loader size="sm" color="white" />
-              ) : (
-                formatCurrency(
-                  totalTransactions > 0 ? totals.gross / totalTransactions : 0
-                )
-              )
-            }
+            value={statsLoading ? (<Loader size="sm" color="white" />) : (formatCurrency(totalTransactions > 0 ? totals.gross / totalTransactions : 0))}
             Icon={IconTrendingUp}
-            isLoading={loading}
+            isLoading={statsLoading}
           />
         </Group>
 
@@ -1014,7 +1010,7 @@ export default function AdminEarningsPage() {
           </Alert>
         )}
 
-        {!loading && tx.items.length === 0 ? (
+  {!listLoading && tx.items.length === 0 ? (
           <Alert color="blue" title="Tidak ada data">
             Belum ada transaksi yang sesuai dengan filter
           </Alert>
@@ -1059,7 +1055,7 @@ export default function AdminEarningsPage() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {loading && !initialLoad
+                  {listLoading && !initialLoad
                     ? Array.from({ length: tx.limit || 10 }).map((_, idx) => (
                         <Table.Tr key={`skeleton-${idx}`}>
                           <Table.Td><Skeleton height={12} width={140} /></Table.Td>
@@ -1105,11 +1101,11 @@ export default function AdminEarningsPage() {
             </div>
             <Group justify="space-between" p="md" wrap="wrap">
               <Text size="sm" c="dimmed">
-                {loading ? 'Memuat…' : `Menampilkan ${tx.items.length} dari ${tx.total} transaksi`}
+                {listLoading ? 'Memuat…' : `Menampilkan ${tx.items.length} dari ${tx.total} transaksi`}
               </Text>
               <Pagination
                 value={tx.page}
-                onChange={(p) => fetchData(p)}
+                onChange={handlePageChange}
                 total={totalPages}
               />
             </Group>

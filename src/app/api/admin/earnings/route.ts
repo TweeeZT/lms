@@ -39,6 +39,9 @@ export async function GET(req: NextRequest) {
   const q = (searchParams.get("q") || "").trim();
   const status = (searchParams.get("status") || "").trim();
   const method = (searchParams.get("method") || "").trim();
+  // Optional date range filters (ISO strings)
+  const startDate = (searchParams.get("startDate") || "").trim();
+  const endDate = (searchParams.get("endDate") || "").trim();
   const sortByRaw = (searchParams.get("sortBy") || "date").trim();
   const sortDirRaw = (searchParams.get("sortDir") || "desc")
     .trim()
@@ -90,7 +93,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    query = query.order(sortBy, { ascending: sortDir === "asc" });
+  // Date range filters
+  if (startDate) query = query.gte("date", startDate);
+  if (endDate) query = query.lte("date", endDate);
+
+  query = query.order(sortBy, { ascending: sortDir === "asc" });
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -146,6 +153,8 @@ export async function GET(req: NextRequest) {
         `user_name.ilike.%${safe}%,course_title.ilike.%${safe}%,id.ilike.%${safe}%`
       );
     }
+    if (startDate) summaryQuery = summaryQuery.gte("date", startDate);
+    if (endDate) summaryQuery = summaryQuery.lte("date", endDate);
 
     const { data: allTransactions } = await summaryQuery;
 

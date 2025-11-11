@@ -95,7 +95,7 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
         },
         {
           label: "Manajemen Alat",
-          href: "/admin/alat",
+          href: "/admin/tools",
           icon: "IconCode",
         },
         {
@@ -133,7 +133,7 @@ const getNavigationItems = (role: User["role"]): NavigationItem[] => {
 
         {
           label: "Manajemen Alat",
-          href: "/instructor/alat",
+          href: "/instructor/tools",
           icon: "IconCode",
         },
       ];

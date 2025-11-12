@@ -278,7 +278,7 @@ export default function AdminToolsPage() {
     }
   };
 
-  if (loading && initialLoading) {
+  if (loading) {
     return (
       <div
         style={{

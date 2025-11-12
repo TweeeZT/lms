@@ -281,7 +281,7 @@ export default function InstructorToolsPage() {
     }
   };
 
-  if (loading && initialLoading) {
+  if (loading) {
     return (
       <div
         style={{

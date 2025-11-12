@@ -22,14 +22,14 @@ export async function GET(req: Request) {
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
-  // base query: published courses
+  // base query: published courses (treat NULL as published for backward-compatibility)
   let query = supabaseAdmin
     .from("courses")
     .select(
       "id,title,description,thumbnail,category,price,duration_min,level,enrolled_count,rating,is_published,created_at,updated_at,instructor_id, users:instructor_id ( id, full_name, avatar )",
       { count: "exact" }
     )
-    .eq("is_published", true);
+    .or("is_published.eq.true,is_published.is.null");
 
   if (q) {
     // ILIKE title OR description

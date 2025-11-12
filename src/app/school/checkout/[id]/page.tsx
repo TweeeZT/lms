@@ -20,7 +20,14 @@ import {
   Radio,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconArrowLeft, IconTicket, IconDiscount } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconTicket,
+  IconDiscount,
+  IconTool,
+  IconPlus,
+  IconCheck,
+} from "@tabler/icons-react";
 
 export default function CheckoutCoursePage() {
   const { id } = useParams<{ id: string }>();
@@ -44,6 +51,18 @@ export default function CheckoutCoursePage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [totalStudents, setTotalStudents] = useState(0);
   const [includeSchool, setIncludeSchool] = useState(false);
+
+  // Tools (add-ons)
+  interface CourseToolAddOn {
+    id: string;
+    courses_id: string;
+    title: string;
+    text_content?: string;
+    price: number | null;
+  }
+  const [tools, setTools] = useState<CourseToolAddOn[]>([]);
+  const [loadingTools, setLoadingTools] = useState(false);
+  const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
 
   // Discount codes
   const [discountType, setDiscountType] = useState<
@@ -80,6 +99,20 @@ export default function CheckoutCoursePage() {
             setTotalStudents(studentsJson.total || 0);
           }
         }
+
+        // Fetch course tools (add-ons)
+        setLoadingTools(true);
+        try {
+          const toolsRes = await fetch(`/api/school/courses/${id}/tools`);
+          const toolsJson = await toolsRes.json();
+          if (toolsRes.ok && toolsJson.success) {
+            setTools(toolsJson.items || []);
+          }
+        } catch (e) {
+          // optional
+        } finally {
+          setLoadingTools(false);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Gagal memuat kursus");
       } finally {
@@ -100,8 +133,21 @@ export default function CheckoutCoursePage() {
     // Check if free course
     const price = course?.price || 0;
     const finalCount = includeSchool ? totalStudents + 1 : totalStudents;
-    const baseAmount = price * finalCount;
-    const finalAmount = baseAmount - discountAmount;
+    const baseCourseAmount = price * finalCount;
+    // Tools are not discounted and not multiplied (align with user flow)
+    const addonsTotal = tools
+      .filter((t) => selectedToolIds.includes(t.id))
+      .reduce((sum, t) => sum + (t.price || 0), 0);
+    const baseAmount = baseCourseAmount + addonsTotal;
+
+    // Discount applies only on course price portion
+    let discount = 0;
+    if (discountType === "affiliate") {
+      discount = baseCourseAmount * 0.1;
+    }
+    // voucher discount is computed in server; here we keep preview only when validated
+    const previewDiscount = discountAmount || discount; // use calculated/validated value
+    const finalAmount = Math.max(0, baseCourseAmount - previewDiscount) + addonsTotal;
 
     if (finalAmount === 0 && baseAmount === 0) {
       // Handle free course - enroll school and students
@@ -117,6 +163,7 @@ export default function CheckoutCoursePage() {
             affiliateCode:
               discountType === "affiliate" ? affiliateCode : undefined,
             voucherCode: discountType === "voucher" ? voucherCode : undefined,
+            toolIds: selectedToolIds,
           }),
         });
         const json = await res.json();
@@ -159,6 +206,7 @@ export default function CheckoutCoursePage() {
             affiliateCode:
               discountType === "affiliate" ? affiliateCode : undefined,
             voucherCode: discountType === "voucher" ? voucherCode : undefined,
+            toolIds: selectedToolIds,
           }),
         });
         const json = await res.json();
@@ -192,6 +240,7 @@ export default function CheckoutCoursePage() {
             affiliateCode:
               discountType === "affiliate" ? affiliateCode : undefined,
             voucherCode: discountType === "voucher" ? voucherCode : undefined,
+            toolIds: selectedToolIds,
           }),
         });
         const json = await res.json();
@@ -239,8 +288,12 @@ export default function CheckoutCoursePage() {
   };
 
   const finalParticipantCount = totalStudents + (includeSchool ? 1 : 0);
-  const baseAmount = (course?.price || 0) * finalParticipantCount;
-  const finalAmount = Math.max(0, baseAmount - discountAmount);
+  const baseCourseAmount = (course?.price || 0) * finalParticipantCount;
+  const addonsTotalPreview = tools
+    .filter((t) => selectedToolIds.includes(t.id))
+    .reduce((sum, t) => sum + (t.price || 0), 0);
+  const baseAmount = baseCourseAmount + addonsTotalPreview;
+  const finalAmount = Math.max(0, baseCourseAmount - discountAmount) + addonsTotalPreview;
 
   return (
     <Container size="md" py="lg" style={{ position: "relative" }}>
@@ -291,7 +344,10 @@ export default function CheckoutCoursePage() {
                 @media (max-width: 768px) {
                   .checkout-flex { flex-direction: column; }
                   .checkout-thumb { width: 100% !important; }
-                  .checkout-price-bar { display: flex !important; }
+                  .checkout-desktop-bar { flex-direction: column; align-items: center !important; gap: 12px; }
+                  .checkout-total { text-align: center; }
+                  .checkout-pay-btn { width: 100% !important; max-width: 320px; }
+                  .tool-card { width: 100% !important; }
                 }
               `}</style>
               <div
@@ -630,6 +686,130 @@ export default function CheckoutCoursePage() {
                     </div>
                   </Card>
 
+                  {/* Add-On Tools Section (optional) */}
+                  {loadingTools ? (
+                    <Card withBorder mt="md" p="md" radius="md">
+                      <Stack gap="xs" align="center">
+                        <Skeleton height={20} width={180} />
+                        <Skeleton height={14} width={240} />
+                        <Skeleton height={100} radius="md" w={260} />
+                      </Stack>
+                    </Card>
+                  ) : tools.length > 0 ? (
+                    <Card withBorder mt="md" p="md" radius="md">
+                      <Stack gap="sm">
+                        <Group gap={8} justify="center">
+                          <IconTool size={20} />
+                          <Text fw={600}>Tambahan Alat (Opsional)</Text>
+                        </Group>
+                        <Text size="xs" c="dimmed" ta="center">
+                          Pilih alat tambahan yang ingin dibeli bersama kursus
+                        </Text>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 16,
+                            justifyContent: "center",
+                          }}
+                        >
+                          {tools.map((tool) => {
+                            const selected = selectedToolIds.includes(tool.id);
+                            const toggle = () => {
+                              setSelectedToolIds((prev) =>
+                                prev.includes(tool.id)
+                                  ? prev.filter((id2) => id2 !== tool.id)
+                                  : [...prev, tool.id]
+                              );
+                            };
+                            return (
+                              <Card
+                                key={tool.id}
+                                withBorder
+                                radius="md"
+                                p="md"
+                                style={{
+                                  width: "min(260px, 100%)",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "stretch",
+                                  textAlign: "center",
+                                  background: selected
+                                    ? "linear-gradient(135deg,#ffffff,#e8f6ff)"
+                                    : undefined,
+                                  borderColor: selected
+                                    ? "var(--mantine-color-blue-5)"
+                                    : undefined,
+                                  boxShadow: selected
+                                    ? "0 0 0 2px rgba(30,55,105,0.12)"
+                                    : undefined,
+                                  transition: "all .2s",
+                                }}
+                              >
+                                <Stack gap={4} style={{ flex: 1 }}>
+                                  <Text size="sm" fw={600} lineClamp={2}>
+                                    {tool.title}
+                                  </Text>
+                                  <Text size="xs" c="dimmed" lineClamp={3}>
+                                    {(tool.text_content || "")
+                                      .replace(/<[^>]+>/g, "")
+                                      .slice(0, 160)}
+                                    {(tool.text_content || "").length > 160
+                                      ? "..."
+                                      : ""}
+                                  </Text>
+                                  <Text
+                                    size="sm"
+                                    fw={700}
+                                    c={selected ? "green" : "blue"}
+                                    mt={4}
+                                  >
+                                    {tool.price && tool.price > 0
+                                      ? `Rp ${tool.price.toLocaleString()}`
+                                      : "Gratis"}
+                                  </Text>
+                                </Stack>
+                                <Button
+                                  mt="sm"
+                                  size="xs"
+                                  fullWidth
+                                  variant={selected ? "light" : "outline"}
+                                  color={selected ? "green" : "blue"}
+                                  leftSection={
+                                    selected ? (
+                                      <IconCheck size={14} />
+                                    ) : (
+                                      <IconPlus size={14} />
+                                    )
+                                  }
+                                  onClick={toggle}
+                                >
+                                  {selected ? "Ditambahkan" : "Tambah"}
+                                </Button>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                        {/* Summary for addons */}
+                        {selectedToolIds.length > 0 && (
+                          <Alert
+                            color="green"
+                            variant="light"
+                            radius="md"
+                            ta="center"
+                          >
+                            <Text size="sm">
+                              Total alat tambahan: <b>Rp {tools
+                                .filter((t) => selectedToolIds.includes(t.id))
+                                .reduce((s, t) => s + (t.price || 0), 0)
+                                .toLocaleString()}</b>
+                            </Text>
+                          </Alert>
+                        )}
+                      </Stack>
+                    </Card>
+                  ) : null}
+
                   <Alert
                     mt="md"
                     color="yellow"
@@ -671,15 +851,23 @@ export default function CheckoutCoursePage() {
               style={{ display: "flex" }}
               className="checkout-desktop-bar"
             >
-              <div>
+              <div className="checkout-total">
                 <Text size="xs" c="dimmed" mb={4}>
                   Total Pembayaran
                 </Text>
-                {discountAmount > 0 && (
-                  <Text size="sm" c="dimmed" td="line-through">
-                    Rp {baseAmount.toLocaleString()}
-                  </Text>
-                )}
+                {/* Breakdown */}
+                <Stack gap={2}>
+                  {discountAmount > 0 && (
+                    <Text size="xs" c="dimmed" td="line-through">
+                      Kursus: Rp {baseCourseAmount.toLocaleString()}
+                    </Text>
+                  )}
+                  {addonsTotalPreview > 0 && (
+                    <Text size="xs" c="dimmed">
+                      Alat tambahan: Rp {addonsTotalPreview.toLocaleString()}
+                    </Text>
+                  )}
+                </Stack>
                 <Text
                   fw={800}
                   size="xl"
@@ -690,24 +878,25 @@ export default function CheckoutCoursePage() {
                     ? "GRATIS"
                     : `Rp ${finalAmount.toLocaleString()}`}
                 </Text>
-                <Text size="xs" c="dimmed" mt={2}>
-                  {finalParticipantCount} peserta × Rp{" "}
-                  {(course.price || 0).toLocaleString()}
+                <Stack gap={2} mt={4}>
+                  <Text size="xs" c="dimmed">
+                    {finalParticipantCount} peserta × Rp{" "}
+                    {(course.price || 0).toLocaleString()}
+                  </Text>
                   {discountAmount > 0 && (
-                    <Text component="span" c="green" fw={600}>
-                      {" "}
-                      - Rp {discountAmount.toLocaleString()}
+                    <Text size="xs" c="green" fw={600}>
+                      Hemat Rp {discountAmount.toLocaleString()}
                     </Text>
                   )}
-                </Text>
+                </Stack>
               </div>
               <Button
-                className="btn-primary"
+                className="btn-primary checkout-pay-btn"
                 loading={creatingInvoice}
                 onClick={() => setConfirmOpen(true)}
                 size="md"
                 radius="md"
-                style={{ minWidth: 180 }}
+                style={{ minWidth: 180, alignSelf: "center" }}
               >
                 {finalAmount === 0 && baseAmount === 0
                   ? "Daftar Sekarang"

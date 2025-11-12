@@ -3,7 +3,7 @@ import { supabaseAdmin } from "../../../../../lib/supabaseServer";
 
 // Force Node runtime (needed for future email / crypto, avoid edge limitations)
 export const runtime = "nodejs";
-// body: { userId, courseId, affiliateCode?, voucherCode? }
+// body: { userId, courseId, affiliateCode?, voucherCode?, toolIds?: string[] }
 // Creates a Xendit invoice (mock/simple call placeholder) and inserts pending transaction.
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +12,12 @@ export async function POST(req: NextRequest) {
     const courseId = (body.courseId || "").trim();
     const affiliateCode = (body.affiliateCode || "").trim();
     const voucherCode = (body.voucherCode || "").trim();
+    const rawToolIds: unknown = body.toolIds;
+    const toolIds = Array.isArray(rawToolIds)
+      ? rawToolIds
+          .filter((v) => typeof v === "string" && v.trim().length)
+          .map((v) => v.trim())
+      : [];
 
     if (!userId || !courseId) {
       return NextResponse.json(
@@ -138,21 +144,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const baseAmount = course.price || 0;
+    // Fetch selected add-on tools (course_tools) if any. Each contributes its price (no discount applied to tools).
+    let toolsTotal = 0;
+    if (toolIds.length) {
+      const { data: toolsData, error: toolsErr } = await supabaseAdmin
+        .from("course_tools")
+        .select("id, price, courses_id")
+        .in("id", toolIds)
+        .eq("courses_id", courseId);
+      if (toolsErr) {
+        return NextResponse.json(
+          { success: false, error: "Gagal mengambil data alat tambahan" },
+          { status: 500 }
+        );
+      }
+      // Sum only positive numeric prices
+      toolsTotal = (toolsData || []).reduce((sum, t) => {
+        const p = typeof t.price === "number" && t.price > 0 ? t.price : 0;
+        return sum + p;
+      }, 0);
+    }
+
+    const courseBasePrice = course.price || 0;
 
     // Calculate discount
     let discountAmount = 0;
     if (affiliateDiscount > 0) {
-      discountAmount = baseAmount * affiliateDiscount;
+      discountAmount = courseBasePrice * affiliateDiscount;
     } else if (voucherDiscount > 0 && voucherDiscountType) {
       if (voucherDiscountType === "percentage") {
-        discountAmount = baseAmount * (voucherDiscount / 100);
+        discountAmount = courseBasePrice * (voucherDiscount / 100);
       } else if (voucherDiscountType === "fixed") {
         discountAmount = voucherDiscount;
       }
     }
 
-    const finalAmount = Math.max(0, baseAmount - discountAmount);
+    // Apply discount only to course price, never to tools
+    const discountedCoursePrice = Math.max(0, courseBasePrice - discountAmount);
+    const finalAmount = discountedCoursePrice + toolsTotal;
+    const baseAmount = courseBasePrice + toolsTotal; // original total before discount (tools unaffected)
 
     // Create invoice via Xendit
     const apiKey = process.env.XENDIT_SECRET_KEY;
@@ -180,9 +210,12 @@ export async function POST(req: NextRequest) {
       final_amount: String(finalAmount),
       course_id: courseId,
       user_id: userId,
+      course_price: String(courseBasePrice),
+      tools_total: String(toolsTotal),
     };
     if (affiliateCodeId) metadata.affiliate_code_id = String(affiliateCodeId);
     if (voucherId) metadata.voucher_id = String(voucherId);
+    if (toolIds.length) metadata.tool_ids = JSON.stringify(toolIds);
 
     console.log("[user/invoice] Sending metadata to Xendit:", metadata);
 
@@ -196,7 +229,7 @@ export async function POST(req: NextRequest) {
         external_id: externalId,
         amount: finalAmount,
         payer_email: undefined,
-        description: `Pembelian kursus ${course.title}`,
+  description: `Pembelian kursus ${course.title}$${toolIds.length ? ` + ${toolIds.length} add-on alat` : ""}`,
         // Store discount context so webhook can be idempotent and complete even if the pending insert failed
         metadata,
         // Pass context so success page can poll without relying solely on localStorage
@@ -257,7 +290,7 @@ export async function POST(req: NextRequest) {
           user_name: user.full_name,
           course_id: courseId,
           course_title: course.title,
-          amount: baseAmount,
+          amount: baseAmount, // includes tools
           final_amount: finalAmount,
           // Use PENDING as placeholder (DB column is NOT NULL)
           method: "PENDING",
@@ -265,6 +298,7 @@ export async function POST(req: NextRequest) {
           instructors_id: course.instructor_id || null,
           voucher_id: voucherId,
           affiliate_code_id: affiliateCodeId,
+          tools_total: toolsTotal || 0, // if a column exists; harmless if ignored
         });
         if (insertRes.error) {
           console.error("transaction pending insert failed", insertRes.error);
@@ -293,6 +327,8 @@ export async function POST(req: NextRequest) {
       originalAmount: baseAmount,
       finalAmount: finalAmount,
       discount: discountAmount,
+      toolsTotal,
+      coursePrice: courseBasePrice,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Invoice error";

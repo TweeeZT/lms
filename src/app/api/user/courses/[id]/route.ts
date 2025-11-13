@@ -83,6 +83,8 @@ export async function GET(
       .eq("user_id", userId)
       .eq("course_id", courseId)
       .single();
+    // Instructors who own the course are implicitly allowed (treated as enrolled for access)
+    const isInstructorOfCourse = String(course.instructor_id) === String(userId);
 
     // Format response
     const courseData = {
@@ -101,7 +103,8 @@ export async function GET(
       instructorId: course.instructor_id,
       instructorName: instructor?.full_name || "Unknown",
       isPublished: course.is_published,
-      isEnrolled: !!enrollment,
+  isEnrolled: !!enrollment || isInstructorOfCourse,
+  isInstructorOfCourse,
       createdAt: course.created_at,
       updatedAt: course.updated_at,
     };

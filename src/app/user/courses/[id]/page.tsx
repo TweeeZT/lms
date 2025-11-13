@@ -72,6 +72,7 @@ type CourseData = {
   totalModules: number;
   enrolledCount: number;
   rating?: number;
+  isEnrolled?: boolean; // from API, used to gate course-specific discussion
 };
 
 const MODULE_ICONS = {
@@ -362,20 +363,30 @@ export default function CourseOverviewPage() {
   return (
     <Container size="xl" py="xl">
       <Stack gap="xl">
-        {/* Back Button */}
-        <Button
-          variant="subtle"
-          size="md"
-          onClick={() => router.push("/user/courses")}
-          leftSection={
-            <IconChevronRight
-              size={20}
-              style={{ transform: "rotate(180deg)" }}
-            />
-          }
-        >
-          Kembali ke Kursus Saya
-        </Button>
+        {/* Top Bar: Back (left) & Discussion Button (right) */}
+        <Group justify="space-between" align="center">
+          <Button
+            variant="subtle"
+            size="md"
+            onClick={() => router.push("/user/courses")}
+            leftSection={
+              <IconChevronRight
+                size={20}
+                style={{ transform: "rotate(180deg)" }}
+              />
+            }
+          >
+            Kembali ke Kursus Saya
+          </Button>
+          <Button
+            variant="light"
+            size="md"
+            color="blue"
+            onClick={() => router.push(`/user/courses/${courseId}/discussions`)}
+          >
+            Diskusi Kursus
+          </Button>
+        </Group>
 
         {/* Course Header */}
         <Paper
@@ -534,6 +545,7 @@ export default function CourseOverviewPage() {
 
         {/* Course Tools Section */}
         <CourseToolsSection tools={tools} loading={loading} />
+
 
         {/* Modules Section */}
         <Stack gap="xl">

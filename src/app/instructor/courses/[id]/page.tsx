@@ -254,6 +254,13 @@ export default function InstructorCourseDetailPage() {
               <Button
                 variant="light"
                 color="blue"
+                onClick={() => router.push(`/instructor/courses/${courseId}/discussions`)}
+              >
+                Diskusi Kursus
+              </Button>
+              <Button
+                variant="light"
+                color="blue"
                 leftSection={<IconUsers size={18} />}
                 onClick={() =>
                   router.push(`/instructor/courses/${courseId}/students`)

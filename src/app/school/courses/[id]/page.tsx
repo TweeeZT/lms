@@ -352,20 +352,30 @@ export default function CourseOverviewPage() {
   return (
     <Container size="xl" py="xl">
       <Stack gap="xl">
-        {/* Back Button */}
-        <Button
-          variant="subtle"
-          size="md"
-          onClick={() => router.push("/school/courses")}
-          leftSection={
-            <IconChevronRight
-              size={20}
-              style={{ transform: "rotate(180deg)" }}
-            />
-          }
-        >
-          Kembali ke Kursus Saya
-        </Button>
+        {/* Back + Discussion Button */}
+        <Group justify="space-between" align="center">
+          <Button
+            variant="subtle"
+            size="md"
+            onClick={() => router.push("/school/courses")}
+            leftSection={
+              <IconChevronRight
+                size={20}
+                style={{ transform: "rotate(180deg)" }}
+              />
+            }
+          >
+            Kembali ke Kursus Saya
+          </Button>
+          <Button
+            variant="light"
+            size="md"
+            color="blue"
+            onClick={() => router.push(`/school/courses/${courseId}/discussions`)}
+          >
+            Diskusi Kursus
+          </Button>
+        </Group>
 
         {/* Course Header */}
         <Paper

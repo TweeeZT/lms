@@ -40,12 +40,14 @@ export async function GET(req: Request) {
       );
     }
 
+    // Global forum: hanya ambil posting yang TIDAK terkait kursus (course_id IS NULL)
     let query = supabase
       .from("discussion_posts")
       .select(
-        "id, user_id, title, content, likes, tags, created_at, updated_at",
+        "id, user_id, title, content, likes, tags, created_at, updated_at, course_id",
         { count: "exact" }
-      );
+      )
+      .is("course_id", null);
     if (mine) query = query.eq("user_id", userId);
     if (q) query = query.or(`title.ilike.%${q}%,content.ilike.%${q}%`);
     if (sort === "latest")

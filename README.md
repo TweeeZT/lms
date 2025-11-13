@@ -97,6 +97,13 @@ http://localhost:3000
   --primary-color: #1e386a;
   --secondary-color: #f6d457;
   ```
+- **Diskusi Khusus Kursus** – Setiap kursus kini memiliki forum diskusinya sendiri terpisah dari forum global. Endpoint baru:
+  - `GET /api/user/courses/[id]/discussions` (list thread peserta kursus)
+  - `POST /api/user/courses/[id]/discussions` (buat thread)
+  - `GET /api/user/courses/[id]/discussions/[discussionId]` (detail + komentar)
+  - `POST /api/user/courses/[id]/discussions/[discussionId]/comments` (tambah komentar)
+  Komponen UI: `CourseDiscussionSection` ditampilkan di halaman kursus setelah bagian tools.
+  Asumsi skema: tabel `discussion_posts` memiliki kolom opsional `course_id` untuk mengaitkan thread ke kursus tertentu.
 
 ---
 

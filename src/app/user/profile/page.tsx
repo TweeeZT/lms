@@ -1619,7 +1619,7 @@ export default function UserProfilePage() {
                             )}
                           </div>
 
-                          <Group gap="xs">
+                          <Stack gap="xs">
                             <Button
                               variant="light"
                               radius="xl"
@@ -1627,7 +1627,7 @@ export default function UserProfilePage() {
                                 setModalImg(cert.url);
                                 setModalOpen(true);
                               }}
-                              flex={1}
+                              fullWidth
                             >
                               Lihat Sertifikat
                             </Button>
@@ -1665,12 +1665,12 @@ export default function UserProfilePage() {
                                     console.error(e);
                                   }
                                 }}
-                                flex={1}
+                                fullWidth
                               >
                                 Download
                               </Button>
                             )}
-                          </Group>
+                          </Stack>
                         </Stack>
                       </Card>
                     </Grid.Col>

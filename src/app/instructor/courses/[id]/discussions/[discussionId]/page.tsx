@@ -28,6 +28,7 @@ export default function InstructorCourseDiscussionDetailPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   async function load() { if(!user) return; setLoading(true); try { const res = await fetch(`/api/user/courses/${courseId}/discussions/${discussionId}?userId=${user.id}`); const json = await res.json(); if(res.ok && json.success) { setPost(json.item as ApiPost); } } finally { setLoading(false); } }
   const startEdit = () => { if(!post) return; setEditTitle(post.title); setEditContent(post.content.replace(/\r\n/g,'\n')); setEditTags(post.tags || []); setExistingMedia(post.media || []); setMediaToDelete([]); setNewFiles([]); setEditing(true); };
@@ -37,6 +38,7 @@ export default function InstructorCourseDiscussionDetailPage() {
   const saveEdit = async () => { if(!user || !post) return; setSavingEdit(true); try { const res = await fetch(`/api/user/courses/${courseId}/discussions/${discussionId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId:user.id, title:editTitle.trim(), content:editContent.trim(), tags:editTags }) }); if(!res.ok){ setSavingEdit(false); return; } if(mediaToDelete.length || newFiles.length){ const fd = new FormData(); fd.set('userId', user.id); if(mediaToDelete.length) fd.set('deleteMediaIds', JSON.stringify(mediaToDelete)); newFiles.forEach(f => fd.append('files', f)); await fetch(`/api/user/discussions/${post.id}/media`, { method:'PATCH', body: fd }); } await load(); setEditing(false); } finally { setSavingEdit(false); } };
   const deletePost = async () => { if(!user || !post) return; setDeleting(true); try { const res = await fetch(`/api/user/courses/${courseId}/discussions/${discussionId}`, { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId:user.id }) }); if(res.ok){ router.push(`/instructor/courses/${courseId}/discussions`); } } finally { setDeleting(false); } };
   useEffect(()=>{ load(); },[user, courseId, discussionId]);
+  useEffect(() => { if (!loading) setInitialLoad(false); }, [loading]);
 
   // Like feature removed per request
 
@@ -46,7 +48,7 @@ export default function InstructorCourseDiscussionDetailPage() {
 
   return (
     <Container size="md" py="xl">
-      <PrimeLoader force={loading || savingEdit || deleting || sending} />
+      <PrimeLoader force={initialLoad && loading} backdrop coverColor="#fff" />
       {!loading && !post && (
         <Text>Diskusi tidak ditemukan</Text>
       )}

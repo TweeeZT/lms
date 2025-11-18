@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Container, Stack, Group, Button, Title, Text, SegmentedControl, Select, TextInput, Avatar, Badge, ActionIcon, Pagination, Image, SimpleGrid, Modal } from "@mantine/core";
+import { Container, Stack, Group, Button, Title, Text, SegmentedControl, Select, TextInput, Avatar, Badge, ActionIcon, Pagination, Image, SimpleGrid, Modal, Skeleton } from "@mantine/core";
 import { IconChevronRight, IconPlus, IconVideo, IconX } from "@tabler/icons-react";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
@@ -31,6 +31,7 @@ export default function InstructorCourseDiscussionsListPage() {
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [playVideo, setPlayVideo] = useState<string | null>(null);
+  const [initialLoad, setInitialLoad] = useState(true);
   const totalPages = Math.max(1, Math.ceil(total / (limit || 10)));
 
   useEffect(() => {
@@ -54,6 +55,11 @@ export default function InstructorCourseDiscussionsListPage() {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
+  // Only use PrimeLoader for the initial page render
+  useEffect(() => {
+    if (!loadingCourse && !loadingPosts) setInitialLoad(false);
+  }, [loadingCourse, loadingPosts]);
+
   function relativeTime(date: string | Date) {
     const d = typeof date === 'string' ? new Date(date) : date; const diff = Date.now() - d.getTime(); const sec = Math.floor(diff/1000); const m = Math.floor(sec/60); const h = Math.floor(m/60);
     if (sec < 60) return 'baru saja'; if (m < 60) return `${m} menit lalu`; if (h < 24) return `${h} jam lalu`;
@@ -66,7 +72,7 @@ export default function InstructorCourseDiscussionsListPage() {
 
   return (
     <Container size="lg" py="xl">
-      <PrimeLoader force={loadingCourse || loadingPosts} />
+      <PrimeLoader force={initialLoad && (loadingCourse || loadingPosts)} backdrop coverColor="#fff" />
       <Stack gap="lg">
         <Group justify="space-between" align="center">
           <Button variant="subtle" size="md" onClick={() => router.push(`/instructor/courses/${courseId}`)} leftSection={<IconChevronRight size={20} style={{ transform:'rotate(180deg)' }} />}>Kembali ke Kursus</Button>
@@ -83,7 +89,23 @@ export default function InstructorCourseDiscussionsListPage() {
         {(!course?.isEnrolled && !loadingCourse) && <Text c="red" size="sm">Anda belum terdaftar di kursus ini.</Text>}
         <TextInput placeholder="Cari judul/konten..." value={q} onChange={e => setQ(e.currentTarget.value)} onKeyDown={e => e.key==='Enter' && setPage(1)} />
         <Stack gap="md">
-          {items.map(post => (
+          {loadingPosts && !initialLoad ? (
+            <>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} style={{ padding:'20px', background:'#fff', borderRadius:12, border:'1px solid #e9ecef', boxShadow:'0 2px 4px rgba(0,0,0,0.1)' }}>
+                  <Group align="flex-start" gap="md" wrap="nowrap">
+                    <Skeleton height={36} width={36} radius="xl" />
+                    <div style={{ flex:1 }}>
+                      <Skeleton height={12} style={{ width:'35%', marginBottom:8 }} />
+                      <Skeleton height={14} style={{ width:'60%', marginBottom:8 }} />
+                      <Skeleton height={10} style={{ width:'90%' }} />
+                    </div>
+                  </Group>
+                </div>
+              ))}
+            </>
+          ) : (
+          items.map(post => (
             <div key={post.id} style={{ padding:'20px', background:'#fff', borderRadius:12, border:'1px solid #e9ecef', cursor:'pointer', boxShadow:'0 2px 4px rgba(0,0,0,0.1)' }} onClick={() => router.push(`/instructor/courses/${courseId}/discussions/${post.id}`)}>
               <Group align="flex-start" gap="md" wrap="nowrap">
                 <Avatar radius="xl" size="md" src={post.user?.avatar || undefined} style={{ flexShrink:0, marginTop:2 }}>
@@ -132,7 +154,8 @@ export default function InstructorCourseDiscussionsListPage() {
                 </div>
               </Group>
             </div>
-          ))}
+          )))
+          }
         </Stack>
         <Group justify="space-between" align="center" mt="md"><Text size="xs" c="dimmed">Total {total} post</Text><Pagination total={totalPages} value={page} onChange={setPage} size="sm" /></Group>
       </Stack>

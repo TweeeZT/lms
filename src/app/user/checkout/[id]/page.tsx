@@ -17,6 +17,7 @@ import {
   Modal,
   Radio,
   TextInput,
+  ActionIcon,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -26,6 +27,7 @@ import {
   IconPlus,
   IconCheck,
   IconTool,
+  IconInfoCircle,
 } from "@tabler/icons-react";
 
 export default function CheckoutCoursePage() {
@@ -59,6 +61,8 @@ export default function CheckoutCoursePage() {
   const [tools, setTools] = useState<CourseToolAddOn[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
+  const [toolDetailOpen, setToolDetailOpen] = useState(false);
+  const [activeTool, setActiveTool] = useState<CourseToolAddOn | null>(null);
 
   // Discount codes
   const [discountType, setDiscountType] = useState<
@@ -597,8 +601,27 @@ export default function CheckoutCoursePage() {
                                     ? "0 0 0 2px rgba(30,55,105,0.12)"
                                     : undefined,
                                   transition: "all .2s",
+                                  position: "relative",
                                 }}
                               >
+                                <ActionIcon
+                                  variant="subtle"
+                                  color="gray"
+                                  size="sm"
+                                  aria-label="Info alat"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTool(tool);
+                                    setToolDetailOpen(true);
+                                  }}
+                                  style={{
+                                    position: "absolute",
+                                    top: 8,
+                                    right: 8,
+                                  }}
+                                >
+                                  <IconInfoCircle size={16} />
+                                </ActionIcon>
                                 <Stack gap={4} style={{ flex: 1 }}>
                                   <Text size="sm" fw={600} lineClamp={2}>
                                     {tool.title}
@@ -652,10 +675,14 @@ export default function CheckoutCoursePage() {
                             ta="center"
                           >
                             <Text size="sm">
-                              Total alat tambahan: <b>Rp {tools
-                                .filter((t) => selectedToolIds.includes(t.id))
-                                .reduce((s, t) => s + (t.price || 0), 0)
-                                .toLocaleString()}</b>
+                              Total alat tambahan:{" "}
+                              <b>
+                                Rp{" "}
+                                {tools
+                                  .filter((t) => selectedToolIds.includes(t.id))
+                                  .reduce((s, t) => s + (t.price || 0), 0)
+                                  .toLocaleString()}
+                              </b>
                             </Text>
                           </Alert>
                         )}
@@ -794,7 +821,8 @@ export default function CheckoutCoursePage() {
           const total = discountedCourse + addonsTotal;
           return (
             <Text fw={700} size="lg">
-              Konfirmasi {total === 0 && coursePrice === 0 ? "Pendaftaran" : "Pembayaran"}
+              Konfirmasi{" "}
+              {total === 0 && coursePrice === 0 ? "Pendaftaran" : "Pembayaran"}
             </Text>
           );
         })()}
@@ -815,7 +843,15 @@ export default function CheckoutCoursePage() {
               if (total === 0 && coursePrice === 0) {
                 return "Anda akan terdaftar di kursus gratis ini. Lanjutkan?";
               }
-              return `Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi sebesar Rp ${total.toLocaleString()}${discountAmount > 0 ? ` (Diskon Rp ${discountAmount.toLocaleString()} pada kursus)` : ""}${addonsTotal > 0 ? ` + Rp ${addonsTotal.toLocaleString()} alat tambahan` : ""}. Lanjutkan?`;
+              return `Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi sebesar Rp ${total.toLocaleString()}${
+                discountAmount > 0
+                  ? ` (Diskon Rp ${discountAmount.toLocaleString()} pada kursus)`
+                  : ""
+              }${
+                addonsTotal > 0
+                  ? ` + Rp ${addonsTotal.toLocaleString()} alat tambahan`
+                  : ""
+              }. Lanjutkan?`;
             })()}
           </Text>
           <Group justify="flex-end" gap="sm">
@@ -848,6 +884,36 @@ export default function CheckoutCoursePage() {
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      {/* Tool Detail Modal */}
+      <Modal
+        opened={toolDetailOpen}
+        onClose={() => setToolDetailOpen(false)}
+        title={
+          <Group gap="sm">
+            <IconTool size={20} />
+            <Text fw={700}>{activeTool?.title || "Detail Alat"}</Text>
+          </Group>
+        }
+        size="lg"
+        centered
+      >
+        {activeTool && (
+          <Stack gap="md">
+            <div
+              dangerouslySetInnerHTML={{
+                __html: activeTool.text_content || "",
+              }}
+              style={{ lineHeight: 1.7 }}
+            />
+            {typeof activeTool.price === "number" && activeTool.price > 0 && (
+              <Text fw={600}>
+                Perkiraan biaya: Rp {activeTool.price.toLocaleString()}
+              </Text>
+            )}
+          </Stack>
+        )}
       </Modal>
     </Container>
   );

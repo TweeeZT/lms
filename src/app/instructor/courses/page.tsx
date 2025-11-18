@@ -38,6 +38,7 @@ export default function InstructorCoursesPage() {
     rating?: number | null;
     is_published?: boolean | null;
     points?: number | null;
+    access_duration_days?: number | null;
     created_at: string;
     updated_at?: string;
   };
@@ -57,6 +58,8 @@ export default function InstructorCoursesPage() {
     points: 0,
     overviewTitle: "",
     overviewContent: "",
+    accessDurationType: "lifetime" as "lifetime" | "limited",
+    accessDurationDays: 0,
   });
   const [errors, setErrors] = useState<{
     title?: string;
@@ -109,6 +112,8 @@ export default function InstructorCoursesPage() {
       points: 0,
       overviewTitle: "",
       overviewContent: "",
+      accessDurationType: "lifetime",
+      accessDurationDays: 0,
     });
     setEditingId(null);
     setErrors({});
@@ -138,6 +143,11 @@ export default function InstructorCoursesPage() {
       points: Number(c.points || 0),
       overviewTitle: "",
       overviewContent: "",
+      accessDurationType:
+        c.access_duration_days && c.access_duration_days > 0
+          ? "limited"
+          : "lifetime",
+      accessDurationDays: Number(c.access_duration_days || 0),
     });
     setSelectedFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -317,6 +327,11 @@ export default function InstructorCoursesPage() {
           fd.append("points", String(form.points ?? 0));
           fd.append("overviewTitle", form.overviewTitle || "");
           fd.append("overviewContent", form.overviewContent || "");
+          if (form.accessDurationType === "limited" && form.accessDurationDays > 0) {
+            fd.append("access_duration_days", String(form.accessDurationDays));
+          } else {
+            fd.append("access_duration_days", "");
+          }
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
           res = await fetch(
@@ -344,7 +359,12 @@ export default function InstructorCoursesPage() {
                 duration_min: form.durationMin,
                 points: form.points,
                 overviewTitle: form.overviewTitle || "",
-                overviewContent: form.overviewContent || "",
+                  overviewContent: form.overviewContent || "",
+                  access_duration_days:
+                    form.accessDurationType === "limited" &&
+                    form.accessDurationDays > 0
+                      ? form.accessDurationDays
+                      : null,
               }),
             }
           );
@@ -370,6 +390,11 @@ export default function InstructorCoursesPage() {
         fd.append("points", String(form.points ?? 0));
         fd.append("overviewTitle", form.overviewTitle || "");
         fd.append("overviewContent", form.overviewContent || "");
+        if (form.accessDurationType === "limited" && form.accessDurationDays > 0) {
+          fd.append("access_duration_days", String(form.accessDurationDays));
+        } else {
+          fd.append("access_duration_days", "");
+        }
         if (selectedFile) {
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
@@ -726,6 +751,11 @@ export default function InstructorCoursesPage() {
                       <Badge size="sm" variant="light" color="grape">
                         {Math.round((course.duration_min ?? 0) / 60)} jam
                       </Badge>
+                      <Badge size="sm" variant="light" color="blue">
+                        {course.access_duration_days && course.access_duration_days > 0
+                          ? `${course.access_duration_days} hari akses`
+                          : "Akses seumur hidup"}
+                      </Badge>
                     </Group>
                     <Group justify="space-between" align="center">
                       <Text fw={700} c="green">
@@ -994,6 +1024,39 @@ export default function InstructorCoursesPage() {
             withAsterisk
             disabled={saving}
           />
+          <Group align="flex-end" grow>
+            <Select
+              label="Masa Akses"
+              data={[
+                { value: "lifetime", label: "Permanen (seumur hidup)" },
+                { value: "limited", label: "Durasi tertentu" },
+              ]}
+              value={form.accessDurationType}
+              onChange={(v) =>
+                setForm((prev) => ({
+                  ...prev,
+                  accessDurationType:
+                    (v as "lifetime" | "limited") || "lifetime",
+                }))
+              }
+              disabled={saving}
+            />
+            {form.accessDurationType === "limited" && (
+              <NumberInput
+                label="Durasi (hari)"
+                value={form.accessDurationDays}
+                onChange={(v) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    accessDurationDays: Number(v || 0),
+                  }))
+                }
+                min={1}
+                description="Contoh: 180 untuk 6 bulan, 365 untuk 1 tahun"
+                disabled={saving}
+              />
+            )}
+          </Group>
           <Group justify="space-between" wrap="nowrap">
             <Switch
               label="Tayang"

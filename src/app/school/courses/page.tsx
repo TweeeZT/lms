@@ -53,6 +53,8 @@ type ApiCourse = {
   rating?: number | null;
   instructor?: { id: string; fullName: string; avatar?: string | null } | null;
   points?: number | null; // new: points from courses.points
+  expiresAt?: string | null;
+  isExpired?: boolean;
 };
 
 type ApiEnrollmentItem = {
@@ -350,6 +352,8 @@ export default function UserCoursesPage() {
                 const course = row.course!;
                 const completedCount = row.progress?.completedCount ?? 0;
                 const totalModules = course.totalModules ?? null; // backend-provided fallback
+                const expireTs = course.expiresAt && !isNaN(Date.parse(course.expiresAt)) ? Date.parse(course.expiresAt) : null;
+                const expired = course.isExpired ?? (!!expireTs && Date.now() > expireTs);
                 const isCompleted =
                   (typeof row.progress?.percentage === "number" && row.progress.percentage >= 100) ||
                   (totalModules !== null && completedCount >= totalModules);
@@ -360,6 +364,11 @@ export default function UserCoursesPage() {
                     ? Math.round((completedCount / totalModules) * 100)
                     : 0;
                 const currentModule = completedCount;
+                const expiryLabel = course.expiresAt && !expired
+                  ? `Berlaku hingga ${new Date(course.expiresAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : course.expiresAt && expired
+                  ? `Kedaluwarsa ${new Date(course.expiresAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : 'Berlaku selamanya';
 
                 return (
                   <Card
@@ -410,9 +419,9 @@ export default function UserCoursesPage() {
                       >
                         <Badge
                           variant="filled"
-                          color={isCompleted ? "green" : "blue"}
+                          color={expired ? "red" : isCompleted ? "green" : "blue"}
                         >
-                          {isCompleted ? "Selesai" : "Berlangsung"}
+                          {expired ? "Kedaluwarsa" : isCompleted ? "Selesai" : "Berlangsung"}
                         </Badge>
                       </div>
                       {isCompleted && (
@@ -480,6 +489,7 @@ export default function UserCoursesPage() {
                           value={progress}
                           color={isCompleted ? "green" : "blue"}
                         />
+                        <Text size="xs" c="dimmed" mt={4}>{expiryLabel}</Text>
                       </div>
 
                       <Group justify="space-between">

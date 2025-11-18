@@ -263,6 +263,25 @@ export async function GET(req: NextRequest) {
             .eq("course_id", resolvedCourse)
             .maybeSingle();
           if (!progress) {
+            // Compute expire_at based on course access_duration_days for paid enrollments
+            let expireAt: string | null = null;
+            try {
+              const { data: courseMeta } = await supabaseAdmin
+                .from("courses")
+                .select("access_duration_days")
+                .eq("id", resolvedCourse)
+                .maybeSingle();
+              const accessDays = (courseMeta as any)?.access_duration_days as
+                | number
+                | null
+                | undefined;
+              if (accessDays && accessDays > 0) {
+                const base = new Date();
+                base.setDate(base.getDate() + accessDays);
+                expireAt = base.toISOString();
+              }
+            } catch {}
+
             // fetch first published module for course
             let firstModule: string | null = null;
             try {
@@ -281,6 +300,7 @@ export async function GET(req: NextRequest) {
               completed_modules: [],
               progress_percentage: 0,
               current_module_id: firstModule,
+              expire_at: expireAt,
             });
           }
         } catch {}
@@ -348,7 +368,7 @@ export async function POST(req: NextRequest) {
     // Get course details
     const { data: course, error: courseErr } = await supabaseAdmin
       .from("courses")
-      .select("id, title, price, instructor_id")
+      .select("id, title, price, instructor_id, access_duration_days")
       .eq("id", courseId)
       .maybeSingle();
 
@@ -419,6 +439,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Compute expire_at based on course access_duration_days (if limited)
+    let expireAt: string | null = null;
+    const accessDays = (course as any)?.access_duration_days as
+      | number
+      | null
+      | undefined;
+    if (accessDays && accessDays > 0) {
+      const now = new Date();
+      now.setDate(now.getDate() + accessDays);
+      expireAt = now.toISOString();
+    }
+
     // Create user_progress (enrollment)
     const { error: progressErr } = await supabaseAdmin
       .from("user_progress")
@@ -430,6 +462,7 @@ export async function POST(req: NextRequest) {
         progress_percentage: 0,
         enrolled_at: new Date().toISOString(),
         last_accessed_at: new Date().toISOString(),
+        expire_at: expireAt,
       });
 
     if (progressErr) {

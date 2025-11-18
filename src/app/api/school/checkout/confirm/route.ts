@@ -53,6 +53,27 @@ export async function POST(req: NextRequest) {
       .map((s: any) => s.user_id)
       .filter(Boolean);
 
+    // Fetch course meta early to compute expiry
+    const { data: courseMetaForExpiry } = await supabase
+      .from("courses")
+      .select("id,title,price,instructor_id,enrolled_count,access_duration_days")
+      .eq("id", courseId)
+      .maybeSingle();
+
+    let expireAtForSchool: string | null = null;
+    let expireAtForStudents: string | null = null;
+    const accessDays = (courseMetaForExpiry as any)?.access_duration_days as
+      | number
+      | null
+      | undefined;
+    if (accessDays && accessDays > 0) {
+      const base = new Date();
+      base.setDate(base.getDate() + accessDays);
+      const iso = base.toISOString();
+      expireAtForSchool = iso;
+      expireAtForStudents = iso;
+    }
+
     // 3. Insert into school_progress if includeSchool and not already exists
     if (includeSchool && !hasSchoolProgress) {
       const newId =
@@ -66,6 +87,7 @@ export async function POST(req: NextRequest) {
           completed_modules: [],
           progress_percentage: 0,
           current_module_id: null,
+          expire_at: expireAtForSchool,
         });
 
       if (schoolProgressError) {
@@ -105,6 +127,7 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           course_id: courseId,
           completed_modules: [],
+          expire_at: expireAtForStudents,
         }));
 
         const { error: studentProgressError } = await supabase

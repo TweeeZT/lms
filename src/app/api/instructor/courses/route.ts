@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from("courses")
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at",
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, access_duration_days, created_at, updated_at",
         { count: "exact" }
       )
       .eq("instructor_id", instructorId)
@@ -168,6 +168,11 @@ export async function POST(req: Request) {
     const is_published = String(form.get("is_published") || "false") === "true";
     const overviewTitle = String(form.get("overviewTitle") || "").trim();
     const overviewContent = String(form.get("overviewContent") || "").trim();
+    const accessDurationRaw = form.get("access_duration_days");
+    const access_duration_days =
+      accessDurationRaw === null || accessDurationRaw === ""
+        ? null
+        : Number(accessDurationRaw);
 
     if (!instructorId || !title) {
       return NextResponse.json(
@@ -249,13 +254,14 @@ export async function POST(req: Request) {
       rating: 0,
       is_published: Boolean(is_published ?? false),
       points: Number(points ?? 0),
+      access_duration_days,
     } as const;
 
     const { data, error } = await supabase
       .from("courses")
       .insert(insertPayload)
       .select(
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, access_duration_days, created_at, updated_at"
       )
       .single();
     if (error) {

@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
         progress_percentage,
         completed_modules,
         current_module_id,
+        expire_at,
         courses (
           id,
           title,
@@ -120,22 +121,29 @@ export async function GET(req: NextRequest) {
     };
 
     // Transform data
-    const items = (data || []).map((row: any) => ({
-      enrollmentId: row.id,
-      enrolledAt: row.enrolled_at,
-      progress: {
-        percentage: row.progress_percentage || 0,
-        completedCount: Array.isArray(row.completed_modules)
-          ? row.completed_modules.length
-          : 0,
-        currentModuleId: row.current_module_id,
-      },
-      course: row.courses
-        ? (() => {
-            const courseSrc = row.courses;
-            const instructor = extractInstructor(courseSrc);
+    const items = (data || []).map((row: any) => {
+      const courseSrc = row.courses;
+      const instructor = courseSrc ? extractInstructor(courseSrc) : null;
 
-            return {
+      // Expiration: prioritize progress.expire_at then course-level
+      const progressExpRaw: unknown = row.expire_at ?? null;
+      const courseExpRaw: unknown = courseSrc?.expires_at ?? courseSrc?.expiry_date ?? null;
+      const finalExpRaw = progressExpRaw || courseExpRaw;
+      const expiresAt: string | null = finalExpRaw ? String(finalExpRaw) : null;
+      const isExpired = !!(expiresAt && !isNaN(Date.parse(expiresAt)) && Date.now() > Date.parse(expiresAt));
+
+      return {
+        enrollmentId: row.id,
+        enrolledAt: row.enrolled_at,
+        progress: {
+          percentage: row.progress_percentage || 0,
+          completedCount: Array.isArray(row.completed_modules)
+            ? row.completed_modules.length
+            : 0,
+          currentModuleId: row.current_module_id,
+        },
+        course: courseSrc
+          ? {
               id: courseSrc.id,
               title: courseSrc.title,
               description: courseSrc.description,
@@ -158,10 +166,12 @@ export async function GET(req: NextRequest) {
               points:
                 courseSrc.points != null ? Number(courseSrc.points) : null,
               instructor,
-            };
-          })()
-        : null,
-    }));
+              expiresAt,
+              isExpired,
+            }
+          : null,
+      };
+    });
 
     return NextResponse.json({
       success: true,

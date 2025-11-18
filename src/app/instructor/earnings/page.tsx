@@ -865,8 +865,8 @@ export default function InstructorEarningsPage() {
               </Button>
             </Group>
             <Divider my={4} />
-            <Group justify="space-between" align="center" wrap="wrap">
-              <Group gap="sm" wrap="wrap">
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
                 <DateInput
                   label="Tanggal Mulai"
                   placeholder="Pilih tanggal mulai"
@@ -881,6 +881,8 @@ export default function InstructorEarningsPage() {
                   locale="id"
                   valueFormat="DD MMMM YYYY"
                 />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
                 <DateInput
                   label="Tanggal Akhir"
                   placeholder="Pilih tanggal akhir"
@@ -893,38 +895,40 @@ export default function InstructorEarningsPage() {
                   locale="id"
                   valueFormat="DD MMMM YYYY"
                 />
-              </Group>
-              <Group gap="sm">
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setStartDate("");
-                    setEndDate("");
-                    setSearch("");
-                    setShowAll(true);
-                    fetchData(1, tx.limit, "searchFilter", {
-                      search: "",
-                      startDate: "",
-                      endDate: "",
-                      showAll: true,
-                    });
-                  }}
-                  disabled={loading || (!startDate && !endDate && !search)}
-                >
-                  Reset
-                </Button>
-                <Button
-                  className="btn-primary"
-                  onClick={() => {
-                    setShowAll(false);
-                    fetchData(1, tx.limit, "searchFilter", { showAll: false });
-                  }}
-                  disabled={loading || !startDate || !endDate}
-                >
-                  Terapkan
-                </Button>
-              </Group>
-            </Group>
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 12, md: 12 }}>
+                <Group gap="sm" justify="flex-end">
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                      setSearch("");
+                      setShowAll(true);
+                      fetchData(1, tx.limit, "searchFilter", {
+                        search: "",
+                        startDate: "",
+                        endDate: "",
+                        showAll: true,
+                      });
+                    }}
+                    disabled={loading || (!startDate && !endDate && !search)}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    className="btn-primary"
+                    onClick={() => {
+                      setShowAll(false);
+                      fetchData(1, tx.limit, "searchFilter", { showAll: false });
+                    }}
+                    disabled={loading || !startDate || !endDate}
+                  >
+                    Terapkan
+                  </Button>
+                </Group>
+              </Grid.Col>
+            </Grid>
           </Stack>
         </Card>
 

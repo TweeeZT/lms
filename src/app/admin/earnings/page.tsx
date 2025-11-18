@@ -20,6 +20,7 @@ import {
   Loader,
   Alert,
   Skeleton,
+  Grid,
 } from "@mantine/core";
 import {
   IconReportMoney,
@@ -889,26 +890,32 @@ export default function AdminEarningsPage() {
         </Group>
 
         {/* Stats Cards */}
-        <Group grow>
-          <StatCard
-            label="Total Pendapatan"
-            value={statsLoading ? (<Loader size="sm" color="white" />) : (formatCurrency(totals.gross))}
-            Icon={IconReportMoney}
-            isLoading={statsLoading}
-          />
-          <StatCard
-            label="Total Transaksi"
-            value={statsLoading ? (<Loader size="sm" color="white" />) : (<AnimatedCounter value={totalTransactions} />)}
-            Icon={IconCash}
-            isLoading={statsLoading}
-          />
-          <StatCard
-            label="Rata-rata per Order"
-            value={statsLoading ? (<Loader size="sm" color="white" />) : (formatCurrency(totalTransactions > 0 ? totals.gross / totalTransactions : 0))}
-            Icon={IconTrendingUp}
-            isLoading={statsLoading}
-          />
-        </Group>
+        <Grid gutter="lg">
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+            <StatCard
+              label="Total Pendapatan"
+              value={statsLoading ? (<Loader size="sm" color="white" />) : (formatCurrency(totals.gross))}
+              Icon={IconReportMoney}
+              isLoading={statsLoading}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+            <StatCard
+              label="Total Transaksi"
+              value={statsLoading ? (<Loader size="sm" color="white" />) : (<AnimatedCounter value={totalTransactions} />)}
+              Icon={IconCash}
+              isLoading={statsLoading}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+            <StatCard
+              label="Rata-rata per Order"
+              value={statsLoading ? (<Loader size="sm" color="white" />) : (formatCurrency(totalTransactions > 0 ? totals.gross / totalTransactions : 0))}
+              Icon={IconTrendingUp}
+              isLoading={statsLoading}
+            />
+          </Grid.Col>
+        </Grid>
 
         {/* Filters */}
         <Paper withBorder p="md">
@@ -916,31 +923,37 @@ export default function AdminEarningsPage() {
             <Text fw={600} size="sm">
               Filter & Pencarian
             </Text>
-            <Group grow>
-              <TextInput
-                placeholder="Cari siswa atau kursus..."
-                value={search}
-                onChange={(e) => setSearch(e.currentTarget.value)}
-              />
-              <DatePickerInput
-                placeholder="Tanggal Mulai"
-                value={startDate}
-                onChange={(val) => setStartDate(val as Date | null)}
-                clearable
-                leftSection={<IconCalendar size={16} />}
-                locale="id"
-                valueFormat="DD MMMM YYYY"
-              />
-              <DatePickerInput
-                placeholder="Tanggal Akhir"
-                value={endDate}
-                onChange={(val) => setEndDate(val as Date | null)}
-                clearable
-                leftSection={<IconCalendar size={16} />}
-                locale="id"
-                valueFormat="DD MMMM YYYY"
-              />
-            </Group>
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, sm: 12, md: 12 }}>
+                <TextInput
+                  placeholder="Cari siswa atau kursus..."
+                  value={search}
+                  onChange={(e) => setSearch(e.currentTarget.value)}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
+                <DatePickerInput
+                  placeholder="Tanggal Mulai"
+                  value={startDate}
+                  onChange={(val) => setStartDate(val as Date | null)}
+                  clearable
+                  leftSection={<IconCalendar size={16} />}
+                  locale="id"
+                  valueFormat="DD MMMM YYYY"
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
+                <DatePickerInput
+                  placeholder="Tanggal Akhir"
+                  value={endDate}
+                  onChange={(val) => setEndDate(val as Date | null)}
+                  clearable
+                  leftSection={<IconCalendar size={16} />}
+                  locale="id"
+                  valueFormat="DD MMMM YYYY"
+                />
+              </Grid.Col>
+            </Grid>
             {(startDate || endDate || search) && (
               <Group>
                 {startDate && (

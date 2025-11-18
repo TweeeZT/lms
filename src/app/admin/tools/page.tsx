@@ -14,6 +14,7 @@ import {
   TextInput,
   NumberInput,
   Tooltip,
+  Skeleton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconEdit, IconPlus, IconTrash, IconSearch } from "@tabler/icons-react";
@@ -52,7 +53,8 @@ export default function AdminToolsPage() {
   const [courses, setCourses] = useState<{ value: string; label: string }[]>(
     []
   );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // untuk form/delete/create
+  const [toolsLoading, setToolsLoading] = useState(false); // untuk loading data tools
   const [initialLoading, setInitialLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export default function AdminToolsPage() {
   };
 
   const fetchTools = async () => {
-    setLoading(true);
+    setToolsLoading(true);
     try {
       const params = new URLSearchParams({
         page: "1",
@@ -148,19 +150,22 @@ export default function AdminToolsPage() {
         color: "red",
       });
     } finally {
-      setLoading(false);
+      setToolsLoading(false);
     }
   };
 
   useEffect(() => {
     if (user?.id) {
       fetchCourses();
-      fetchTools().finally(() => setInitialLoading(false));
+      fetchTools();
+      setInitialLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    fetchTools();
+    if (!initialLoading) {
+      fetchTools();
+    }
   }, [search, courseFilter]);
 
   const resetForm = () => {
@@ -278,67 +283,13 @@ export default function AdminToolsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(255,255,255,0.98)",
-          backdropFilter: "blur(8px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9999,
-        }}
-      >
-        <div style={{ display: "flex", gap: 24 }}>
-          {[0, 1, 2].map((i) => (
-            <svg
-              key={i}
-              width="64"
-              height="64"
-              viewBox="0 0 64 64"
-              style={{
-                animation: "spinDiamond 1.2s linear infinite",
-                animationDelay: `${i * 0.2}s`,
-              }}
-            >
-              <rect
-                x="12"
-                y="12"
-                width="40"
-                height="40"
-                fill="none"
-                stroke="url(#grad)"
-                strokeWidth="8"
-                rx="4"
-                ry="4"
-                transform="rotate(45 32 32)"
-              />
-              <defs>
-                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#f6d457" />
-                  <stop offset="100%" stopColor="#1e3769" />
-                </linearGradient>
-              </defs>
-            </svg>
-          ))}
-        </div>
-        <style>{`
-            @keyframes spinDiamond {
-              from { transform: rotate(0deg); }
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
-      </div>
-    );
-  }
+  // Loading overlay hanya untuk proses form/delete/create, bukan filter/search
+  // Untuk loading filter/search, gunakan skeleton pada tabel saja
 
   return (
     <Stack gap="md" p="md">
-      <Group justify="space-between">
-        <div>
+      <Group justify="space-between" wrap="wrap" gap="md" style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 200, flex: 1 }}>
           <Text fw={700} size="xl">
             Manajemen Alat Peraga Robotik
           </Text>
@@ -346,23 +297,23 @@ export default function AdminToolsPage() {
             Kelola alat untuk kursus robotik
           </Text>
         </div>
-        <Button leftSection={<IconPlus size={16} />} onClick={onCreate}>
+        <Button leftSection={<IconPlus size={16} />} onClick={onCreate} style={{ marginTop: 8, minWidth: 120 }}>
           Tambah Alat
         </Button>
       </Group>
 
       <Card withBorder>
         <Stack gap="sm">
-          <Group gap="sm">
+          <Stack gap="sm" style={{ width: '100%' }}>
             <TextInput
               leftSection={<IconSearch size={16} />}
               placeholder="Cari judul alat..."
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
-              w={360}
+              style={{ minWidth: 160, width: '100%' }}
             />
             <Select
-              w={280}
+              style={{ minWidth: 140, width: '100%' }}
               placeholder="Filter kursus"
               data={courses}
               value={courseFilter}
@@ -370,53 +321,75 @@ export default function AdminToolsPage() {
               clearable
               searchable
             />
-          </Group>
+          </Stack>
 
-          {/* Wrapper dengan horizontal scroll untuk mobile */}
+          {/* Tabel responsif dengan scroll horizontal di mobile */}
           <div style={{ overflowX: "auto", width: "100%" }}>
-            <Table style={{ minWidth: 600 }}>
+            <Table style={{ minWidth: 600, width: '100%' }}>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Kursus</Table.Th>
-                  <Table.Th>Judul Alat</Table.Th>
-                  <Table.Th>Harga</Table.Th>
-                  <Table.Th>Aksi</Table.Th>
+                  <Table.Th style={{ minWidth: 120 }}>Kursus</Table.Th>
+                  <Table.Th style={{ minWidth: 120 }}>Judul Alat</Table.Th>
+                  <Table.Th style={{ minWidth: 80 }}>Harga</Table.Th>
+                  <Table.Th style={{ minWidth: 80 }}>Aksi</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {tools.map((row) => (
-                  <Table.Tr key={row.id}>
-                    <Table.Td>
-                      <Text fw={600} size="sm">
-                        {row.courses?.title || "-"}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">{row.title || "-"}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text fw={500}>{formatCurrency(row.price)}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <ActionIcon
-                          variant="light"
-                          color="blue"
-                          onClick={() => onEdit(row)}
-                        >
-                          <IconEdit size={16} />
-                        </ActionIcon>
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          onClick={() => onDelete(row)}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
-                      </Group>
+                {toolsLoading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <Table.Tr key={`sk-${i}`}>
+                      <Table.Td><Skeleton height={14} width={120} /></Table.Td>
+                      <Table.Td><Skeleton height={14} width={120} /></Table.Td>
+                      <Table.Td><Skeleton height={14} width={80} /></Table.Td>
+                      <Table.Td>
+                        <Group gap="xs">
+                          <Skeleton height={30} width={30} radius="md" />
+                          <Skeleton height={30} width={30} radius="md" />
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                ) : tools.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={4} style={{ textAlign: "center" }}>
+                      <Text size="sm" c="dimmed">Tidak ada alat ditemukan.</Text>
                     </Table.Td>
                   </Table.Tr>
-                ))}
+                ) : (
+                  tools.map((row) => (
+                    <Table.Tr key={row.id}>
+                      <Table.Td>
+                        <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
+                          {row.courses?.title || "-"}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm" style={{ wordBreak: 'break-word' }}>{row.title || "-"}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fw={500}>{formatCurrency(row.price)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" wrap="wrap">
+                          <ActionIcon
+                            variant="light"
+                            color="blue"
+                            onClick={() => onEdit(row)}
+                          >
+                            <IconEdit size={16} />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            onClick={() => onDelete(row)}
+                          >
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
               </Table.Tbody>
             </Table>
           </div>

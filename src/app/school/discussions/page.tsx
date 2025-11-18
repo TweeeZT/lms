@@ -370,7 +370,7 @@ export default function UserDiscussionsPage() {
                       </Group>
                       <div style={{ marginBottom: 12 }}>
                         <Group gap="xs" mb={6} align="center" wrap="nowrap">
-                          <Text fw={600} size="sm">
+                          <Text fw={600} size="sm" style={{ wordBreak: "break-word", overflowWrap: "break-word", flex: 1, minWidth: 0 }}>
                             {post.title}
                           </Text>
                           {post.tags?.[0] && (
@@ -386,7 +386,13 @@ export default function UserDiscussionsPage() {
                         </Group>
                         <Text
                           size="sm"
-                          style={{ lineHeight: 1.5, whiteSpace: "pre-line" }}
+                          style={{ 
+                            lineHeight: 1.5, 
+                            whiteSpace: "pre-line",
+                            wordBreak: "break-word",
+                            overflowWrap: "break-word",
+                            maxWidth: "100%"
+                          }}
                         >
                           {post.content.replace(/\\n/g, "\n")}
                         </Text>

@@ -690,6 +690,16 @@ export default function UserPostDetailPage() {
               />
             </Stack>
 
+            <TextInput
+              label="Tag (opsional)"
+              placeholder="Tambahkan tag lalu Enter"
+              value={editTags.join(", ")}
+              onChange={(e) =>
+                setEditTags(e.currentTarget.value.split(/,\s*/).filter(Boolean))
+              }
+              disabled={savingEdit}
+            />
+
             {/* Existing Media */}
             {existingMedia.length > 0 && (
               <Stack gap="xs">

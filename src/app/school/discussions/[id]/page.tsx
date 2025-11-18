@@ -120,6 +120,11 @@ export default function UserPostDetailPage() {
   const [editingComment, setEditingComment] = useState<ApiComment | null>(null);
   const [editText, setEditText] = useState("");
 
+  // Hitung jumlah kata
+  const countWords = (text: string) => {
+    return text.trim().split(/\s+/).filter((word) => word.length > 0).length;
+  };
+
   // Map backend role to human label and color
   const getRoleLabel = (r?: string | null) => {
     if (!r) return null;
@@ -623,34 +628,63 @@ export default function UserPostDetailPage() {
                 )}
 
                 {/* Upload New Media */}
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  disabled={savingEdit}
-                  onChange={(e) => {
-                    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-                    const files = Array.from(e.currentTarget.files || []);
-                    const validated = files.filter((f) => {
-                      if (f.size > MAX_SIZE) {
-                        alert(`File ${f.name} terlalu besar. Maksimal 10MB.`);
-                        return false;
-                      }
-                      return true;
-                    });
-                    setEditFiles(validated);
-                  }}
+                <div
                   style={{
-                    padding: "8px",
-                    border: "1px dashed #ced4da",
-                    borderRadius: "4px",
-                    width: "100%",
+                    position: "relative",
+                    border: "2px dashed #ced4da",
+                    borderRadius: "8px",
+                    padding: "32px 16px",
+                    textAlign: "center",
                     cursor: "pointer",
+                    backgroundColor: "#f8f9fa",
+                    transition: "all 0.2s",
                   }}
-                />
-                <Text size="xs" c="dimmed">
-                  Format: gambar / video (maks 10MB per file)
-                </Text>
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "#228be6";
+                    e.currentTarget.style.backgroundColor = "#f0f6ff";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "#ced4da";
+                    e.currentTarget.style.backgroundColor = "#f8f9fa";
+                  }}
+                  onClick={() => document.getElementById("edit-file-input")?.click()}
+                >
+                  <input
+                    id="edit-file-input"
+                    type="file"
+                    multiple
+                    accept="image/*,video/*"
+                    disabled={savingEdit}
+                    onChange={(e) => {
+                      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+                      const files = Array.from(e.currentTarget.files || []);
+                      const validated = files.filter((f) => {
+                        if (f.size > MAX_SIZE) {
+                          alert(`File ${f.name} terlalu besar. Maksimal 10MB.`);
+                          return false;
+                        }
+                        return true;
+                      });
+                      setEditFiles(validated);
+                    }}
+                    style={{
+                      display: "none",
+                    }}
+                  />
+                  <Stack gap="xs" align="center">
+                    <Text fw={600} size="sm" c="dark">
+                      Klik untuk pilih file
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      Format: gambar / video
+                    </Text>
+                  </Stack>
+                </div>
+                {editFiles.length > 0 && (
+                  <Text size="xs" c="blue" fw={500}>
+                    {editFiles.length} file dipilih
+                  </Text>
+                )}
               </Stack>
             </Stack>
 
@@ -675,7 +709,7 @@ export default function UserPostDetailPage() {
             />
 
             <Text size="xs" c="dimmed" ta="right">
-              0/1500 kata
+              {countWords(editContent)}/1500 kata
             </Text>
 
             <Group justify="flex-end" gap="sm" mt="md">
@@ -761,10 +795,16 @@ export default function UserPostDetailPage() {
                     {relativeTime(post.created_at)}
                   </Text>
                 </Stack>
-                <Title order={3}>{post.title}</Title>
+                <Title order={3} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>{post.title}</Title>
                 <Text
                   size="sm"
-                  style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
+                  style={{ 
+                    whiteSpace: "pre-line", 
+                    lineHeight: 1.6,
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                    maxWidth: "100%"
+                  }}
                 >
                   {post.content
                     .replaceAll("\\r\\n", "\n")
@@ -914,7 +954,15 @@ export default function UserPostDetailPage() {
                         </Group>
                       </Stack>
                     ) : (
-                      <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                      <Text 
+                        size="sm" 
+                        style={{ 
+                          whiteSpace: "pre-line",
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                          maxWidth: "100%"
+                        }}
+                      >
                         {c.content}
                       </Text>
                     )}
@@ -979,10 +1027,10 @@ export default function UserPostDetailPage() {
                     className="card-hover"
                   >
                     <Stack gap="xs">
-                      <Text fw={600} lineClamp={1}>
+                      <Text fw={600} lineClamp={1} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
                         {p.title}
                       </Text>
-                      <Text size="sm" c="dimmed" lineClamp={2}>
+                      <Text size="sm" c="dimmed" lineClamp={2} style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
                         {p.content
                           .replaceAll("\\r\\n", " ")
                           .replaceAll("\\n", " ")}

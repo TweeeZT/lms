@@ -25,7 +25,8 @@ export async function GET(req: Request) {
   const { data, error, count } = await supabaseAdmin
     .from("enrollments")
     .select(
-      "id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, points, is_published, created_at, updated_at, instructor_id, users:instructor_id ( id, full_name, avatar ) ), progress:user_progress!left ( id, completed_modules, current_module_id )",
+      // Select all course fields to include optional expiry columns
+      "id, enrolled_at, course:courses (*, users:instructor_id ( id, full_name, avatar )), progress:user_progress!left ( id, completed_modules, current_module_id, expire_at )",
       { count: "exact" }
     )
     .eq("user_id", userId)
@@ -58,6 +59,7 @@ export async function GET(req: Request) {
     id?: string;
     completed_modules?: unknown;
     current_module_id?: string | null;
+    expire_at?: string | null;
   } | null;
   type EnrollmentJoinedRow = {
     id?: string;
@@ -125,6 +127,12 @@ export async function GET(req: Request) {
         ? Math.min(100, Math.round((completedCount / totalModules) * 100))
         : 0;
       const instructor = normalizeInstructor(c?.users);
+      // Expiration handling prioritizing progress.expire_at then course-level expiry
+      const progressExpRaw: unknown = (p as any)?.expire_at ?? null;
+      const courseExpRaw: unknown = (c as any)?.expires_at ?? (c as any)?.expiry_date ?? null;
+      const finalExpRaw = progressExpRaw || courseExpRaw;
+      const expiresAt: string | null = finalExpRaw ? String(finalExpRaw) : null;
+      const isExpired = !!(expiresAt && !isNaN(Date.parse(expiresAt)) && Date.now() > Date.parse(expiresAt));
       return {
         enrollmentId:
           row.id || `up-${(c as JoinedCourse | null)?.id || "unknown"}`,
@@ -148,6 +156,8 @@ export async function GET(req: Request) {
               isPublished: c.is_published,
               points: c.points ?? null,
               instructor,
+              expiresAt,
+              isExpired,
             }
           : null,
         progress: {
@@ -204,7 +214,8 @@ export async function GET(req: Request) {
   const { data: upRows, error: upErr, count: upCount } = await supabaseAdmin
     .from("user_progress")
     .select(
-      "id, user_id, course_id, completed_modules, current_module_id, enrolled_at, course:courses ( id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, points, is_published, instructor_id, users:instructor_id ( id, full_name, avatar ) )",
+      // Include progress.expire_at and all course fields for expiry compatibility
+      "id, user_id, course_id, completed_modules, current_module_id, expire_at, enrolled_at, course:courses (*, users:instructor_id ( id, full_name, avatar ))",
       { count: "exact" }
     )
     .eq("user_id", userId)
@@ -227,6 +238,7 @@ export async function GET(req: Request) {
     enrolled_at?: string | null;
     created_at?: string | null;
     course?: JoinedCourse | JoinedCourse[] | null;
+    expire_at?: string | null;
   };
   // Prefetch published modules count for fallback as well
   const fallbackCourseIds = (upRows || [])
@@ -275,6 +287,7 @@ export async function GET(req: Request) {
             }
           })(),
       current_module_id: row.current_module_id ?? null,
+      expire_at: row.expire_at ?? null,
     };
     const completedCount = (p.completed_modules as unknown[]).length;
     const totalModules = c?.id
@@ -284,6 +297,13 @@ export async function GET(req: Request) {
       ? Math.min(100, Math.round((completedCount / totalModules) * 100))
       : 0;
     const instructor = normalizeInstructor(c?.users);
+    // Expiration handling prioritizing progress.expire_at then course-level
+    const progressExpRaw: unknown = p?.expire_at ?? null;
+    const courseExpRaw: unknown = (c as any)?.expires_at ?? (c as any)?.expiry_date ?? null;
+    const finalExpRaw = progressExpRaw || courseExpRaw;
+    const expiresAt: string | null = finalExpRaw ? String(finalExpRaw) : null;
+    const isExpired = !!(expiresAt && !isNaN(Date.parse(expiresAt)) && Date.now() > Date.parse(expiresAt));
+
     return {
       enrollmentId: row.id,
       enrolledAt: row.enrolled_at || row.created_at || new Date().toISOString(),
@@ -303,6 +323,8 @@ export async function GET(req: Request) {
               isPublished: c.is_published,
               points: c.points ?? null,
               instructor,
+              expiresAt,
+              isExpired,
             }
         : null,
       progress: {

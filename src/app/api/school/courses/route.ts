@@ -54,11 +54,18 @@ export async function GET(req: Request) {
       }
     }
 
-    // attach totalModules to course objects
-    const coursesWithModules = (courses || []).map((c: any) => ({
-      ...c,
-      totalModules: modulesCountByCourse[c.id] ?? 0,
-    }));
+    // attach totalModules and compute expiration
+    const now = Date.now();
+    const coursesWithModules = (courses || []).map((c: any) => {
+      const rawExp = c?.expires_at ?? c?.expiry_date ?? null;
+      const expTs = rawExp ? Date.parse(String(rawExp)) : NaN;
+      const isExpired = !!(rawExp && !isNaN(expTs) && now > expTs);
+      return {
+        ...c,
+        totalModules: modulesCountByCourse[c.id] ?? 0,
+        isExpired,
+      };
+    });
 
     // Get courses already purchased by this school (check user_progress for all school students)
     const { data: students } = await supabase
@@ -81,9 +88,12 @@ export async function GET(req: Request) {
       ];
     }
 
-    // Filter out already purchased courses
+    // Filter out already purchased courses, but include expired ones (can be repurchased)
+    const expiredIds = new Set(
+      coursesWithModules.filter((c: any) => c.isExpired).map((c: any) => c.id)
+    );
     const availableCourses = coursesWithModules.filter(
-      (course) => !purchasedCourseIds.includes(course.id)
+      (course: any) => !purchasedCourseIds.includes(course.id) || expiredIds.has(course.id)
     );
 
     return NextResponse.json({

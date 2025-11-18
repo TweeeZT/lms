@@ -89,11 +89,29 @@ export async function GET(req: Request) {
           )
       );
     }
-    // dedupe
+    // dedupe first
     purchasedIds = Array.from(new Set(purchasedIds));
+
+    // If there are purchased courses, include expired ones back into explore
     if (purchasedIds.length) {
-      // Supabase does not allow NOT IN with empty list, safe here
-      query = query.not("id", "in", `(${purchasedIds.join(",")})`);
+      // Fetch expiry info for purchased ids (select all columns to be resilient)
+      const { data: purchasedCourses } = await supabaseAdmin
+        .from("courses")
+        .select("id, expires_at, expiry_date")
+        .in("id", purchasedIds);
+      const now = Date.now();
+      const activePurchasedIds = (purchasedCourses || [])
+        .filter((c: any) => {
+          const raw = c?.expires_at ?? c?.expiry_date ?? null;
+          if (!raw) return true; // no expiry => still purchased/active
+          const t = Date.parse(String(raw));
+          if (isNaN(t)) return true;
+          return now <= t; // still active if not passed
+        })
+        .map((c: any) => c.id);
+      if (activePurchasedIds.length) {
+        query = query.not("id", "in", `(${activePurchasedIds.join(",")})`);
+      }
     }
   }
 

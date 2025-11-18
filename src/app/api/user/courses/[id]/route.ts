@@ -21,24 +21,8 @@ export async function GET(
     // Get course info
     const { data: course, error: courseError } = await supabase
       .from("courses")
-      .select(
-        `
-        id,
-        title,
-        description,
-        thumbnail,
-        category,
-        level,
-        price,
-        duration_min,
-        enrolled_count,
-        rating,
-        instructor_id,
-        is_published,
-        created_at,
-        updated_at
-      `
-      )
+      // Select all columns to be resilient to optional fields like expires_at/expiry_date
+      .select("*")
       .eq("id", courseId)
       .single();
 
@@ -86,6 +70,11 @@ export async function GET(
     // Instructors who own the course are implicitly allowed (treated as enrolled for access)
     const isInstructorOfCourse = String(course.instructor_id) === String(userId);
 
+    // Expiration handling: support either courses.expires_at or courses.expiry_date
+    const rawExpires: unknown = (course as any)?.expires_at ?? (course as any)?.expiry_date ?? null;
+    const expiresAt: string | null = rawExpires ? String(rawExpires) : null;
+    const isExpired = !!(expiresAt && !isNaN(Date.parse(expiresAt)) && Date.now() > Date.parse(expiresAt));
+
     // Format response
     const courseData = {
       id: course.id,
@@ -103,10 +92,13 @@ export async function GET(
       instructorId: course.instructor_id,
       instructorName: instructor?.full_name || "Unknown",
       isPublished: course.is_published,
-  isEnrolled: !!enrollment || isInstructorOfCourse,
+  // If expired, treat as not enrolled for access (except instructor)
+  isEnrolled: (!!enrollment || isInstructorOfCourse) && !isExpired,
   isInstructorOfCourse,
       createdAt: course.created_at,
       updatedAt: course.updated_at,
+      expiresAt,
+      isExpired,
     };
 
     return NextResponse.json({

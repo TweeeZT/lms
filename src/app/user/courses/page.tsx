@@ -14,6 +14,7 @@ import {
   SimpleGrid,
   Skeleton,
   Pagination,
+  Modal,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -54,6 +55,8 @@ type ApiCourse = {
   rating?: number | null;
   instructor?: { id: string; fullName: string; avatar?: string | null } | null;
   points?: number | null; // new: points from courses.points
+  expiresAt?: string | null; // optional expiry date
+  isExpired?: boolean; // computed by server if available
 };
 
 type ApiEnrollmentItem = {
@@ -78,6 +81,7 @@ export default function UserCoursesPage() {
     tier: string;
   }>({ points: 0, coins: 0, tier: "Newbie" });
   const limit = 6;
+  const [extendCourse, setExtendCourse] = useState<ApiCourse | null>(null);
 
   // Reusable StatCard (vertical) similar style to admin
   function StatCard({
@@ -388,6 +392,14 @@ export default function UserCoursesPage() {
                     : 0;
                 const currentModule = completedCount;
 
+                const expireTs = course.expiresAt && !isNaN(Date.parse(course.expiresAt)) ? Date.parse(course.expiresAt) : null;
+                const expired = course.isExpired ?? (!!expireTs && Date.now() > expireTs);
+                const expiryLabel = course.expiresAt && !expired
+                  ? `Berlaku hingga ${new Date(course.expiresAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : course.expiresAt && expired
+                  ? `Kedaluwarsa ${new Date(course.expiresAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : 'Berlaku selamanya';
+
                 return (
                   <Card
                     key={row.enrollmentId}
@@ -435,11 +447,8 @@ export default function UserCoursesPage() {
                           zIndex: 1,
                         }}
                       >
-                        <Badge
-                          variant="filled"
-                          color={isCompleted ? "green" : "blue"}
-                        >
-                          {isCompleted ? "Selesai" : "Berlangsung"}
+                        <Badge variant="filled" color={expired ? "red" : isCompleted ? "green" : "blue"}>
+                          {expired ? "Kedaluwarsa" : isCompleted ? "Selesai" : "Berlangsung"}
                         </Badge>
                       </div>
                       {isCompleted && (
@@ -504,6 +513,7 @@ export default function UserCoursesPage() {
                           value={progress}
                           color={isCompleted ? "green" : "blue"}
                         />
+                        <Text size="xs" c="dimmed" mt={4}>{expiryLabel}</Text>
                       </div>
 
                       <Group justify="space-between">
@@ -574,15 +584,26 @@ export default function UserCoursesPage() {
                               Sertifikat
                             </Button>
                           )}
-                          <Button
-                            className="btn-primary"
-                            size="sm"
-                            component={Link}
-                            href={`/user/courses/${course.id}`}
-                            leftSection={<IconPlayerPlayFilled size="0.8rem" />}
-                          >
-                            {isCompleted ? "Resume Materi" : "Lanjutkan"}
-                          </Button>
+                          {expired ? (
+                            <Button
+                              className="btn-primary"
+                              size="sm"
+                              onClick={() => setExtendCourse(course)}
+                              leftSection={<IconPlayerPlayFilled size="0.8rem" />}
+                            >
+                              Perpanjang Kursus
+                            </Button>
+                          ) : (
+                            <Button
+                              className="btn-primary"
+                              size="sm"
+                              component={Link}
+                              href={`/user/courses/${course.id}`}
+                              leftSection={<IconPlayerPlayFilled size="0.8rem" />}
+                            >
+                              {isCompleted ? "Resume Materi" : "Lanjutkan"}
+                            </Button>
+                          )}
                         </Group>
                       </Group>
                     </Stack>
@@ -727,6 +748,39 @@ export default function UserCoursesPage() {
       </Stack>
 
       {/* Detail materi kini dibuka di halaman baru: /user/courses/[id] */}
+
+      {/* Modal perpanjang kursus */}
+      <Modal opened={!!extendCourse} onClose={() => setExtendCourse(null)} title="Perpanjang Kursus" centered>
+        <Stack gap="sm">
+          <Text>
+            Ingin memperpanjang akses untuk kursus
+            {" "}
+            <Text span fw={600}>{extendCourse?.title}</Text>?
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="light" onClick={async () => {
+              if (!user || !extendCourse) return;
+              try {
+                // Unenroll so kursus pindah ke Jelajahi
+                await fetch(`/api/user/courses/${extendCourse.id}/enrollment`, {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: user.id })
+                });
+              } catch {}
+              // Remove from local list immediately
+              setItems(prev => prev.filter(it => it.course?.id !== extendCourse.id));
+              setExtendCourse(null);
+              notifications.show({ color: 'blue', title: 'Dipindahkan', message: 'Kursus dipindahkan ke Jelajahi. Anda dapat membeli kembali kapan saja.' });
+            }}>Tidak</Button>
+            <Button className="btn-primary" onClick={() => {
+              if (!extendCourse) return;
+              // Redirect to checkout
+              window.location.href = `/user/checkout/${extendCourse.id}`;
+            }}>Ya, Perpanjang</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Container>
   );
 }

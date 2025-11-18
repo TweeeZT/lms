@@ -372,7 +372,15 @@ export default function UserDiscussionsPage() {
                       </Group>
 
                       {/* Title */}
-                      <Text fw={600} size="md" mb={8}>
+                      <Text 
+                        fw={600} 
+                        size="md" 
+                        mb={8}
+                        style={{
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                        }}
+                      >
                         {post.title}
                       </Text>
 
@@ -384,6 +392,9 @@ export default function UserDiscussionsPage() {
                           lineHeight: 1.6,
                           whiteSpace: "pre-line",
                           marginBottom: 16,
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                          maxWidth: "100%",
                         }}
                       >
                         {post.content.replace(/\\n/g, "\n")}

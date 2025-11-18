@@ -938,10 +938,24 @@ export default function UserPostDetailPage() {
                     {relativeTime(post.created_at)}
                   </Text>
                 </Stack>
-                <Title order={3}>{post.title}</Title>
+                <Title 
+                  order={3}
+                  style={{
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                  }}
+                >
+                  {post.title}
+                </Title>
                 <Text
                   size="sm"
-                  style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
+                  style={{ 
+                    whiteSpace: "pre-line", 
+                    lineHeight: 1.6,
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                    maxWidth: "100%",
+                  }}
                 >
                   {post.content
                     .replaceAll("\\r\\n", "\n")
@@ -1091,7 +1105,15 @@ export default function UserPostDetailPage() {
                         </Group>
                       </Stack>
                     ) : (
-                      <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                      <Text 
+                        size="sm" 
+                        style={{ 
+                          whiteSpace: "pre-line",
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                          maxWidth: "100%",
+                        }}
+                      >
                         {c.content}
                       </Text>
                     )}
@@ -1156,10 +1178,25 @@ export default function UserPostDetailPage() {
                     className="card-hover"
                   >
                     <Stack gap="xs">
-                      <Text fw={600} lineClamp={1}>
+                      <Text 
+                        fw={600} 
+                        lineClamp={1}
+                        style={{
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                        }}
+                      >
                         {p.title}
                       </Text>
-                      <Text size="sm" c="dimmed" lineClamp={2}>
+                      <Text 
+                        size="sm" 
+                        c="dimmed" 
+                        lineClamp={2}
+                        style={{
+                          wordBreak: "break-word",
+                          overflowWrap: "break-word",
+                        }}
+                      >
                         {p.content
                           .replaceAll("\\r\\n", " ")
                           .replaceAll("\\n", " ")}

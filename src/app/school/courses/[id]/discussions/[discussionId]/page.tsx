@@ -62,8 +62,8 @@ export default function SchoolCourseDiscussionDetailPage() {
             <Text fw={600} size="sm">{post.user?.full_name || 'Pengguna'}</Text>
             <Text size="xs" c="dimmed">• {relativeTime(post.created_at)}</Text>
           </Group>
-          {!editing && <Title order={4}>{post.title}</Title>}
-          {!editing && <Text size="sm" c="dimmed" style={{ whiteSpace:'pre-line' }}>{post.content}</Text>}
+          {!editing && <Title order={4} style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{post.title}</Title>}
+          {!editing && <Text size="sm" c="dimmed" style={{ whiteSpace:'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{post.content}</Text>}
           {editing && (
             <Stack gap="xs">
               <Textarea label="Judul" minRows={1} autosize value={editTitle} onChange={e=>setEditTitle(e.currentTarget.value)} />
@@ -122,7 +122,7 @@ export default function SchoolCourseDiscussionDetailPage() {
                   <Text fw={600} size="sm">{c.user?.full_name || 'Pengguna'}</Text>
                   <Text size="xs" c="dimmed">• {relativeTime(c.created_at)}</Text>
                 </Group>
-                <Text size="sm" c="dimmed" style={{ whiteSpace:'pre-line' }}>{c.content}</Text>
+                <Text size="sm" c="dimmed" style={{ whiteSpace:'pre-line', overflowWrap: 'break-word', wordBreak: 'break-word' }}>{c.content}</Text>
               </div>
             </Group>
           ))}

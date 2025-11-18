@@ -91,8 +91,8 @@ export default function SchoolCourseDiscussionsListPage() {
                 </Avatar>
                 <div style={{ flex:1 }}>
                   <Group gap="xs" mb={8} wrap="wrap" align="center"><Text fw={600} size="sm">{post.user?.full_name || 'Pengguna'}</Text><Text size="xs" c="dimmed">• {relativeTime(post.created_at)}</Text></Group>
-                  <Text fw={600} size="md" mb={8}>{post.title}</Text>
-                  <Text size="sm" c="dimmed" style={{ lineHeight:1.6, whiteSpace:'pre-line', marginBottom:16 }}>{post.content.replace(/\n/g,'\n')}</Text>
+                  <Text fw={600} size="md" mb={8} style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{post.title}</Text>
+                  <Text size="sm" c="dimmed" style={{ lineHeight:1.6, whiteSpace:'pre-line', marginBottom:16, overflowWrap: 'break-word', wordBreak: 'break-word' }}>{post.content.replace(/\n/g,'\n')}</Text>
                   {post.media && post.media.length > 0 && (
                     <div style={{ marginBottom: 12 }}>
                       <SimpleGrid cols={post.media.length > 1 ? 2 : 1} spacing={6}>

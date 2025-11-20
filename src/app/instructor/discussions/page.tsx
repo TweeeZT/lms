@@ -353,7 +353,7 @@ export default function InstructorDiscussionsFeed() {
                     </Link>
 
                     {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0, maxWidth: "100%" }}>
                       {/* Header */}
                       <Group gap="xs" mb={8}>
                         <Text fw={600} size="sm" c="dark">
@@ -376,18 +376,28 @@ export default function InstructorDiscussionsFeed() {
                       {/* Post content */}
                       <div style={{ marginBottom: 12 }}>
                         <Group gap="xs" mb={6} align="center" wrap="nowrap">
-                          <Text fw={600} size="sm">
+                          <Text fw={600} size="sm" style={{ 
+                            wordBreak: "break-word",
+                            overflowWrap: "break-word",
+                            maxWidth: "100%"
+                          }}>
                             {post.title}
                           </Text>
                           {post.tags?.[0] && (
-                            <Badge size="xs" variant="light" color="blue" style={{ textTransform: "uppercase" }}>
+                            <Badge size="xs" variant="light" color="blue" style={{ textTransform: "uppercase", flexShrink: 0 }}>
                               {post.tags[0]}
                             </Badge>
                           )}
                         </Group>
                         <Text
                           size="sm"
-                          style={{ lineHeight: 1.5, whiteSpace: "pre-line" }}
+                          style={{ 
+                            lineHeight: 1.5, 
+                            whiteSpace: "pre-line",
+                            wordBreak: "break-word",
+                            overflowWrap: "break-word",
+                            maxWidth: "100%"
+                          }}
                         >
                           {post.content.replace(/\\n/g, "\n")}
                         </Text>

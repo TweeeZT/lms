@@ -340,7 +340,7 @@ export default function PostDetailPage() {
                   .map((n) => n[0])
                   .join("")}
               </Avatar>
-              <Stack gap={6} style={{ flex: 1 }}>
+              <Stack gap={6} style={{ flex: 1, minWidth: 0, maxWidth: "100%" }}>
                 <Stack gap={4}>
                   <Group gap={12} wrap="wrap" align="center">
                     <Text fw={700} size="sm">
@@ -359,7 +359,13 @@ export default function PostDetailPage() {
 
                 <Text
                   size="sm"
-                  style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}
+                  style={{ 
+                    whiteSpace: "pre-line", 
+                    lineHeight: 1.6,
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                    maxWidth: "100%"
+                  }}
                 >
                   {post.content
                     .replaceAll("\\r\\n", "\n")
@@ -470,7 +476,7 @@ export default function PostDetailPage() {
                       .map((n) => n[0])
                       .join("")}
                   </Avatar>
-                  <Stack gap={4} style={{ flex: 1 }}>
+                  <Stack gap={4} style={{ flex: 1, minWidth: 0, maxWidth: "100%" }}>
                     <Group justify="space-between" align="center">
                       <Group gap="xs" align="center">
                         <Text fw={600} size="sm">
@@ -506,7 +512,12 @@ export default function PostDetailPage() {
                         </Group>
                       </Stack>
                     ) : (
-                      <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                      <Text size="sm" style={{ 
+                        whiteSpace: "pre-line",
+                        wordBreak: "break-word",
+                        overflowWrap: "break-word",
+                        maxWidth: "100%"
+                      }}>
                         {c.content}
                       </Text>
                     )}

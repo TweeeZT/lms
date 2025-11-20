@@ -43,9 +43,10 @@ export async function GET(req: Request) {
     let query = supabase
       .from("discussion_posts")
       .select(
-        "id, user_id, title, content, likes, tags, created_at, updated_at",
+        "id, user_id, title, content, likes, tags, created_at, updated_at, course_id",
         { count: "exact" }
-      );
+      )
+      .is("course_id", null); // Only show posts without course_id (general forum posts)
     if (mine) query = query.eq("user_id", instructorId);
     if (q) query = query.or(`title.ilike.%${q}%,content.ilike.%${q}%`);
     if (sort === "latest")

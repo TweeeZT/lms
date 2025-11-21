@@ -18,6 +18,7 @@ import {
   Divider,
   Skeleton,
   Modal,
+  Textarea,
 } from "@mantine/core";
 import {
   IconHeart,
@@ -107,6 +108,15 @@ export default function PostDetailPage() {
   const [confirmEditComment, setConfirmEditComment] = useState(false);
   const [confirmDeleteComment, setConfirmDeleteComment] =
     useState<ApiComment | null>(null);
+
+  // Edit & Delete Post state
+  const [editingPost, setEditingPost] = useState(false);
+  const [editPostTitle, setEditPostTitle] = useState("");
+  const [editPostContent, setEditPostContent] = useState("");
+  const [editPostTags, setEditPostTags] = useState<string[]>([]);
+  const [confirmDeletePost, setConfirmDeletePost] = useState(false);
+  const [savingPost, setSavingPost] = useState(false);
+  const [deletingPost, setDeletingPost] = useState(false);
 
   // Map backend role to human label and color
   const getRoleLabel = (r?: string | null) => {
@@ -250,6 +260,92 @@ export default function PostDetailPage() {
     });
   };
 
+  const startEditPost = () => {
+    if (!post) return;
+    setEditPostTitle(post.title);
+    setEditPostContent(post.content.replaceAll("\\r\\n", "\n").replaceAll("\\n\\n", "\n"));
+    setEditPostTags(post.tags || []);
+    setEditingPost(true);
+  };
+
+  const cancelEditPost = () => {
+    setEditingPost(false);
+  };
+
+  const saveEditPost = async () => {
+    if (!user || !post) return;
+    if (!editPostTitle.trim() || !editPostContent.trim()) {
+      notifications.show({
+        title: "Error",
+        message: "Judul dan konten wajib diisi",
+        color: "red",
+      });
+      return;
+    }
+    setSavingPost(true);
+    try {
+      const res = await fetch(`/api/instructor/discussions/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instructorId: user.id,
+          action: "update",
+          title: editPostTitle.trim(),
+          content: editPostContent.trim(),
+          tags: editPostTags,
+        }),
+      });
+      if (res.ok) {
+        await load();
+        setEditingPost(false);
+        notifications.show({
+          title: "Berhasil",
+          message: "Postingan berhasil diupdate",
+          color: "green",
+        });
+      } else {
+        const json = await res.json();
+        notifications.show({
+          title: "Gagal",
+          message: json.error || "Gagal update postingan",
+          color: "red",
+        });
+      }
+    } finally {
+      setSavingPost(false);
+    }
+  };
+
+  const handleDeletePost = async () => {
+    if (!user || !post) return;
+    setDeletingPost(true);
+    try {
+      const res = await fetch(`/api/instructor/discussions/${postId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instructorId: user.id }),
+      });
+      if (res.ok) {
+        notifications.show({
+          title: "Berhasil",
+          message: "Postingan berhasil dihapus",
+          color: "green",
+        });
+        router.push("/instructor/discussions");
+      } else {
+        const json = await res.json();
+        notifications.show({
+          title: "Gagal",
+          message: json.error || "Gagal menghapus postingan",
+          color: "red",
+        });
+      }
+    } finally {
+      setDeletingPost(false);
+      setConfirmDeletePost(false);
+    }
+  };
+
   if (loading) {
     return (
       <Container size="xl">
@@ -294,6 +390,26 @@ export default function PostDetailPage() {
           >
             Kembali ke Forum
           </Button>
+          {/* Edit & Delete buttons for own posts */}
+          {user && post.user_id === user.id && (
+            <Group gap="sm">
+              <Button
+                size="sm"
+                leftSection={<IconEdit size="1rem" />}
+                onClick={startEditPost}
+              >
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                color="red"
+                leftSection={<IconTrash size="1rem" />}
+                onClick={() => setConfirmDeletePost(true)}
+              >
+                Hapus
+              </Button>
+            </Group>
+          )}
         </Group>
 
         <Card
@@ -357,6 +473,12 @@ export default function PostDetailPage() {
                   </Text>
                 </Stack>
 
+                {/* Title */}
+                <Title order={3} mt="xs" mb="xs">
+                  {post.title}
+                </Title>
+
+                {/* Content */}
                 <Text
                   size="sm"
                   style={{ 
@@ -372,6 +494,7 @@ export default function PostDetailPage() {
                     .replaceAll("\\n\\n", "\n")}
                 </Text>
 
+                {/* Tags */}
                 {post.tags?.length > 0 && (
                   <Group gap={8} wrap="wrap" mt="xs">
                     {post.tags.map((t) => (
@@ -596,6 +719,79 @@ export default function PostDetailPage() {
                 Batal
               </Button>
               <Button color="red" onClick={handleDeleteComment}>
+                Hapus
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+
+        {/* Modal Edit Post */}
+        <Modal
+          opened={editingPost}
+          onClose={cancelEditPost}
+          title="Edit Postingan"
+          size="lg"
+          centered
+        >
+          <Stack gap="md">
+            <TextInput
+              label="Judul"
+              placeholder="Judul diskusi"
+              value={editPostTitle}
+              onChange={(e) => setEditPostTitle(e.currentTarget.value)}
+              required
+            />
+            <Textarea
+              label="Konten"
+              placeholder="Tulis konten diskusi..."
+              value={editPostContent}
+              onChange={(e) => setEditPostContent(e.currentTarget.value)}
+              minRows={6}
+              required
+            />
+            <TextInput
+              label="Tags (opsional, pisahkan dengan koma)"
+              placeholder="contoh: javascript, react, tutorial"
+              value={editPostTags.join(", ")}
+              onChange={(e) => {
+                const tags = e.currentTarget.value
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter((t) => t);
+                setEditPostTags(tags);
+              }}
+            />
+            <Group justify="flex-end" gap="sm">
+              <Button variant="subtle" onClick={cancelEditPost} disabled={savingPost}>
+                Batal
+              </Button>
+              <Button onClick={saveEditPost} loading={savingPost}>
+                Simpan
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+
+        {/* Modal Konfirmasi Hapus Post */}
+        <Modal
+          opened={confirmDeletePost}
+          onClose={() => setConfirmDeletePost(false)}
+          title="Konfirmasi Hapus Postingan"
+          centered
+        >
+          <Stack>
+            <Text>
+              Apakah kamu yakin ingin menghapus postingan ini? Semua komentar dan media akan ikut terhapus. Tindakan ini tidak bisa dibatalkan.
+            </Text>
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="default"
+                onClick={() => setConfirmDeletePost(false)}
+                disabled={deletingPost}
+              >
+                Batal
+              </Button>
+              <Button color="red" onClick={handleDeletePost} loading={deletingPost}>
                 Hapus
               </Button>
             </Group>

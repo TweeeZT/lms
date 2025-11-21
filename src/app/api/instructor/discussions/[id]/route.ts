@@ -238,3 +238,83 @@ export async function PATCH(
     );
   }
 }
+
+// DELETE /api/instructor/discussions/[id]  Body { instructorId }
+export async function DELETE(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const body = (await req.json().catch(() => ({}))) as {
+      instructorId?: string;
+    };
+    const instructorId = body.instructorId;
+    if (!instructorId) {
+      return NextResponse.json(
+        { success: false, error: "instructorId wajib" },
+        { status: 400 }
+      );
+    }
+    const postId = params.id;
+    const { data: post } = await supabase
+      .from("discussion_posts")
+      .select("id, user_id")
+      .eq("id", postId)
+      .maybeSingle();
+    if (!post)
+      return NextResponse.json(
+        { success: false, error: "Post tidak ditemukan" },
+        { status: 404 }
+      );
+    if (post.user_id !== instructorId) {
+      return NextResponse.json(
+        { success: false, error: "Tidak boleh menghapus posting orang lain" },
+        { status: 403 }
+      );
+    }
+
+    // Fetch media to optionally delete storage objects
+    const { data: media } = await supabase
+      .from("discussion_media")
+      .select("id, url")
+      .eq("post_id", postId);
+
+    // Delete likes first (foreign key constraint)
+    await supabase
+      .from("discussion_likes")
+      .delete()
+      .eq("discussion_id", postId);
+    // Delete comments
+    await supabase.from("discussion_comments").delete().eq("post_id", postId);
+    // Delete media rows
+    await supabase.from("discussion_media").delete().eq("post_id", postId);
+    // Delete post
+    await supabase.from("discussion_posts").delete().eq("id", postId);
+
+    // Best-effort delete storage objects (derive path after domain /object/public/discussion/)
+    const paths: string[] = [];
+    interface MediaRow {
+      id: string;
+      url: string;
+    }
+    (media || []).forEach((m: MediaRow) => {
+      const marker = "/object/public/discussion/";
+      const idx = m.url.indexOf(marker);
+      if (idx !== -1) {
+        const path = m.url.substring(idx + marker.length);
+        if (path) paths.push(path);
+      }
+    });
+    if (paths.length) {
+      await supabase.storage.from("discussion").remove(paths);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal menghapus";
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
+  }
+}

@@ -63,16 +63,16 @@ export async function GET(
     // Check if user is enrolled
     const { data: enrollment } = await supabase
       .from(isSchool ? "school_progress" : "user_progress")
-      .select("id, completed_modules, current_module_id")
+      .select("id, completed_modules, current_module_id, expire_at")
       .eq("user_id", userId)
       .eq("course_id", courseId)
       .single();
     // Instructors who own the course are implicitly allowed (treated as enrolled for access)
     const isInstructorOfCourse = String(course.instructor_id) === String(userId);
 
-    // Expiration handling: support either courses.expires_at or courses.expiry_date
-    const rawExpires: unknown = (course as any)?.expires_at ?? (course as any)?.expiry_date ?? null;
-    const expiresAt: string | null = rawExpires ? String(rawExpires) : null;
+    // Expiration handling: use expire_at directly from enrollment
+    const expireAt = (enrollment as any)?.expire_at;
+    const expiresAt: string | null = expireAt ? String(expireAt) : null;
     const isExpired = !!(expiresAt && !isNaN(Date.parse(expiresAt)) && Date.now() > Date.parse(expiresAt));
 
     // Format response

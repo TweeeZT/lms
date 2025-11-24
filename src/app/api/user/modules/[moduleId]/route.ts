@@ -28,6 +28,39 @@ export async function GET(
       { status: 404 }
     );
 
+  // Check if course is expired using expire_at from user_progress
+  const { data: courseData } = await supabaseAdmin
+    .from("courses")
+    .select("id, instructor_id")
+    .eq("id", mod.course_id)
+    .maybeSingle();
+  
+  if (courseData) {
+    const isInstructor = String(courseData.instructor_id) === String(userId);
+    
+    if (!isInstructor) {
+      // Get expire_at from user_progress
+      const { data: progress } = await supabaseAdmin
+        .from("user_progress")
+        .select("expire_at")
+        .eq("user_id", userId)
+        .eq("course_id", mod.course_id)
+        .maybeSingle();
+      
+      if (progress?.expire_at) {
+        const expiryTime = Date.parse(progress.expire_at);
+        const isExpired = !isNaN(expiryTime) && Date.now() > expiryTime;
+        
+        if (isExpired) {
+          return NextResponse.json(
+            { success: false, error: "Kursus ini telah kedaluwarsa. Silakan beli lagi untuk melanjutkan." },
+            { status: 403 }
+          );
+        }
+      }
+    }
+  }
+
   // Content (optional)
   const { data: content } = await supabaseAdmin
     .from("module_contents")
@@ -378,6 +411,39 @@ export async function POST(
       { success: false, error: "Invalid payload" },
       { status: 400 }
     );
+  }
+
+  // Check if course is expired before allowing any action using expire_at
+  const { data: courseData } = await supabaseAdmin
+    .from("courses")
+    .select("id, instructor_id")
+    .eq("id", courseId)
+    .maybeSingle();
+  
+  if (courseData) {
+    const isInstructor = String(courseData.instructor_id) === String(userId);
+    
+    if (!isInstructor) {
+      // Get expire_at from user_progress
+      const { data: progress } = await supabaseAdmin
+        .from("user_progress")
+        .select("expire_at")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+      
+      if (progress?.expire_at) {
+        const expiryTime = Date.parse(progress.expire_at);
+        const isExpired = !isNaN(expiryTime) && Date.now() > expiryTime;
+        
+        if (isExpired) {
+          return NextResponse.json(
+            { success: false, error: "Kursus ini telah kedaluwarsa. Silakan beli lagi untuk melanjutkan." },
+            { status: 403 }
+          );
+        }
+      }
+    }
   }
 
   // Helper to compute progress percentage

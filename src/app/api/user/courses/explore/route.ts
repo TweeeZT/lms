@@ -61,6 +61,7 @@ export async function GET(req: Request) {
       .from("enrollments")
       .select("course_id")
       .eq("user_id", userId);
+    
     if (Array.isArray(enrRows)) {
       purchasedIds.push(
         ...enrRows
@@ -71,30 +72,58 @@ export async function GET(req: Request) {
           )
       );
     }
-    // gather from user_progress as fallback (legacy)
+    // gather from user_progress - use expire_at directly
     interface ProgressRow {
       course_id?: string | null;
+      expire_at?: string | null;
     }
     const { data: progRows } = await supabaseAdmin
       .from("user_progress")
-      .select("course_id")
+      .select("course_id, expire_at")
       .eq("user_id", userId);
+    
+    // Map to store expiry dates for each course
+    const expiryDates: Record<string, string | null> = {};
+    
     if (Array.isArray(progRows)) {
-      purchasedIds.push(
-        ...progRows
-          .map((r: ProgressRow) => r.course_id)
-          .filter(
-            (v: string | null | undefined): v is string =>
-              typeof v === "string" && !!v
-          )
-      );
+      progRows.forEach((r: ProgressRow) => {
+        if (r.course_id && typeof r.course_id === "string") {
+          purchasedIds.push(r.course_id);
+          expiryDates[r.course_id] = r.expire_at || null;
+        }
+      });
     }
     // dedupe first
     purchasedIds = Array.from(new Set(purchasedIds));
 
-    // Exclude all purchased courses from explore
-    if (purchasedIds.length) {
-      query = query.not("id", "in", `(${purchasedIds.join(",")})`);
+    // Smart filtering based on expire_at:
+    // - Courses without expire_at (null): permanently hidden after purchase
+    // - Courses with expire_at: hidden only while active, reappear after expiry
+    if (purchasedIds.length > 0) {
+      const now = Date.now();
+      const toExclude: string[] = [];
+      
+      purchasedIds.forEach((courseId) => {
+        const expireAt = expiryDates[courseId];
+        
+        if (!expireAt) {
+          // No expiry date = permanent purchase, always hide from explore
+          toExclude.push(courseId);
+        } else {
+          // Has expiry date = check if still active
+          const expiryTime = Date.parse(expireAt);
+          if (!isNaN(expiryTime) && now <= expiryTime) {
+            // Still active, hide from explore
+            toExclude.push(courseId);
+          }
+          // If expired (now > expiryTime), don't add to exclude list
+          // so it will appear in explore again for repurchase
+        }
+      });
+      
+      if (toExclude.length > 0) {
+        query = query.not("id", "in", `(${toExclude.join(",")})`);
+      }
     }
   }
 

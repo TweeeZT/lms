@@ -73,6 +73,9 @@ type CourseData = {
   enrolledCount: number;
   rating?: number;
   isEnrolled?: boolean; // from API, used to gate course-specific discussion
+  expiresAt?: string | null;
+  isExpired?: boolean;
+  isInstructorOfCourse?: boolean;
 };
 
 const MODULE_ICONS = {
@@ -138,7 +141,20 @@ export default function CourseOverviewPage() {
         if (!courseRes.ok || !courseJson.success) {
           throw new Error(courseJson.error || "Gagal memuat kursus");
         }
-        setCourse(courseJson.course);
+        
+        const courseData = courseJson.course;
+        setCourse(courseData);
+
+        // Check if course is expired and user is not the instructor
+        if (courseData.isExpired && !courseData.isInstructorOfCourse) {
+          notifications.show({
+            title: "Kursus Kedaluwarsa",
+            message: "Masa aktif kursus ini telah berakhir. Silakan beli lagi untuk melanjutkan.",
+            color: "orange",
+          });
+          router.push(`/user/checkout/${courseId}`);
+          return;
+        }
 
         // Load modules
         const modulesRes = await fetch(

@@ -36,7 +36,7 @@ export async function GET(
       .from("courses")
       .select(
         // removed total_modules from select
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, created_at, updated_at, users:instructor_id(full_name)"
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, access_duration_days, created_at, updated_at, users:instructor_id(full_name)"
       )
       .eq("id", courseId)
       .maybeSingle();

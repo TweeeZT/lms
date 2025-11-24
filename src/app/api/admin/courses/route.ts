@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       .from("courses")
       .select(
         // removed total_modules from select
-        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, created_at, updated_at, users:instructor_id(full_name)",
+        "id, instructor_id, title, description, thumbnail, category, price, duration_min, level, enrolled_count, rating, is_published, points, access_duration_days, created_at, updated_at, users:instructor_id(full_name)",
         { count: "exact" }
       )
       .order("created_at", { ascending: false });
@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
       enrolled_count: number | null;
       rating: number | null;
       is_published: boolean | null;
+      access_duration_days?: number | null;
       created_at: string;
       updated_at: string | null;
       // Supabase can return a single object or array depending on join; we accept both
@@ -239,6 +240,13 @@ export async function POST(req: NextRequest) {
       .getPublicUrl(objectPath);
     const thumbnail = urlData.publicUrl;
 
+    const access_duration_days_raw = String(
+      form.get("access_duration_days") || ""
+    ).trim();
+    const access_duration_days = access_duration_days_raw
+      ? Number(access_duration_days_raw)
+      : null;
+
     const insertPayload = {
       id: newId,
       instructor_id,
@@ -251,6 +259,7 @@ export async function POST(req: NextRequest) {
       level,
       // removed: total_modules
       points: Number(points),
+      access_duration_days,
       enrolled_count: 0,
       rating: 0,
       is_published: Boolean(is_published),
@@ -384,6 +393,9 @@ export async function PATCH(req: NextRequest) {
       const duration_min = form.get("duration_min");
       const points = form.get("points");
       const is_published = form.get("is_published");
+      const access_duration_days_raw = String(
+        form.get("access_duration_days") || ""
+      ).trim();
       const instructor_id = String(form.get("instructor_id") || "").trim();
       const overviewTitle = String(form.get("overviewTitle") || "").trim();
       const overviewContent = String(form.get("overviewContent") || "").trim();
@@ -399,6 +411,10 @@ export async function PATCH(req: NextRequest) {
       if (points !== null) allowed.points = Number(points);
       if (is_published !== null)
         allowed.is_published = String(is_published) === "true";
+      if (access_duration_days_raw !== "") {
+        const n = Number(access_duration_days_raw);
+        allowed.access_duration_days = Number.isFinite(n) && n > 0 ? n : null;
+      }
 
       // Store overview data for later module creation/update
       allowed["__overviewTitle"] = overviewTitle;
@@ -472,6 +488,7 @@ export async function PATCH(req: NextRequest) {
         "is_published",
         "thumbnail",
         "instructor_id",
+        "access_duration_days",
       ];
       for (const f of fields) {
         if (Object.prototype.hasOwnProperty.call(body, f)) {

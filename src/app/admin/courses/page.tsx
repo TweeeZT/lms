@@ -59,6 +59,7 @@ export default function AdminCoursesPage() {
     rating?: number | null;
     is_published?: boolean | null;
     points?: number | null;
+    access_duration_days?: number | null;
     created_at: string;
     updated_at?: string;
   };
@@ -83,6 +84,8 @@ export default function AdminCoursesPage() {
     points: 0,
     overviewTitle: "",
     overviewContent: "",
+    accessDurationType: "lifetime" as "lifetime" | "limited",
+    accessDurationDays: 0,
   });
   const [errors, setErrors] = useState<{ [k: string]: string | undefined }>({});
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -121,6 +124,8 @@ export default function AdminCoursesPage() {
       points: 0,
       overviewTitle: "",
       overviewContent: "",
+      accessDurationType: "lifetime",
+      accessDurationDays: 0,
     });
     setEditingId(null);
     setErrors({});
@@ -152,6 +157,11 @@ export default function AdminCoursesPage() {
       points: Number(c.points || 0),
       overviewTitle: "",
       overviewContent: "",
+      accessDurationType:
+        c.access_duration_days && c.access_duration_days > 0
+          ? "limited"
+          : "lifetime",
+      accessDurationDays: Number(c.access_duration_days || 0),
     });
     setSelectedFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -309,6 +319,12 @@ export default function AdminCoursesPage() {
     if (!form.title.trim()) baseErrors.title = "Judul wajib";
     if (!form.description.trim()) baseErrors.description = "Deskripsi wajib";
     if (form.durationMin <= 0) baseErrors.durationMin = "Durasi harus > 0";
+    if (
+      form.accessDurationType === "limited" &&
+      form.accessDurationDays <= 0
+    ) {
+      baseErrors.accessDurationDays = "Durasi akses harus > 0";
+    }
     const needsThumb = !editingId
       ? !selectedFile
       : !(selectedFile || form.thumbnail?.trim());
@@ -334,6 +350,17 @@ export default function AdminCoursesPage() {
           fd.append("points", String(form.points ?? 0));
           fd.append("overviewTitle", form.overviewTitle || "");
           fd.append("overviewContent", form.overviewContent || "");
+          if (
+            form.accessDurationType === "limited" &&
+            form.accessDurationDays > 0
+          ) {
+            fd.append(
+              "access_duration_days",
+              String(form.accessDurationDays)
+            );
+          } else {
+            fd.append("access_duration_days", "");
+          }
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
           res = await fetch(
@@ -355,6 +382,11 @@ export default function AdminCoursesPage() {
             points: form.points,
             overviewTitle: form.overviewTitle || "",
             overviewContent: form.overviewContent || "",
+            access_duration_days:
+              form.accessDurationType === "limited" &&
+              form.accessDurationDays > 0
+                ? form.accessDurationDays
+                : null,
           };
           res = await fetch(
             `/api/admin/courses?userId=${encodeURIComponent(user.id)}`,
@@ -387,6 +419,14 @@ export default function AdminCoursesPage() {
         fd.append("points", String(form.points ?? 0));
         fd.append("overviewTitle", form.overviewTitle || "");
         fd.append("overviewContent", form.overviewContent || "");
+        if (
+          form.accessDurationType === "limited" &&
+          form.accessDurationDays > 0
+        ) {
+          fd.append("access_duration_days", String(form.accessDurationDays));
+        } else {
+          fd.append("access_duration_days", "");
+        }
         if (selectedFile) {
           fd.append("file", selectedFile);
           fd.append("filename", selectedFile.name);
@@ -779,6 +819,12 @@ export default function AdminCoursesPage() {
                         <Badge size="sm" variant="light" color="grape">
                           {Math.round((course.duration_min ?? 0) / 60)} jam
                         </Badge>
+                        <Badge size="sm" variant="light" color="indigo">
+                          {course.access_duration_days &&
+                          course.access_duration_days > 0
+                            ? `${course.access_duration_days} hari akses`
+                            : "Akses seumur hidup"}
+                        </Badge>
                       </Group>
                       <Group justify="space-between" align="center">
                         <Text fw={700} c="green">
@@ -1051,6 +1097,38 @@ export default function AdminCoursesPage() {
             withAsterisk
             disabled={saving}
           />
+          <Select
+            label="Masa Akses"
+            data={[
+              { value: "lifetime", label: "Akses seumur hidup" },
+              { value: "limited", label: "Durasi tertentu" },
+            ]}
+            value={form.accessDurationType}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                accessDurationType:
+                  (v as "lifetime" | "limited") || "lifetime",
+              })
+            }
+            disabled={saving}
+          />
+          {form.accessDurationType === "limited" && (
+            <NumberInput
+              label="Durasi akses (hari)"
+              value={form.accessDurationDays}
+              onChange={(v) =>
+                setForm({
+                  ...form,
+                  accessDurationDays: Number(v || 0),
+                })
+              }
+              min={1}
+              error={errors.accessDurationDays}
+              description="Berapa lama siswa dapat mengakses kursus setelah dibeli"
+              disabled={saving}
+            />
+          )}
           <Group justify="space-between" wrap="nowrap">
             <Switch
               label="Tayang"

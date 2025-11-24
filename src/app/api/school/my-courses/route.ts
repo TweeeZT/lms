@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         progress_percentage,
         completed_modules,
         current_module_id,
-        expire_at,
+        expired_at,
         courses (
           id,
           title,
@@ -125,8 +125,8 @@ export async function GET(req: NextRequest) {
       const courseSrc = row.courses;
       const instructor = courseSrc ? extractInstructor(courseSrc) : null;
 
-      // Expiration: prioritize progress.expire_at then course-level
-      const progressExpRaw: unknown = row.expire_at ?? null;
+      // Expiration: prioritize progress.expired_at then course-level
+      const progressExpRaw: unknown = row.expired_at ?? null;
       const courseExpRaw: unknown = courseSrc?.expires_at ?? courseSrc?.expiry_date ?? null;
       const finalExpRaw = progressExpRaw || courseExpRaw;
       const expiresAt: string | null = finalExpRaw ? String(finalExpRaw) : null;

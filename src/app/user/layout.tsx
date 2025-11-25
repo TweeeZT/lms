@@ -42,12 +42,14 @@ export default function UserLayout({
     | "purchases"
     | "certificates"
     | "scratch-projects"
+    | "games"
   )[] = [
     "profile",
     "achievements",
     "purchases",
     "certificates",
     "scratch-projects",
+    "games",
   ];
 
   return (

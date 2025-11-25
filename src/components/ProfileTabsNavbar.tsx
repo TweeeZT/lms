@@ -11,6 +11,7 @@ import {
   IconCertificate,
   IconCode,
   IconAward,
+  IconDeviceGamepad2,
 } from "@tabler/icons-react";
 
 type TabId =
@@ -19,7 +20,8 @@ type TabId =
   | "purchases"
   | "leaderboard"
   | "certificates"
-  | "scratch-projects";
+  | "scratch-projects"
+  | "games";
 const allTabs: { id: TabId; label: string; Icon: any }[] = [
   { id: "profile", label: "Profil", Icon: IconUser },
   { id: "achievements", label: "Pencapaian", Icon: IconTrophy },
@@ -27,6 +29,7 @@ const allTabs: { id: TabId; label: string; Icon: any }[] = [
   { id: "leaderboard", label: "Leaderboard", Icon: IconAward },
   { id: "certificates", label: "Sertifikat", Icon: IconCertificate },
   { id: "scratch-projects", label: "Proyek Scratch", Icon: IconCode },
+  { id: "games", label: "Permainan", Icon: IconDeviceGamepad2 },
 ];
 
 export default function ProfileTabsNavbar({

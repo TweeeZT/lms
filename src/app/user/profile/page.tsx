@@ -55,6 +55,7 @@ import {
   IconInfoCircle,
   IconRefresh,
   IconCoin,
+  IconDeviceGamepad2,
 } from "@tabler/icons-react";
 import NextImage from "next/image";
 import Cropper from "react-easy-crop";
@@ -73,6 +74,7 @@ export default function UserProfilePage() {
       | "leaderboard"
       | "certificates"
       | "scratch-projects"
+      | "games"
       | null;
     return t ?? "profile";
   }, [params]);
@@ -1851,6 +1853,199 @@ export default function UserProfilePage() {
             )}
           </Stack>
         )}
+
+        {/* Games Tab */}
+        {activeTab === "games" && (
+          <Stack gap="lg">
+            <div>
+              <Title order={3} c="var(--primary-color)">
+                Permainan
+              </Title>
+              <Text c="dimmed">
+                Mainkan game dan kumpulkan poin untuk akun kamu!
+              </Text>
+            </div>
+
+            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg">
+              {/* Game 1: Avoid Car */}
+              <Card
+                shadow="sm"
+                padding="lg"
+                radius="md"
+                withBorder
+                style={{ cursor: "pointer", transition: "transform 0.2s" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.transform = "scale(1.02)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+                onClick={() => window.open("/games/avoid-car", "_blank")}
+              >
+                <Stack gap="md">
+                  <div
+                    style={{
+                      width: "100%",
+                      height: 150,
+                      background:
+                        "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                      borderRadius: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconDeviceGamepad2 size={60} color="white" />
+                  </div>
+                  <div>
+                    <Title order={4}>🚗 Hindari Mobil</Title>
+                    <Text size="sm" c="dimmed" mt={4}>
+                      Game racing - hindari mobil lawan sambil bergerak!
+                    </Text>
+                  </div>
+                  <Group gap="xs">
+                    <Badge color="blue" variant="light">
+                      Racing
+                    </Badge>
+                    <Badge color="green" variant="light">
+                      10 Skor = 1 Poin
+                    </Badge>
+                  </Group>
+                  <Text size="xs" c="dimmed">
+                    Kontrol: Arrow Left/Right
+                  </Text>
+                </Stack>
+              </Card>
+
+              {/* Game 2: Platform Jump */}
+              <Card
+                shadow="sm"
+                padding="lg"
+                radius="md"
+                withBorder
+                style={{ cursor: "pointer", transition: "transform 0.2s" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.transform = "scale(1.02)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+                onClick={() => window.open("/games/platform-jump", "_blank")}
+              >
+                <Stack gap="md">
+                  <div
+                    style={{
+                      width: "100%",
+                      height: 150,
+                      background:
+                        "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                      borderRadius: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconDeviceGamepad2 size={60} color="white" />
+                  </div>
+                  <div>
+                    <Title order={4}>🏃 Platform Jump</Title>
+                    <Text size="sm" c="dimmed" mt={4}>
+                      Lompati rintangan dan hindari jatuh!
+                    </Text>
+                  </div>
+                  <Group gap="xs">
+                    <Badge color="pink" variant="light">
+                      Platform
+                    </Badge>
+                    <Badge color="green" variant="light">
+                      5 Skor = 1 Poin
+                    </Badge>
+                  </Group>
+                  <Text size="xs" c="dimmed">
+                    Kontrol: SPACE to Jump
+                  </Text>
+                </Stack>
+              </Card>
+
+              {/* Game 3: Tetris */}
+              <Card
+                shadow="sm"
+                padding="lg"
+                radius="md"
+                withBorder
+                style={{ cursor: "pointer", transition: "transform 0.2s" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.transform = "scale(1.02)")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.transform = "scale(1)")
+                }
+                onClick={() => window.open("/games/tetris", "_blank")}
+              >
+                <Stack gap="md">
+                  <div
+                    style={{
+                      width: "100%",
+                      height: 150,
+                      background:
+                        "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+                      borderRadius: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconDeviceGamepad2 size={60} color="white" />
+                  </div>
+                  <div>
+                    <Title order={4}>🧱 Tetris</Title>
+                    <Text size="sm" c="dimmed" mt={4}>
+                      Classic Tetris - susun balok dan hapus baris!
+                    </Text>
+                  </div>
+                  <Group gap="xs">
+                    <Badge color="cyan" variant="light">
+                      Puzzle
+                    </Badge>
+                    <Badge color="green" variant="light">
+                      50 Skor = 1 Poin
+                    </Badge>
+                  </Group>
+                  <Text size="xs" c="dimmed">
+                    Kontrol: Arrow Keys + SPACE
+                  </Text>
+                </Stack>
+              </Card>
+            </SimpleGrid>
+
+            {/* Info Box */}
+            <Card withBorder p="lg" radius="md" bg="blue.0">
+              <Group align="flex-start" gap="md">
+                <IconInfoCircle size={24} color="var(--mantine-color-blue-6)" />
+                <div style={{ flex: 1 }}>
+                  <Text fw={600} c="blue.9" mb={8}>
+                    Cara Bermain
+                  </Text>
+                  <Stack gap={4}>
+                    <Text size="sm" c="blue.8">
+                      • Klik card game untuk membuka game di tab baru
+                    </Text>
+                    <Text size="sm" c="blue.8">
+                      • Mainkan game hingga game over untuk mendapat skor
+                    </Text>
+                    <Text size="sm" c="blue.8">
+                      • Klik &quot;Simpan Skor&quot; untuk menambah poin ke akun
+                      kamu
+                    </Text>
+                    <Text size="sm" c="blue.8">
+                      • Poin akan otomatis ditambahkan ke total poin profilmu
+                    </Text>
+                  </Stack>
+                </div>
+              </Group>
+            </Card>
+          </Stack>
+        )}
       </Card>
 
       {/* Modal Sertifikat */}
@@ -2101,8 +2296,6 @@ function Leaderboard() {
       style={{
         background: "var(--card-bg)",
         position: "relative",
-        overflowX: "auto",
-        maxWidth: "100vw",
       }}
     >
       <Stack gap="md">
@@ -2124,109 +2317,104 @@ function Leaderboard() {
           </Button>
         </Group>
 
-        {/* Podium */}
+        {/* Podium - 3 teratas dengan proper responsive layout */}
         {top3.length > 0 && (
-          <div
+          <SimpleGrid
+            cols={{ base: 1, xs: 3 }}
+            spacing="md"
+            mb="md"
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 12,
               alignItems: "end",
-              marginBottom: 16,
-              minWidth: 320,
             }}
-            className="podium-grid"
           >
             {/* Rank 2 - left, lower */}
             {top3[1] ? (
-              <PodiumItem
-                rank={2}
-                item={top3.find((i) => i.rank === 2) || top3[1]}
-                height={120}
-                align="end"
-              />
+              <div style={{ order: 1 }}>
+                <PodiumItem
+                  rank={2}
+                  item={top3.find((i) => i.rank === 2) || top3[1]}
+                  height={120}
+                  align="end"
+                />
+              </div>
             ) : (
-              <div />
+              <div style={{ order: 1 }} />
             )}
             {/* Rank 1 - center, higher */}
-            <PodiumItem
-              rank={1}
-              item={top3.find((i) => i.rank === 1) || top3[0]}
-              height={160}
-              highlight
-            />
+            <div style={{ order: 2 }}>
+              <PodiumItem
+                rank={1}
+                item={top3.find((i) => i.rank === 1) || top3[0]}
+                height={160}
+                highlight
+              />
+            </div>
 
             {/* Rank 3 - right, lower */}
             {top3[2] ? (
-              <PodiumItem
-                rank={3}
-                item={top3.find((i) => i.rank === 3) || top3[2]}
-                height={110}
-                align="start"
-              />
+              <div style={{ order: 3 }}>
+                <PodiumItem
+                  rank={3}
+                  item={top3.find((i) => i.rank === 3) || top3[2]}
+                  height={110}
+                  align="start"
+                />
+              </div>
             ) : (
-              <div />
+              <div style={{ order: 3 }} />
             )}
-          </div>
+          </SimpleGrid>
         )}
 
-        {/* Rest of list */}
+        {/* Rest of list - vertical list tanpa scroll horizontal */}
         <Stack gap="sm">
           {rest.map((it) => (
-            <Group
+            <Card
               key={it.userId}
-              justify="space-between"
-              wrap="wrap"
+              withBorder
+              radius="md"
+              p="md"
               style={{
-                border: "1px solid var(--border-color)",
-                borderRadius: 12,
-                padding: 12,
                 background: "#fff",
-                gap: 8,
               }}
             >
-              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
-                <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
-                  {it.rank}
+              <Group gap="sm" wrap="nowrap" justify="space-between">
+                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                  <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
+                    #{it.rank}
+                  </Badge>
+                  <Avatar
+                    src={it.avatar || undefined}
+                    radius="xl"
+                    size="md"
+                    style={{ flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <Text
+                      fw={600}
+                      lineClamp={1}
+                      style={{ wordBreak: "break-word" }}
+                    >
+                      {it.fullName || it.username}
+                    </Text>
+                    <Text size="xs" c="dimmed" lineClamp={1}>
+                      {it.tier}
+                    </Text>
+                  </div>
+                </Group>
+                <Badge color="blue" variant="light" style={{ flexShrink: 0 }}>
+                  {Math.floor(it.score)} Poin
                 </Badge>
-                <Avatar
-                  src={it.avatar || undefined}
-                  radius="xl"
-                  size="md"
-                  style={{ flexShrink: 0 }}
-                />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <Text
-                    fw={600}
-                    lineClamp={1}
-                    style={{ wordBreak: "break-word" }}
-                  >
-                    {it.fullName || it.username}
-                  </Text>
-                  <Text size="xs" c="dimmed" lineClamp={1}>
-                    {it.tier} • Skor {Math.floor(it.score)}
-                  </Text>
-                </div>
               </Group>
-            </Group>
+            </Card>
           ))}
           {items.length === 0 && (
-            <Text c="white">Belum ada data leaderboard</Text>
+            <Text c="white" ta="center">
+              Belum ada data leaderboard
+            </Text>
           )}
         </Stack>
       </Stack>
-
-      <style jsx>{`
-        @media (max-width: 640px) {
-          .podium-grid {
-            gap: 8px !important;
-            min-width: 320px;
-          }
-          .podium-item {
-            min-width: 90px;
-          }
-        }
-      `}</style>
     </Card>
   );
 }
@@ -2317,7 +2505,6 @@ function SchoolLeaderboard() {
       style={{
         background: "var(--card-bg)",
         position: "relative",
-        overflowX: "auto",
       }}
     >
       <Stack gap="md">
@@ -2339,103 +2526,100 @@ function SchoolLeaderboard() {
           </Button>
         </Group>
 
+        {/* Podium - 3 teratas dengan proper responsive layout */}
         {top3.length > 0 && (
-          <div
+          <SimpleGrid
+            cols={{ base: 1, xs: 3 }}
+            spacing="md"
+            mb="md"
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 12,
               alignItems: "end",
-              marginBottom: 16,
-              minWidth: 320,
             }}
-            className="podium-grid"
           >
+            {/* Rank 2 - left, lower */}
             {top3[1] ? (
-              <PodiumItem
-                rank={2}
-                item={top3.find((i) => i.rank === 2) || top3[1]}
-                height={120}
-                align="end"
-              />
+              <div style={{ order: 1 }}>
+                <PodiumItem
+                  rank={2}
+                  item={top3.find((i) => i.rank === 2) || top3[1]}
+                  height={120}
+                  align="end"
+                />
+              </div>
             ) : (
-              <div />
+              <div style={{ order: 1 }} />
             )}
-            <PodiumItem
-              rank={1}
-              item={top3.find((i) => i.rank === 1) || top3[0]}
-              height={160}
-              highlight
-            />
+            {/* Rank 1 - center, higher */}
+            <div style={{ order: 2 }}>
+              <PodiumItem
+                rank={1}
+                item={top3.find((i) => i.rank === 1) || top3[0]}
+                height={160}
+                highlight
+              />
+            </div>
+            {/* Rank 3 - right, lower */}
             {top3[2] ? (
-              <PodiumItem
-                rank={3}
-                item={top3.find((i) => i.rank === 3) || top3[2]}
-                height={110}
-                align="start"
-              />
+              <div style={{ order: 3 }}>
+                <PodiumItem
+                  rank={3}
+                  item={top3.find((i) => i.rank === 3) || top3[2]}
+                  height={110}
+                  align="start"
+                />
+              </div>
             ) : (
-              <div />
+              <div style={{ order: 3 }} />
             )}
-          </div>
+          </SimpleGrid>
         )}
 
+        {/* Rest of list - vertical list tanpa scroll horizontal */}
         <Stack gap="sm">
           {rest.map((it) => (
-            <Group
+            <Card
               key={it.userId}
-              justify="space-between"
-              wrap="wrap"
+              withBorder
+              radius="md"
+              p="md"
               style={{
-                border: "1px solid var(--border-color)",
-                borderRadius: 12,
-                padding: 12,
                 background: "#fff",
-                gap: 8,
               }}
             >
-              <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
-                <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
-                  {it.rank}
+              <Group gap="sm" wrap="nowrap" justify="space-between">
+                <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+                  <Badge radius="xl" variant="light" style={{ flexShrink: 0 }}>
+                    #{it.rank}
+                  </Badge>
+                  <Avatar
+                    src={it.avatar || undefined}
+                    radius="xl"
+                    size="md"
+                    style={{ flexShrink: 0 }}
+                  />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <Text
+                      fw={600}
+                      lineClamp={1}
+                      style={{ wordBreak: "break-word" }}
+                    >
+                      {it.fullName || it.username}
+                    </Text>
+                  </div>
+                </Group>
+                <Badge color="blue" variant="light" style={{ flexShrink: 0 }}>
+                  {Math.floor(it.score)} Poin
                 </Badge>
-                <Avatar
-                  src={it.avatar || undefined}
-                  radius="xl"
-                  size="md"
-                  style={{ flexShrink: 0 }}
-                />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <Text
-                    fw={600}
-                    lineClamp={1}
-                    style={{ wordBreak: "break-word" }}
-                  >
-                    {it.fullName || it.username}
-                  </Text>
-                  <Text size="xs" c="dimmed" lineClamp={1}>
-                    Skor {Math.floor(it.score)}
-                  </Text>
-                </div>
               </Group>
-            </Group>
+            </Card>
           ))}
           {items.length === 0 && (
-            <Text c="white">Belum ada data leaderboard</Text>
+            <Text c="white" ta="center">
+              Belum ada data leaderboard
+            </Text>
           )}
         </Stack>
       </Stack>
-
-      <style jsx>{`
-        @media (max-width: 640px) {
-          .podium-grid {
-            gap: 8px !important;
-            min-width: 320px;
-          }
-          .podium-item {
-            min-width: 90px;
-          }
-        }
-      `}</style>
     </Card>
   );
 }
@@ -2532,30 +2716,14 @@ function PodiumItem({
       >
         {item.fullName || item.username}
       </Text>
-      <Text size="xs" c="dimmed" lineClamp={1}>
-        {item.tier} • Skor {Math.floor(item.score || 0)}
-      </Text>
-
-      <style jsx>{`
-        @media (max-width: 640px) {
-          .podium-item .podium-avatar {
-            width: 48px !important;
-            height: 48px !important;
-          }
-          .podium-item .crown-icon {
-            width: 20px !important;
-            height: 20px !important;
-            top: -18px !important;
-          }
-          .podium-item .trophy-icon {
-            width: 12px !important;
-            height: 12px !important;
-          }
-          .podium-base {
-            min-height: 80px !important;
-          }
-        }
-      `}</style>
+      {item.tier && (
+        <Text size="xs" c="dimmed" lineClamp={1}>
+          {item.tier}
+        </Text>
+      )}
+      <Badge color="blue" variant="light" size="sm" mt={4}>
+        {Math.floor(item.score || 0)} Poin
+      </Badge>
     </div>
   );
 }

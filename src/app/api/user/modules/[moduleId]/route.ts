@@ -677,6 +677,25 @@ export async function POST(
         );
     } else {
       const newId = `${isSchool ? "sp" : "up"}-${randomUUID()}`;
+      // Compute expire_at based on course.access_duration_days if available
+      let computedExpire: string | null = null;
+      try {
+        const { data: courseMeta } = await supabaseAdmin
+          .from("courses")
+          .select("access_duration_days")
+          .eq("id", courseId)
+          .maybeSingle();
+        const accessDays = (courseMeta as any)?.access_duration_days as
+          | number
+          | null
+          | undefined;
+        if (accessDays && accessDays > 0) {
+          const base = new Date();
+          base.setDate(base.getDate() + accessDays);
+          computedExpire = base.toISOString();
+        }
+      } catch (e) {}
+
       const { error: insErr } = await supabaseAdmin.from(tableName).insert({
         id: newId,
         user_id: userId,
@@ -684,6 +703,7 @@ export async function POST(
         completed_modules: updated,
         current_module_id: moduleId, // Set current module to the one just completed
         progress_percentage: progressPct,
+        expire_at: computedExpire,
       });
       if (insErr)
         return NextResponse.json(

@@ -135,11 +135,31 @@ export async function POST(req: NextRequest) {
             .eq("id", progress.id);
         } else {
           // Create new progress record
+          // Compute expire_at from course access_duration_days if available
+          let computedExpire: string | null = null;
+          try {
+            const { data: courseMeta } = await supabaseAdmin
+              .from("courses")
+              .select("access_duration_days")
+              .eq("id", module.course_id)
+              .maybeSingle();
+            const accessDays = (courseMeta as any)?.access_duration_days as
+              | number
+              | null
+              | undefined;
+            if (accessDays && accessDays > 0) {
+              const base = new Date();
+              base.setDate(base.getDate() + accessDays);
+              computedExpire = base.toISOString();
+            }
+          } catch (e) {}
+
           await supabaseAdmin.from("user_progress").insert({
             user_id: submission.user_id,
             course_id: module.course_id,
             completed_modules: completedModules,
             progress_percentage: progressPct,
+            expire_at: computedExpire,
           });
         }
       }

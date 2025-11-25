@@ -101,6 +101,34 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+    // If school already had progress and course has access duration, extend it
+    if (includeSchool && hasSchoolProgress && expireAtForSchool) {
+      try {
+        const { data: sp } = await supabase
+          .from("school_progress")
+          .select("id, expire_at")
+          .eq("user_id", schoolUserId)
+          .eq("course_id", courseId)
+          .maybeSingle();
+        if (sp && (sp as any).id) {
+          const existingExpire = (sp as any).expire_at;
+          const nowTs = Date.now();
+          const existingTs = existingExpire ? Date.parse(existingExpire) : NaN;
+          const baseTs = !isNaN(existingTs) && existingTs > nowTs ? existingTs : nowTs;
+          // accessDays already used to compute expireAtForSchool; compute duration to add
+          const addMs = Date.parse(expireAtForSchool) - Date.now();
+          if (!isNaN(addMs) && addMs > 0) {
+            const newIso = new Date(baseTs + addMs).toISOString();
+            await supabase
+              .from("school_progress")
+              .update({ expire_at: newIso })
+              .eq("id", (sp as any).id);
+          }
+        }
+      } catch (e) {
+        console.error("[school/checkout/confirm] Failed to extend school_progress expire_at", e);
+      }
+    }
 
     // 4. Insert into user_progress for all students
     let insertedStudents = 0;
@@ -153,6 +181,37 @@ export async function POST(req: NextRequest) {
           }
         } else {
           insertedStudents = studentProgressRows.length;
+        }
+      }
+      // Extend expire_at for already-enrolled students if course grants limited access
+      if (existingUserIds.size > 0 && expireAtForStudents) {
+        try {
+          const existingList = await supabase
+            .from("user_progress")
+            .select("id, user_id, expire_at")
+            .eq("course_id", courseId)
+            .in("user_id", Array.from(existingUserIds));
+          if (existingList && Array.isArray(existingList.data)) {
+            const rows = existingList.data as any[];
+            const addMs = Date.parse(expireAtForStudents) - Date.now();
+            for (const r of rows) {
+              try {
+                const existingTs = r.expire_at ? Date.parse(r.expire_at) : NaN;
+                const baseTs = !isNaN(existingTs) && existingTs > Date.now() ? existingTs : Date.now();
+                if (!isNaN(addMs) && addMs > 0) {
+                  const newIso = new Date(baseTs + addMs).toISOString();
+                  await supabase
+                    .from("user_progress")
+                    .update({ expire_at: newIso })
+                    .eq("id", r.id);
+                }
+              } catch (e) {
+                console.error("[school/checkout/confirm] Failed to extend user_progress for user", r.user_id, e);
+              }
+            }
+          }
+        } catch (e) {
+          console.error("[school/checkout/confirm] Failed to fetch existing user_progress for extension", e);
         }
       }
     }

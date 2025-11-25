@@ -42,6 +42,25 @@ export async function POST(req: NextRequest) {
       .eq("course_id", courseId)
       .maybeSingle();
     if (!upCheck) {
+      // Compute expire_at from course.access_duration_days if available
+      let computedExpire: string | null = null;
+      try {
+        const { data: courseMeta } = await supabaseAdmin
+          .from("courses")
+          .select("access_duration_days")
+          .eq("id", courseId)
+          .maybeSingle();
+        const accessDays = (courseMeta as any)?.access_duration_days as
+          | number
+          | null
+          | undefined;
+        if (accessDays && accessDays > 0) {
+          const base = new Date();
+          base.setDate(base.getDate() + accessDays);
+          computedExpire = base.toISOString();
+        }
+      } catch (e) {}
+
       const { error: upInsErr } = await supabaseAdmin
         .from("user_progress")
         .insert({
@@ -50,6 +69,7 @@ export async function POST(req: NextRequest) {
           course_id: courseId,
           completed_modules: [],
           progress_percentage: 0,
+          expire_at: computedExpire,
         });
       if (upInsErr) {
         return NextResponse.json(

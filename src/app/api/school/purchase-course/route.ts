@@ -125,10 +125,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get course details and instructor
+    // Get course details and instructor (include access_duration_days for expiry)
     const { data: course } = await supabase
       .from("courses")
-      .select("id, title, total_modules, price, instructor_id")
+      .select("id, title, total_modules, price, instructor_id, access_duration_days")
       .eq("id", courseId)
       .single();
 
@@ -167,6 +167,15 @@ export async function POST(req: Request) {
     const finalAmount = pricePerStudent * students.length;
     const totalDiscount = totalAmount - finalAmount;
 
+    // Compute expiry based on course.access_duration_days (if set)
+    const accessDays = (course as any)?.access_duration_days as number | null | undefined;
+    let expireAtForStudents: string | null = null;
+    if (accessDays && accessDays > 0) {
+      const base = new Date();
+      base.setDate(base.getDate() + accessDays);
+      expireAtForStudents = base.toISOString();
+    }
+
     // Enroll each student (create user_progress if not exists)
     let enrolled = 0;
     for (const student of students) {
@@ -181,7 +190,7 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (!existing) {
-        // Create enrollment in user_progress
+        // Create enrollment in user_progress, include expire_at when applicable
         await supabase.from("user_progress").insert({
           user_id: userId,
           course_id: courseId,
@@ -190,8 +199,40 @@ export async function POST(req: Request) {
           progress_percentage: 0,
           enrolled_at: new Date().toISOString(),
           last_accessed_at: new Date().toISOString(),
+          expire_at: expireAtForStudents,
         });
         enrolled++;
+      }
+    }
+
+    // Extend expire_at for already-enrolled students if course grants limited access
+    if (studentUserIds.length > 0 && expireAtForStudents) {
+      try {
+        const { data: existingRows } = await supabase
+          .from("user_progress")
+          .select("id, user_id, expire_at")
+          .eq("course_id", courseId)
+          .in("user_id", studentUserIds);
+        if (existingRows && Array.isArray(existingRows)) {
+          const addMs = Date.parse(expireAtForStudents) - Date.now();
+          for (const r of existingRows) {
+            try {
+              const existingTs = r.expire_at ? Date.parse(r.expire_at) : NaN;
+              const baseTs = !isNaN(existingTs) && existingTs > Date.now() ? existingTs : Date.now();
+              if (!isNaN(addMs) && addMs > 0) {
+                const newIso = new Date(baseTs + addMs).toISOString();
+                await supabase
+                  .from("user_progress")
+                  .update({ expire_at: newIso })
+                  .eq("id", r.id);
+              }
+            } catch (e) {
+              console.error("[school/purchase-course] Failed to extend user_progress for user", r.user_id, e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[school/purchase-course] Failed to fetch/extend existing user_progress", e);
       }
     }
 

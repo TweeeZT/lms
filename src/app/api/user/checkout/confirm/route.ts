@@ -258,7 +258,7 @@ export async function GET(req: NextRequest) {
 
           const { data: progress } = await supabaseAdmin
             .from(progressTable)
-            .select("id")
+            .select("id, expire_at")
             .eq("user_id", userId)
             .eq("course_id", resolvedCourse)
             .maybeSingle();
@@ -302,6 +302,32 @@ export async function GET(req: NextRequest) {
               current_module_id: firstModule,
               expire_at: expireAt,
             });
+          } else {
+            // If progress exists and course grants limited access, extend expire_at
+            try {
+              if (expireAt) {
+                const existingExpire = (progress as any)?.expire_at;
+                const nowTs = Date.now();
+                const existingTs = existingExpire ? Date.parse(existingExpire) : NaN;
+                const baseTs = !isNaN(existingTs) && existingTs > nowTs ? existingTs : nowTs;
+                const newDate = new Date(baseTs);
+                // expireAt variable represents now + accessDays earlier; compute extension by difference
+                // To extend by accessDays, calculate days between expireAt and now, i.e., use accessDays from courseMeta
+                // Simpler: compute duration in ms between expireAt and now, then add to base
+                const accessDurationMs = Date.parse(expireAt) - Date.now();
+                if (!isNaN(accessDurationMs) && accessDurationMs > 0) {
+                  const newTs = baseTs + accessDurationMs;
+                  const newIso = new Date(newTs).toISOString();
+                  const { error: updErr } = await supabaseAdmin
+                    .from(progressTable)
+                    .update({ expire_at: newIso })
+                    .eq("id", (progress as any).id);
+                  if (updErr) console.error("Failed to extend existing progress expire_at:", updErr);
+                }
+              }
+            } catch (e) {
+              console.error("Error extending existing progress expire_at (confirm):", e);
+            }
           }
         } catch {}
       }

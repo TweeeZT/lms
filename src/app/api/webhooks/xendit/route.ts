@@ -521,6 +521,29 @@ export async function POST(req: NextRequest) {
       }
 
       // Ensure progress row: school → school_progress, user/instructor/admin → user_progress
+      // Compute expire_at based on course.access_duration_days if provided
+      let computedExpireAt: string | null = null;
+      let accessDaysVar: number | null = null;
+      try {
+        const { data: courseMeta } = await supabaseAdmin
+          .from("courses")
+          .select("access_duration_days")
+          .eq("id", course)
+          .maybeSingle();
+        const accessDays = (courseMeta as any)?.access_duration_days as
+          | number
+          | null
+          | undefined;
+        if (accessDays && accessDays > 0) {
+          accessDaysVar = Number(accessDays);
+          const base = new Date();
+          base.setDate(base.getDate() + accessDaysVar);
+          computedExpireAt = base.toISOString();
+        }
+      } catch (e) {
+        console.warn("Failed to compute expire_at from course meta", e);
+      }
+
       try {
         const progressTable =
           userRole === "school" ? "school_progress" : "user_progress";
@@ -528,7 +551,7 @@ export async function POST(req: NextRequest) {
 
         const { data: progress } = await supabaseAdmin
           .from(progressTable)
-          .select("id")
+          .select("id, expire_at")
           .eq("user_id", userId)
           .eq("course_id", course)
           .maybeSingle();
@@ -555,6 +578,7 @@ export async function POST(req: NextRequest) {
             completed_modules: [],
             progress_percentage: 0,
             current_module_id: firstModule,
+            expire_at: computedExpireAt,
           });
           if (progressRes.error) {
             console.error(
@@ -566,6 +590,29 @@ export async function POST(req: NextRequest) {
           }
         } else {
           console.log(`${progressTable} already exists`);
+          // If course grants limited access and we have accessDaysVar, extend expire_at
+          try {
+            if (accessDaysVar && accessDaysVar > 0) {
+              const existingExpire = (progress as any)?.expire_at;
+              const nowTs = Date.now();
+              const existingTs = existingExpire ? Date.parse(existingExpire) : NaN;
+              const baseTs = !isNaN(existingTs) && existingTs > nowTs ? existingTs : nowTs;
+              const newDate = new Date(baseTs);
+              newDate.setDate(newDate.getDate() + accessDaysVar);
+              const newIso = newDate.toISOString();
+              const { error: updErr } = await supabaseAdmin
+                .from(progressTable)
+                .update({ expire_at: newIso })
+                .eq("id", (progress as any).id);
+              if (updErr) {
+                console.error(`Failed to extend expire_at for ${progressTable}:`, updErr);
+              } else {
+                console.log(`Extended expire_at to ${newIso} for ${progressTable}`);
+              }
+            }
+          } catch (e) {
+            console.error("Error while extending existing progress expire_at", e);
+          }
         }
       } catch (e) {
         console.error("webhook progress insert failed", e);

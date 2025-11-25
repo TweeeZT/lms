@@ -31,35 +31,68 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update user points
-    const { data: userData, error: userFetchError } = await supabase
-      .from("users")
+    // Update student points (students.user_id column holds the user's id)
+    const { data: studentData, error: studentFetchError } = await supabase
+      .from("students")
       .select("points")
-      .eq("id", userId)
+      .eq("user_id", userId)
       .single();
 
-    if (userFetchError) {
-      console.error("Error fetching user:", userFetchError);
-      return NextResponse.json(
-        { success: false, error: "Failed to fetch user data" },
-        { status: 500 }
-      );
-    }
+    let newPoints: number;
 
-    const currentPoints = userData?.points || 0;
-    const newPoints = currentPoints + points;
+    if (studentFetchError) {
+      console.error("Error fetching student:", studentFetchError);
+      const errCode = (studentFetchError as any)?.code;
+      if (errCode === "42703") {
+        // 42703 = undefined column in PostgreSQL
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Database column 'students.points' not found. Run migration to add 'points' column to students table.",
+            details: (studentFetchError as any)?.message,
+          },
+          { status: 500 }
+        );
+      }
 
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ points: newPoints })
-      .eq("id", userId);
+      // If student row doesn't exist, create it with the earned points
+      const createMsg = (studentFetchError as any)?.message || "";
+      if (createMsg.includes("Results contain 0 rows") || createMsg.includes("No rows")) {
+        const { error: createError } = await supabase.from("students").insert({
+          user_id: userId,
+          points: points,
+        });
+        if (createError) {
+          console.error("Error creating student row:", createError);
+          return NextResponse.json(
+            { success: false, error: "Failed to create student record" },
+            { status: 500 }
+          );
+        }
+        newPoints = points;
+      } else {
+        return NextResponse.json(
+          { success: false, error: "Failed to fetch student data", details: (studentFetchError as any)?.message },
+          { status: 500 }
+        );
+      }
+    } else {
+      const currentPoints = (studentData as any)?.points || 0;
+      newPoints = currentPoints + points;
 
-    if (updateError) {
-      console.error("Error updating user points:", updateError);
-      return NextResponse.json(
-        { success: false, error: "Failed to update user points" },
-        { status: 500 }
-      );
+      const { error: updateError } = await supabase
+        .from("students")
+        .update({ points: newPoints })
+        .eq("user_id", userId);
+
+      if (updateError) {
+        console.error("Error updating student points:", updateError);
+        return NextResponse.json(
+          { success: false, error: "Failed to update student points" },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({
